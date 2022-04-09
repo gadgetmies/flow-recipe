@@ -1,3 +1,11 @@
+# Flow Recipe
+
+Structured recipe modelling and algorithmic scheduling.
+
+Goal: Create a format for describing cooking and baking recipes in a structured and accurate manner in order to enable programmatic scheduling and adaptation. 
+
+---
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
