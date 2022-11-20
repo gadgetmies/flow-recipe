@@ -294,17 +294,6 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <output id="oven-ready-buns" name="buns"/>
             </outputs>
         </step>
-        <!-- TODO: this should be generated from the bake step -->
-        <step operation="preheat-oven">
-            <options>
-                <option name="temperature">
-                    <numeric-value number="250" unit="celcius"/>
-                </option>
-            </options>
-            <outputs>
-                <output id="oven-at-250c"/>
-            </outputs>
-        </step>
         <step operation="bake">
             <!-- TODO: add interrupt i.e. suspend other operations when this finishes and split their processing time -->
             <options>
@@ -316,8 +305,6 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <inputs>
-                <!-- TODO: does it make sense to have the oven as a dependency (it is "singleton")? -->
-                <input ref="oven-at-250c"/>
                 <input ref="oven-ready-buns"/>
             </inputs>
             <outputs>

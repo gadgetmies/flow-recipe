@@ -1,4 +1,4 @@
-import {operations} from "./operations";
+import { operations } from "./operations";
 
 function getOption(options, optionName) {
   return options.querySelector(`[name=${optionName}]`).children[0];
@@ -34,6 +34,7 @@ export function getChildren(node, selector) {
   return Array.from(node.querySelectorAll(selector));
 }
 
+// TODO: rename ingredient -> input as it is not always an ingredient
 export function getIngredients(recipe, node) {
   return getInputs(node).map((input) => {
     const ingredientId = input.getAttribute("ref");
@@ -57,12 +58,19 @@ export function getAmounts(recipe, node) {
 
 export function getNameForInputAtIndex(recipe, node, i) {
   const ingredients = getIngredients(recipe, node);
-  const name = ingredients[i].getAttribute("name");
-  return name;
+  return ingredients[i].getAttribute("name");
 }
 
 export function getFirstInputName(recipe, node) {
   return getNameForInputAtIndex(recipe, node, 0);
+}
+
+export function getRefForInputAtIndex(node, i) {
+  return getInputs(node)[i].getAttribute("ref");
+}
+
+export function getFirstInputRef(node) {
+  return getRefForInputAtIndex(node, 0);
 }
 
 export function findIngredientWithId(recipe, id) {
@@ -93,6 +101,10 @@ export function findFinalOutputId(xml) {
 }
 
 export function getInstructions(recipe, item) {
+  console.log({ item });
+  if (!item) {
+    debugger;
+  }
   const node = findStepProducing(recipe, item.id);
   const operation = operations[node.getAttribute("operation")];
   return operation.instruction(recipe, node);

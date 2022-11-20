@@ -7,7 +7,12 @@ function value(valueOrFunction, ...args) {
     : valueOrFunction;
 }
 
-export function scheduleItemsInTimelines(graph, nodes, timelines, mustFinishBy) {
+export function scheduleItemsInTimelines(
+  graph,
+  nodes,
+  timelines,
+  mustFinishBy
+) {
   if (nodes.length === 0) {
     return;
   }
@@ -17,11 +22,27 @@ export function scheduleItemsInTimelines(graph, nodes, timelines, mustFinishBy) 
   for (const node of nodes) {
     const dependencies = [];
 
-    console.log("Processing", node.innerHTML);
+    console.log("Processing", node.outerHTML);
     const operationId = node.getAttribute("operation");
     const operation = operations[operationId];
     const outputs = node.querySelectorAll("output");
     let firstStepsStartsAt = 0;
+
+    if (operation.expand) {
+      console.log("Expanding node", node);
+      const steps = operation.expand(graph, node);
+      node.remove();
+      const stepsElement = graph.getElementsByTagName("steps")[0];
+      steps.forEach((step) => stepsElement.append(step));
+      console.log(graph);
+      scheduleItemsInTimelines(
+        graph,
+        steps,
+        timelines,
+        mustFinishBy
+      )
+      continue;
+    }
 
     console.log("Calculating timeline");
     // TODO: Sort operations by longest passive time?
@@ -80,7 +101,8 @@ export function scheduleItemsInTimelines(graph, nodes, timelines, mustFinishBy) 
             const fitsBetweenCurrentAndNext =
               timeline.length > 2 &&
               indexInTimeline > 0 &&
-              timeline[indexInTimeline - 1].start - timeline[indexInTimeline].end >=
+              timeline[indexInTimeline - 1].start -
+                timeline[indexInTimeline].end >=
                 activeDuration &&
               timeline[indexInTimeline].end + duration <=
                 nextInSequenceStartsAt;
@@ -92,7 +114,7 @@ export function scheduleItemsInTimelines(graph, nodes, timelines, mustFinishBy) 
               const start = end - activeDuration;
               nextInSequenceStartsAt = start;
               possibleSpots.push({
-                method: 'insert',
+                method: "insert",
                 timelineNumber,
                 index: indexInTimeline,
                 start,
@@ -115,7 +137,7 @@ export function scheduleItemsInTimelines(graph, nodes, timelines, mustFinishBy) 
               );
               const end = start + activeDuration;
               possibleSpots.push({
-                method: 'push',
+                method: "push",
                 timelineNumber,
                 index: timeline.length,
                 start,
@@ -172,6 +194,11 @@ export function scheduleItemsInTimelines(graph, nodes, timelines, mustFinishBy) 
       }
     }
     console.log("Next nodes", dependencies);
-    scheduleItemsInTimelines(graph, dependencies, timelines, firstStepsStartsAt);
+    scheduleItemsInTimelines(
+      graph,
+      dependencies,
+      timelines,
+      firstStepsStartsAt
+    );
   }
 }
