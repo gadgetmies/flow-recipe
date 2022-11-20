@@ -291,7 +291,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <input ref="pearl-sugar"/>
             </inputs>
             <outputs>
-                <output id="oven-ready-buns" name="buns"/>
+                <output id="oven-ready-buns" name="oven ready buns"/>
             </outputs>
         </step>
         <step operation="bake">
@@ -301,14 +301,14 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                     <numeric-value number="250" unit="celcius"/>
                 </option>
                 <option name="duration">
-                    <numeric-value number="900" unit="seconds"/>
+                    <numeric-value number="15" unit="minutes"/>
                 </option>
             </options>
             <inputs>
                 <input ref="oven-ready-buns"/>
             </inputs>
             <outputs>
-                <output id="baked-buns"/>
+                <output id="baked-buns" name="baked buns"/>
             </outputs>
         </step>
     </steps>

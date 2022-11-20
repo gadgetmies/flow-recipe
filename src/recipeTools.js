@@ -1,6 +1,7 @@
 import { operations } from "./operations";
 
 function getOption(options, optionName) {
+  console.log(options, optionName)
   return options.querySelector(`[name=${optionName}]`).children[0];
 }
 

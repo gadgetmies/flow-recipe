@@ -36,3 +36,17 @@
     transform: rotate(360deg);
   }
 }
+
+.container {
+  max-width: 20em;
+  background: #fee;
+  margin: 1em auto;
+  border-radius: 1em;
+  padding: 1em;
+  text-align: left;
+}
+
+.container .title {
+  margin-top: 0;
+  text-align: center;
+}

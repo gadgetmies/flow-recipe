@@ -20,7 +20,7 @@ const xmlToElement = (xml) => {
 
 export const operations = {
   measure: {
-    timeline: (node) => [{ active: 60, passive: 0 }],
+    timeline: (node) => ({ active: 60, passive: 0 }),
     title: (node) => "Measure",
     instruction: (recipe, node) => {
       const [{ name, amount }] = getAmounts(recipe, node);
@@ -38,16 +38,14 @@ export const operations = {
         options
       )} ${getUnitFromOption("temperature", options)}`;
     },
-    timeline: (node) => [
-      {
-        title: "Heat",
-        active: 30,
-        passive: Math.max(
-          0,
-          (getNumericValueFromOption("temperature", getOptions(node)) - 10) * 5
-        ),
-      },
-    ],
+    timeline: (node) => ({
+      title: "Heat",
+      active: 30,
+      passive: Math.max(
+        0,
+        (getNumericValueFromOption("temperature", getOptions(node)) - 10) * 5
+      ),
+    }),
     title: (node) => "Heat",
   },
   "preheat-oven": {
@@ -58,15 +56,12 @@ export const operations = {
         options
       )} ${getUnitFromOption("temperature", options)}`;
     },
-    timeline: (node) => [
-      {
-        title: "Preheat the oven",
-        active: 30,
-        passive:
-          (getNumericValueFromOption("temperature", getOptions(node)) - 20) *
-          10,
-      },
-    ],
+    timeline: (node) => ({
+      title: "Preheat the oven",
+      active: 30,
+      passive:
+        (getNumericValueFromOption("temperature", getOptions(node)) - 20) * 8,
+    }),
     title: (node) => "Preheat the oven",
   },
   crumble: {
@@ -74,7 +69,7 @@ export const operations = {
       // TODO: How to generate names for outputs so they can be referenced in the instructions?
       return `Crumble ${getFirstInputName(recipe, node)}`;
     },
-    timeline: (node) => [{ active: 30, passive: 0 }],
+    timeline: (node) => ({ active: 30, passive: 0 }),
     title: (node) => "Crumble",
   },
   mix: {
@@ -94,7 +89,7 @@ export const operations = {
         </div>
       );
     },
-    timeline: (node) => [{ active: 60, passive: 0 }],
+    timeline: (node) => ({ active: 60, passive: 0 }),
     title: (node) => "Mix",
   },
   "mix-in-steps": {
@@ -103,15 +98,29 @@ export const operations = {
       const secondInputName = getNameForInputAtIndex(recipe, node, 1);
       return `Mix ${secondInputName} to ${firstInputName} in steps`;
     },
-    timeline: (node) => [
-      {
-        active: 10, // TODO
-        passive: 0,
-      },
-    ],
+    timeline: (node) => ({
+      active: 10, // TODO
+      passive: 0,
+    }),
     title: (node) => "Mix in steps",
   },
+  wait: {
+    // TODO: reuse wait?
+    instruction: (recipe, node) => {
+      const options = getOptions(node);
+      return `Wait for ${getNumericValueFromOption(
+        "duration",
+        options
+      )} ${getUnitFromOption("duration", options)}`;
+    },
+    timeline: (node) => ({
+      active: 60,
+      passive: getDuration(getOptions(node)),
+    }),
+    title: (node) => "Wait",
+  },
   raise: {
+    // TODO: reuse wait?
     instruction: (recipe, node) => {
       const options = getOptions(node);
       return `Raise ${getFirstInputName(
@@ -122,21 +131,22 @@ export const operations = {
         options
       )} ${getUnitFromOption("duration", options)}`;
     },
-    timeline: (node) => [
-      { active: 60, passive: getDuration(getOptions(node)) },
-    ],
+    timeline: (node) => ({
+      active: 60,
+      passive: getDuration(getOptions(node)) - 60,
+    }),
     title: (node) => "Raise",
   },
   batch: {
     instruction: () => "Process in batches",
-    timeline: (node) => [{ active: 60, passive: 0 }],
+    timeline: (node) => ({ active: 60, passive: 0 }),
     title: (node) => "Process in batches",
   },
   spherify: {
     instruction: (recipe, node) => {
       return `Roll ${getFirstInputName(recipe, node)} into balls`;
     },
-    timeline: (node) => [{ active: 240, passive: 0 }],
+    timeline: (node) => ({ active: 240, passive: 0 }),
     title: (node) => "Roll into balls",
   },
   bake: {
@@ -159,17 +169,22 @@ export const operations = {
         "temperature",
         options
       )}`;
-      const unit = `${getUnitFromOption("temperature", options)}`;
-      const preheatStepId = `oven-at-${temperature}-${unit[0]}`;
+      const duration = getNumericValueFromOption("duration", options);
+      const durationUnit = getUnitFromOption("duration", options);
+      const temperatureUnit = `${getUnitFromOption("temperature", options)}`;
+      const preheatStepId = `oven-at-${temperature}-${temperatureUnit[0]}`;
       const inputRef = getFirstInputRef(node);
+      const inputName = getFirstInputName(recipe, node);
       const bakedId = `baked-${inputRef}`;
-      const outputId = getOutputs(node)[0].getAttribute("id");
+      const output = getOutputs(node)[0];
+      const outputId = output.getAttribute("id");
+      const outputName = output.getAttribute("name") || `Baked ${inputName}`;
 
       return [
         `<step operation="preheat-oven">
         <options>
           <option name="temperature">
-            <numeric-value number="${temperature}" unit="${unit}"/>
+            <numeric-value number="${temperature}" unit="${temperatureUnit}"/>
           </option>
         </options>
         <outputs>
@@ -177,12 +192,17 @@ export const operations = {
         </outputs>
       </step>`,
         `<step operation="put-into-oven"><!-- TODO rename operation -->
+        <options>
+          <option name="duration">
+            <numeric-value number="${duration}" unit="${durationUnit}"/>
+          </option>
+        </options>
         <inputs>
-          <input ref="${preheatStepId}"/>
           <input ref="${inputRef}"/>
+          <input ref="${preheatStepId}"/>
         </inputs>
         <outputs>
-          <output id="${bakedId}" />
+          <output id="${bakedId}" name="baking ${inputName}" />
         </outputs>
       </step>`,
         `<step operation="take-out-of-oven">
@@ -190,7 +210,7 @@ export const operations = {
           <input ref="${bakedId}"/>
         </inputs>
         <outputs>
-          <output id="${outputId}" />
+          <output id="${outputId}" name="${outputName}"/>
         </outputs>
       </step>`,
       ].map(xmlToElement);
@@ -201,26 +221,22 @@ export const operations = {
     instruction: (recipe, node) => {
       return `Put ${getNameForInputAtIndex(recipe, node, 0)} into oven`;
     },
-    timeline: (node) => [
-      {
-        title: "Put into oven",
-        active: 30,
-        passive: 0
-      },
-    ],
+    timeline: (node) => ({
+      title: "Put into oven",
+      active: 30,
+      passive: getDuration(getOptions(node)),
+    }),
     title: (node) => "Put into oven",
   },
   "take-out-of-oven": {
     instruction: (recipe, node) => {
       return `Take ${getNameForInputAtIndex(recipe, node, 0)} out of oven`;
     },
-    timeline: (node) => [
-      {
-        title: "Take out",
-        active: 30,
-        passive: 0
-      },
-    ],
+    timeline: (node) => ({
+      title: "Take out",
+      active: 30,
+      passive: 0,
+    }),
     title: (node) => "Take out of oven",
   },
   brush: {
@@ -229,7 +245,7 @@ export const operations = {
       const secondInputName = getNameForInputAtIndex(recipe, node, 1);
       return `Brush ${firstInputName} with ${secondInputName}`;
     },
-    timeline: (node) => [{ active: 60, passive: 0 }],
+    timeline: (node) => ({ active: 60, passive: 0 }),
     title: (node) => "Brush",
   },
   sprinkle: {
@@ -238,7 +254,7 @@ export const operations = {
       const secondInputName = getNameForInputAtIndex(recipe, node, 1);
       return `Sprinkle ${secondInputName} on ${firstInputName}`;
     },
-    timeline: (node) => [{ active: 60, passive: 0 }],
+    timeline: (node) => ({ active: 60, passive: 0 }),
     title: (node) => "Sprinkle",
   },
   beat: {
@@ -246,7 +262,7 @@ export const operations = {
       const firstInputName = getNameForInputAtIndex(recipe, node, 0);
       return `Beat ${firstInputName}`;
     },
-    timeline: (node) => [{ active: 60, passive: 0 }],
+    timeline: (node) => ({ active: 60, passive: 0 }),
     title: (node) => "Beat",
   },
   "place-on-sheet": {
@@ -254,7 +270,7 @@ export const operations = {
       const firstInputName = getNameForInputAtIndex(recipe, node, 0);
       return `Place ${firstInputName} on a sheet`;
     },
-    timeline: (node) => [{ active: 120, passive: 0 }],
+    timeline: (node) => ({ active: 120, passive: 0 }),
     title: (node) => "Place on sheet",
   },
 };
