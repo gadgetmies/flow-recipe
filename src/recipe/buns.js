@@ -228,7 +228,16 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
         <step operation="batch">
             <options>
                 <option name="batch-size">
-                    <numeric-value number="30" unit="grams"/>
+                    <!-- TODO: would it be better to just express this as number of batches? -->
+                    <!-- The recipe will anyway be defined with as certain amounts instead of ratios -->
+                    <!-- although it would be great if the batches could be weighed. Perhaps however the
+                    best thing would be to define the size and amount of the outputs, which would define
+                    the batch sizes. The problem there however is that it might be difficult to estimate
+                    the amount of buns that fit on a single sheet. Perhaps it would be possible to define
+                    some kind of bun size to sheet area mapping still and have that scale logarithmically
+                    (or exponentially)? 
+                    -->
+                    <numeric-value number="30" unit="grams"/> 
                 </option>
             </options>
             <inputs>
@@ -294,7 +303,9 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <output id="oven-ready-buns" name="oven ready buns"/>
             </outputs>
         </step>
-        <step operation="bake">
+        <step operation="bake"> 
+            <!-- TODO: add a sequence meta step, that takes the inputs of the parent step and forwards those to the first step, of which outputs will be the inputs of the next one. 
+            How will the next steps know which inputs to use though? Need to generate automatic ids and expect a certain order? -->
             <!-- TODO: add interrupt i.e. suspend other operations when this finishes and split their processing time -->
             <options>
                 <option name="temperature">

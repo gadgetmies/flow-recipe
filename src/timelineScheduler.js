@@ -1,6 +1,10 @@
 import { operations } from "./operations";
 import { findStepProducing } from "./recipeTools";
 
+function cloneToFreezeForDebug(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
 function value(valueOrFunction, ...args) {
   return typeof valueOrFunction === "function"
     ? valueOrFunction(...args)
@@ -43,7 +47,7 @@ export function scheduleItemsInTimelines(
 
   console.log(
     {
-      timelines: structuredClone(timelines),
+      timelines: cloneToFreezeForDebug(timelines),
       readyAt: mustFinishBy,
       graph,
     },
@@ -181,7 +185,7 @@ export function scheduleItemsInTimelines(
         "Splicing",
         spotTimelineNumber,
         index,
-        structuredClone(timelines[spotTimelineNumber])
+        cloneToFreezeForDebug(timelines[spotTimelineNumber])
       );
 
       timelines[spotTimelineNumber].splice(index, 0, item);

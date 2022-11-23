@@ -245,7 +245,7 @@ function App() {
     );
 
     return () => {
-      p.current?.close();
+      // p.current?.close();
     };
   }, []);
 
@@ -332,6 +332,7 @@ function App() {
   const position = formatTime(
     -(recipeDuration - timelines[currentTimeline][currentStep]?.start)
   );
+  const timeUntilFinished = formatTime(timelines[currentTimeline][currentStep]?.start)
 
   const height = laneHeight * timelines.length;
 
@@ -394,7 +395,7 @@ function App() {
               </thead>
               <tbody>
                 {connections.map(({ name, id }, i) => (
-                  <tr>
+                  <tr key={id}>
                     <td>
                       {participantId === i ? (
                         <input
@@ -437,8 +438,9 @@ function App() {
               }}
             >
               {timelines.map((timeline, timelineNumber) =>
-                timeline.map(({ start, end, title }, i) => (
+                timeline.map(({ start, end, title, id }, i) => (
                   <rect
+                    key={id}
                     width={end - start}
                     height={laneHeight}
                     x={width + start}
@@ -469,9 +471,11 @@ function App() {
               <>
                 <p>{getInstructions(recipe, step)}</p>
                 <p>
-                  Start time: {position}
-                  <br />
-                  Duration: {formatTime(step.duration)}
+                  Time until finished: {timeUntilFinished}<br />
+                </p>
+                <p>
+                  Estimated step duration: {formatTime(step.duration)}
+                  Start time: {position}<br/>
                 </p>
               </>
             ) : null}
@@ -481,8 +485,8 @@ function App() {
             {shoppingList ? (
               <ul>
                 {Object.entries(shoppingList).map(
-                  ([name, { amount, unit }]) => (
-                    <li>
+                  ([name, { amount, unit }], i) => (
+                    <li key={`${name}-${i}`}>
                       {amount} {unit} {name}
                     </li>
                   )
