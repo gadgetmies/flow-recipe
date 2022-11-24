@@ -171,14 +171,18 @@ function App() {
 
   const sendConnections = () => {
     for (const connection of connectionsRef.current.slice(1)) {
-      connection.connection.send(
-        JSON.stringify({
-          type: "connections",
-          data: connectionsRef.current.map(({ connection, ...rest }) => ({
-            ...rest,
-          })),
-        })
-      );
+      try {
+        connection.connection.send(
+          JSON.stringify({
+            type: "connections",
+            data: connectionsRef.current.map(({connection, ...rest}) => ({
+              ...rest,
+            })),
+          })
+        );
+      } catch (e) {
+        console.error(e, connection)
+      }
     }
   };
 
