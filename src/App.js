@@ -259,11 +259,9 @@ function App() {
 
   const updateName = (name) => {
     if (participantId === 0) {
-      const hostConnection = connectionsRef.current[0];
       const newConnections = mergeConnection(
         {
-          id: hostConnection.connectionId,
-          connection: hostConnection.connection,
+          id: hostId,
           name,
         },
         connectionsRef.current // does this need to be ref current?
