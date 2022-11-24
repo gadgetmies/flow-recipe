@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/flow-recipe/static/css/main.bb000464.css",
-    "main.js": "/flow-recipe/static/js/main.3c2d924b.js",
+    "main.js": "/flow-recipe/static/js/main.f2cf6c30.js",
     "static/js/787.665ae1db.chunk.js": "/flow-recipe/static/js/787.665ae1db.chunk.js",
     "index.html": "/flow-recipe/index.html",
     "main.bb000464.css.map": "/flow-recipe/static/css/main.bb000464.css.map",
-    "main.3c2d924b.js.map": "/flow-recipe/static/js/main.3c2d924b.js.map",
+    "main.f2cf6c30.js.map": "/flow-recipe/static/js/main.f2cf6c30.js.map",
     "787.665ae1db.chunk.js.map": "/flow-recipe/static/js/787.665ae1db.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.bb000464.css",
-    "static/js/main.3c2d924b.js"
+    "static/js/main.f2cf6c30.js"
   ]
 }
