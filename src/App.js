@@ -144,6 +144,7 @@ function App() {
   const [nextConnectionNumber, _setNextConnectionNumber] = useState(
     nextConnectionNumberRef.current
   );
+  const [setupDone, setSetupDone] = useState(participantId === 0);
 
   const connectionRef = useRef();
 
@@ -175,13 +176,13 @@ function App() {
         connection.connection.send(
           JSON.stringify({
             type: "connections",
-            data: connectionsRef.current.map(({connection, ...rest}) => ({
+            data: connectionsRef.current.map(({ connection, ...rest }) => ({
               ...rest,
             })),
           })
         );
       } catch (e) {
-        console.error(e, connection)
+        console.error(e, connection);
       }
     }
   };
@@ -325,6 +326,8 @@ function App() {
       setCurrentTimeline(ownLane);
       setCurrentStep(newTimelines[ownLane].length - 1);
     }
+
+    setSetupDone(true);
   }, [recipe, connections]);
 
   const width = Math.max(
@@ -334,7 +337,9 @@ function App() {
   const position = formatTime(
     -(recipeDuration - timelines[currentTimeline][currentStep]?.start)
   );
-  const timeUntilFinished = formatTime(timelines[currentTimeline][currentStep]?.start)
+  const timeUntilFinished = formatTime(
+    timelines[currentTimeline][currentStep]?.start
+  );
 
   const height = laneHeight * timelines.length;
 
@@ -389,32 +394,36 @@ function App() {
           <div className={"container"}>
             <h2 className="title">Settings</h2>
             <h3>Participants:</h3>
-            <table>
-              <thead>
-                <tr>
-                  <td>Name</td>
-                </tr>
-              </thead>
-              <tbody>
-                {connections.map(({ name, id }, i) => (
-                  <tr key={id}>
-                    <td>
-                      {participantId === i ? (
-                        <input
-                          name="name"
-                          value={name}
-                          onChange={(e) => {
-                            setName(e.target.value);
-                          }}
-                        />
-                      ) : (
-                        name
-                      )}
-                    </td>
+            {!setupDone ? (
+              "Connecting..."
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <td>Name</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {connections.map(({ name, id }, i) => (
+                    <tr key={id}>
+                      <td>
+                        {participantId === i ? (
+                          <input
+                            name="name"
+                            value={name}
+                            onChange={(e) => {
+                              setName(e.target.value);
+                            }}
+                          />
+                        ) : (
+                          name
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
             {participantId === 0 && (
               <>
                 <h3>Add participant</h3>
@@ -425,7 +434,6 @@ function App() {
                 />
               </>
             )}
-            {nextConnectionNumber}
           </div>
           <h2>Steps</h2>
           <div style={{ overflowX: "auto" }}>
@@ -473,11 +481,13 @@ function App() {
               <>
                 <p>{getInstructions(recipe, step)}</p>
                 <p>
-                  Time until finished: {timeUntilFinished}<br />
+                  Time until finished: {timeUntilFinished}
+                  <br />
                 </p>
                 <p>
                   Estimated step duration: {formatTime(step.duration)}
-                  Start time: {position}<br/>
+                  Start time: {position}
+                  <br />
                 </p>
               </>
             ) : null}
