@@ -23,6 +23,8 @@ const queryParams = new Proxy(new URLSearchParams(window.location.search), {
   get: (searchParams, prop) => searchParams.get(prop),
 });
 
+const baseUrl = window.location.href.split(/[?#]/)[0];
+
 const participantId = Number(queryParams.participant) || 0;
 let sessionId = queryParams.session;
 if (!sessionId) {
@@ -30,7 +32,7 @@ if (!sessionId) {
   window.history.replaceState(
     { sessionId, participantId },
     "Buns!",
-    `/?session=${sessionId}&participant=${participantId}`
+    `${baseUrl}?session=${sessionId}&participant=${participantId}`
   );
 }
 
@@ -296,7 +298,7 @@ function App() {
   }, [recipe]);
 
   useEffect(() => {
-    if (!recipe) {
+    if (!recipe || (participantId !== 0 && connections.length < 2)) {
       return;
     }
 
@@ -429,7 +431,7 @@ function App() {
                 <h3>Add participant</h3>
                 <QRCodeSVG
                   value={`${
-                    window.location.href.split(/[?#]/)[0]
+                    baseUrl
                   }?session=${sessionId}&participant=${nextConnectionNumber}`}
                 />
               </>
@@ -486,8 +488,8 @@ function App() {
                 </p>
                 <p>
                   Estimated step duration: {formatTime(step.duration)}
-                  Start time: {position}
                   <br />
+                  Start time: {position}
                 </p>
               </>
             ) : null}

@@ -51,7 +51,7 @@ export const operations = {
   "preheat-oven": {
     instruction: (recipe, node) => {
       const options = getOptions(node);
-      return `Preheat the oven to ${getNumericValueFromOption(
+      return `Set the oven to ${getNumericValueFromOption(
         "temperature",
         options
       )} ${getUnitFromOption("temperature", options)}`;
