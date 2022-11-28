@@ -1,8 +1,11 @@
 # Flow Recipe
 
-Structured recipe modelling and algorithmic scheduling.
+A P2P collaborative cooking app with structured recipe modelling and algorithmic scheduling.
 
-Goal: Create a format for describing cooking and baking recipes in a structured and accurate manner in order to enable programmatic scheduling and adaptation. 
+Goals: 
+* Enable people to cook together without stress and planning
+* Create a format for describing cooking and baking recipes in a structured and accurate manner in order to enable 
+programmatic scheduling and adaptation. 
 
 ---
 
