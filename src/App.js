@@ -1,13 +1,6 @@
 import "./App.css";
 import xml_data from "./recipe/buns";
-import {
-  createContext,
-  useContext,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   findFinalOutputId,
   findStepProducing,
@@ -147,6 +140,27 @@ function App() {
     nextConnectionNumberRef.current
   );
   const [setupDone, setSetupDone] = useState(participantId === 0);
+  const completedStepsRef = useRef([]);
+  const [completedSteps, _setCompletedSteps] = useState(
+    completedStepsRef.current
+  );
+  const setCompletedSteps = (newValue) => {
+    completedStepsRef.current = newValue;
+    _setCompletedSteps(newValue);
+  };
+
+  const markCurrentStepDone = async () => {
+    const currentStepItem = timelines[currentTimeline][currentStep];
+    console.log({ currentStepItem });
+    const currentStepId = currentStepItem.id;
+    setCompletedSteps([...completedStepsRef.current, currentStepId]);
+    if (participantId === 0) {
+      await sendCompletedSteps();
+    } else {
+      await sendStepCompleted(currentStepId);
+    }
+    setCurrentStep(currentStep - 1);
+  };
 
   const connectionRef = useRef();
 
@@ -172,21 +186,36 @@ function App() {
     return newConnections;
   };
 
-  const sendConnections = () => {
+  const sendMessageToAllConnections = async (message) => {
     for (const connection of connectionsRef.current.slice(1)) {
       try {
-        connection.connection.send(
-          JSON.stringify({
-            type: "connections",
-            data: connectionsRef.current.map(({ connection, ...rest }) => ({
-              ...rest,
-            })),
-          })
-        );
+        connection.connection.send(JSON.stringify(message));
       } catch (e) {
         console.error(e, connection);
       }
     }
+  };
+
+  const sendConnections = async () => {
+    await sendMessageToAllConnections({
+      type: "connections",
+      data: connectionsRef.current.map(({ connection, ...rest }) => ({
+        ...rest,
+      })),
+    });
+  };
+
+  const sendStepCompleted = (stepId) => {
+    connectionRef.current.send(
+      JSON.stringify({ type: "stepCompleted", data: stepId })
+    );
+  };
+
+  const sendCompletedSteps = async () => {
+    await sendMessageToAllConnections({
+      type: "completedSteps",
+      data: completedStepsRef.current,
+    });
   };
 
   const handleConnection = (connection) => {
@@ -201,10 +230,10 @@ function App() {
 
     connection.on(
       "data",
-      ((connectionId, data) => {
+      (async (connectionId, data) => {
         const json = JSON.parse(data);
         if (json.type === "init") {
-          sendConnections();
+          await sendConnections();
         } else if (json.type === "name") {
           setConnections(
             mergeConnection(
@@ -215,7 +244,10 @@ function App() {
               connectionsRef.current
             )
           );
-          sendConnections();
+          await sendConnections();
+        } else if (json.type === "stepCompleted") {
+          setCompletedSteps([...completedStepsRef.current, json.data]);
+          await sendCompletedSteps();
         }
         console.log(data);
       }).bind(null, connectionId)
@@ -230,6 +262,8 @@ function App() {
       const json = JSON.parse(data);
       if (json.type === "connections") {
         setConnections(json.data);
+      } else if (json.type === "completedSteps") {
+        setCompletedSteps(json.data);
       }
     });
   };
@@ -309,6 +343,21 @@ function App() {
     const finalOutputId = findFinalOutputId(recipe);
     console.log({ finalOutputId });
     const lastStep = findStepProducing(recipe, finalOutputId);
+    const xPathResult = recipe.evaluate(
+      "//ingredient",
+      recipe,
+      null,
+      XPathResult.UNORDERED_NODE_ITERATOR_TYPE,
+      null
+    );
+
+    const ingredients = [];
+    let node = xPathResult.iterateNext();
+    while (node) {
+      ingredients.push(node.getAttribute("id"));
+      node = xPathResult.iterateNext();
+    }
+    setCompletedSteps(ingredients);
 
     console.log(
       `Calculating graph starting from ${lastStep.getAttribute("operation")}`,
@@ -344,8 +393,9 @@ function App() {
   );
 
   const height = laneHeight * timelines.length;
-
   const step = timelines[currentTimeline][currentStep];
+  console.log("inputs", step);
+  const pendingInputs = step?.inputs?.some((i) => !completedSteps.includes(i));
   return (
     <div className="App">
       {!nameSet ? (
@@ -430,9 +480,7 @@ function App() {
               <>
                 <h3>Add participant</h3>
                 <QRCodeSVG
-                  value={`${
-                    baseUrl
-                  }?session=${sessionId}&participant=${nextConnectionNumber}`}
+                  value={`${baseUrl}?session=${sessionId}&participant=${nextConnectionNumber}`}
                 />
               </>
             )}
@@ -465,6 +513,8 @@ function App() {
                       fill:
                         timelineNumber === currentTimeline && i === currentStep
                           ? "rgb(200,200,255)"
+                          : completedSteps.includes(id)
+                          ? "rgb(240,255,240)"
                           : "rgb(240,240,255)",
                       strokeWidth: 3,
                       rx: 5,
@@ -480,18 +530,21 @@ function App() {
           <div className={"container"}>
             <h2 className="title">Step: {step?.title}</h2>
             {timelines[0]?.length > 0 ? (
-              <>
-                <p>{getInstructions(recipe, step)}</p>
-                <p>
-                  Time until finished: {timeUntilFinished}
-                  <br />
-                </p>
-                <p>
-                  Estimated step duration: {formatTime(step.duration)}
-                  <br />
-                  Start time: {position}
-                </p>
-              </>
+              pendingInputs ? (
+                "Waiting for previous steps to complete"
+              ) : (
+                <>
+                  <p>{getInstructions(recipe, step)}</p>
+                  <p>Estimated step duration: {formatTime(step.duration)}</p>
+                  <div
+                    style={{ display: "flex", justifyContent: "center" }}
+                    onClick={markCurrentStepDone}
+                  >
+                    <button>Done!</button>
+                  </div>
+                  <p>Time until finished: {timeUntilFinished}</p>
+                </>
+              )
             ) : null}
           </div>
           <div className="container">

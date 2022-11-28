@@ -1,5 +1,10 @@
 import { operations } from "./operations";
-import { findStepProducing } from "./recipeTools";
+import {findStepProducing, getInputs} from "./recipeTools";
+
+const log = (...args) => {
+  return
+  console.log(...args)
+}
 
 function cloneToFreezeForDebug(value) {
   return JSON.parse(JSON.stringify(value))
@@ -20,11 +25,11 @@ function expandNode(graph, node) {
   const operation = getOperationForNode(node);
 
   if (operation.expand) {
-    console.log("Expanding node", node);
+    log("Expanding node", node);
     const steps = operation.expand(graph, node);
     node.remove();
     const stepsElement = graph.getElementsByTagName("steps")[0];
-    console.log("expanded", ...steps);
+    log("expanded", ...steps);
     steps.forEach((step) => stepsElement.append(step));
     const [last] = steps.splice(-1, 1);
     steps.forEach((node) => expandNode(graph, node));
@@ -45,7 +50,7 @@ export function scheduleItemsInTimelines(
     return;
   }
 
-  console.log(
+  log(
     {
       timelines: cloneToFreezeForDebug(timelines),
       readyAt: mustFinishBy,
@@ -57,18 +62,20 @@ export function scheduleItemsInTimelines(
   for (let node of nodes) {
     const dependencies = [];
 
-    console.log("Processing", node);
+    log("Processing", node);
     node = expandNode(graph, node);
     const operation = getOperationForNode(node);
     const outputs = node.querySelectorAll("output");
     const operationTimelineItem = operation.timeline(node);
     const title = operation.title(node);
     let stepStartsAt;
+    const inputs = getInputs(node)
+    const inputIds = inputs.map(n => n.getAttribute('ref'))
 
-    console.log("Calculating timeline");
+    log("Calculating timeline");
     // TODO: Sort operations by longest passive time?
     for (const output of outputs) {
-      console.log({ output, operation });
+      log({ output, operation });
       const passiveDuration = value(
         operationTimelineItem.passive,
         node,
@@ -79,9 +86,10 @@ export function scheduleItemsInTimelines(
 
       const timelineItem = {
         id: output.getAttribute("id"),
+        inputs: inputIds
       };
 
-      console.log("Processing", timelineItem, operationTimelineItem);
+      log("Processing", timelineItem, operationTimelineItem);
 
       const possibleSpots = [];
 
@@ -97,7 +105,7 @@ export function scheduleItemsInTimelines(
             indexInTimeline < lastIndex &&
             mustFinishBy < timeline[indexInTimeline].start
           ) {
-            console.log(
+            log(
               "Unable to start before dependent operations are started"
             );
             continue;
@@ -131,7 +139,7 @@ export function scheduleItemsInTimelines(
 
           const atLastTimelineItem = indexInTimeline + 1 >= timeline.length;
           if (atLastTimelineItem) {
-            console.log(
+            log(
               `No open slots found. Only possible to add the item at the end in timeline ${timelineNumber}`
             );
             const lastItem = timeline[lastIndex];
@@ -153,12 +161,12 @@ export function scheduleItemsInTimelines(
           }
         }
       }
-      console.log(JSON.stringify({ possibleSpots }, null, 2));
+      log(JSON.stringify({ possibleSpots }, null, 2));
 
       const firstAvailableSpot = possibleSpots
         .splice(1)
         .reduce((firstSpot, spot) => {
-          console.log("Comparing", firstSpot, spot);
+          log("Comparing", firstSpot, spot);
           return spot.start > firstSpot.start ||
             (spot.start === firstSpot.start && spot.index < firstSpot.index)
             ? spot
@@ -181,7 +189,7 @@ export function scheduleItemsInTimelines(
       };
 
       stepStartsAt = start;
-      console.log(
+      log(
         "Splicing",
         spotTimelineNumber,
         index,
@@ -191,17 +199,15 @@ export function scheduleItemsInTimelines(
       timelines[spotTimelineNumber].splice(index, 0, item);
     }
 
-    const inputs = node.querySelectorAll("input");
-
     for (const input of inputs) {
       const step = findStepProducing(graph, input.getAttribute("ref"));
       if (step !== null) {
         dependencies.push(step);
       } else {
-        console.log(`Ingredient ${input.getAttribute("ref")}`);
+        log(`Ingredient ${input.getAttribute("ref")}`);
       }
     }
-    console.log("Next nodes", ...dependencies);
+    log("Next nodes", ...dependencies);
     scheduleItemsInTimelines(
       graph,
       dependencies,
