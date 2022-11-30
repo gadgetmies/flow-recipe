@@ -3,8 +3,11 @@ import xml_data from "./recipe/buns";
 import { useEffect, useRef, useState } from "react";
 import {
   findFinalOutputId,
+  findOutputWithId,
   findStepProducing,
+  getInputs,
   getInstructions,
+  getOutputs,
 } from "./recipeTools";
 import { calculateShoppingList } from "./shoppingListGenerator";
 import { scheduleItemsInTimelines } from "./timelineScheduler";
@@ -19,7 +22,9 @@ const queryParams = new Proxy(new URLSearchParams(window.location.search), {
 const baseUrl = window.location.href.split(/[?#]/)[0];
 
 const sessionId = queryParams.session || uuidV4();
-const participantId = queryParams.session ? queryParams.participant || uuidV4() : "0";
+const participantId = queryParams.session
+  ? queryParams.participant || uuidV4()
+  : "0";
 const isHost = participantId === "0";
 
 window.history.replaceState(
@@ -393,8 +398,20 @@ function App() {
 
   const height = laneHeight * timelines.length;
   const step = timelines[currentTimeline][currentStep];
-  console.log("inputs", step);
-  const pendingInputs = step?.inputs?.some((i) => !completedSteps.includes(i));
+  const pendingInputs = step?.inputs?.filter(
+    (i) => !completedSteps.includes(i)
+  );
+  // TODO: get participants and outputs for inputs
+  const inputsForStep = step?.inputs?.map((id) => {
+    const timeline = timelines.findIndex((t) => t.some((s) => s.id === id));
+    return {
+      id,
+      input: findOutputWithId(id, recipe).getAttribute("name"),
+      participant:
+        timeline === currentTimeline ? null : connections[timeline].name,
+    };
+  });
+  console.log({ inputsForStep, pendingInputs });
   return (
     <div className="App">
       {!nameSet ? (
@@ -526,23 +543,47 @@ function App() {
 
           <div className={"container"}>
             <h2 className="title">Step: {step?.title}</h2>
-            {timelines[0]?.length > 0 ? (
-              pendingInputs ? (
-                "Waiting for previous steps to complete"
-              ) : (
-                <>
-                  <p>{getInstructions(recipe, step)}</p>
-                  <p>Estimated step duration: {formatTime(step.duration)}</p>
-                  <div
-                    style={{ display: "flex", justifyContent: "center" }}
-                    onClick={markCurrentStepDone}
-                  >
-                    <button>Done!</button>
-                  </div>
-                  <p>Time until finished: {timeUntilFinished}</p>
-                </>
-              )
-            ) : null}
+            {timelines[0]?.length > 0 && (
+              <>
+                {pendingInputs.length > 0 && (
+                  <>
+                    Waiting for: <br />
+                    <ul>
+                      {pendingInputs
+                        .map((pi) => inputsForStep.find((i) => i.id === pi))
+                        .map(({ input, participant }) => (
+                          <li>
+                            {input}{" "}
+                            {participant !== null && `from ${participant}`}
+                          </li>
+                        ))}
+                    </ul>
+                  </>
+                )}
+                {inputsForStep.length > 0 && (
+                  <p>
+                    Get: <br />
+                    <ul>
+                      {inputsForStep.map(({ participant, input }) => (
+                        <li>
+                          {input}{" "}
+                          {participant !== null && `from ${participant}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </p>
+                )}
+                <p>{getInstructions(recipe, step)}</p>
+                <p>Estimated step duration: {formatTime(step.duration)}</p>
+                <div
+                  style={{ display: "flex", justifyContent: "center" }}
+                  onClick={markCurrentStepDone}
+                >
+                  <button>Done!</button>
+                </div>
+                <p>Time until finished: {timeUntilFinished}</p>
+              </>
+            )}
           </div>
           <div className="container">
             <h2 className="title">Shopping list</h2>

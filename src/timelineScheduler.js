@@ -1,13 +1,17 @@
 import { operations } from "./operations";
-import {findStepProducing, getInputs} from "./recipeTools";
+import {
+  findIngredientWithId,
+  findStepProducing,
+  getInputs,
+} from "./recipeTools";
 
 const log = (...args) => {
-  return
-  console.log(...args)
-}
+  return;
+  console.log(...args);
+};
 
 function cloneToFreezeForDebug(value) {
-  return JSON.parse(JSON.stringify(value))
+  return JSON.parse(JSON.stringify(value));
 }
 
 function value(valueOrFunction, ...args) {
@@ -69,8 +73,13 @@ export function scheduleItemsInTimelines(
     const operationTimelineItem = operation.timeline(node);
     const title = operation.title(node);
     let stepStartsAt;
-    const inputs = getInputs(node)
-    const inputIds = inputs.map(n => n.getAttribute('ref'))
+    const inputs = getInputs(node);
+    const inputIds = inputs
+      .filter((n) => {
+        const producer = findIngredientWithId(graph, n.getAttribute("ref"));
+        return producer === null;
+      })
+      .map((n) => n.getAttribute("ref"));
 
     log("Calculating timeline");
     // TODO: Sort operations by longest passive time?
@@ -86,7 +95,7 @@ export function scheduleItemsInTimelines(
 
       const timelineItem = {
         id: output.getAttribute("id"),
-        inputs: inputIds
+        inputs: inputIds,
       };
 
       log("Processing", timelineItem, operationTimelineItem);
@@ -105,9 +114,7 @@ export function scheduleItemsInTimelines(
             indexInTimeline < lastIndex &&
             mustFinishBy < timeline[indexInTimeline].start
           ) {
-            log(
-              "Unable to start before dependent operations are started"
-            );
+            log("Unable to start before dependent operations are started");
             continue;
           }
 

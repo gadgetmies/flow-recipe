@@ -90,6 +90,10 @@ export function findStepProducing(graph, outputId) {
   return output.parentNode.parentNode;
 }
 
+export function findOutputWithId(id, recipe) {
+  return recipe.querySelector(`[id="${id}"]`)
+}
+
 export function findFinalOutputId(xml) {
   const inputIds = getInputs(xml).map((i) => i.getAttribute("ref"));
   const outputIds = getOutputs(xml).map((i) => i.getAttribute("id"));
