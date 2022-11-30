@@ -18,16 +18,15 @@ const queryParams = new Proxy(new URLSearchParams(window.location.search), {
 
 const baseUrl = window.location.href.split(/[?#]/)[0];
 
-const participantId = Number(queryParams.participant) || 0;
-let sessionId = queryParams.session;
-if (!sessionId) {
-  sessionId = uuidV4();
-  window.history.replaceState(
-    { sessionId, participantId },
-    "Buns!",
-    `${baseUrl}?session=${sessionId}&participant=${participantId}`
-  );
-}
+const sessionId = queryParams.session || uuidV4();
+const participantId = queryParams.session ? queryParams.participant || uuidV4() : "0";
+const isHost = participantId === "0";
+
+window.history.replaceState(
+  { sessionId, participantId },
+  "Buns!",
+  `${baseUrl}?session=${sessionId}&participant=${participantId}`
+);
 
 const ownId = `recipes-${sessionId}-${participantId}`;
 const hostId = `recipes-${sessionId}-0`;
@@ -139,7 +138,7 @@ function App() {
   const [nextConnectionNumber, _setNextConnectionNumber] = useState(
     nextConnectionNumberRef.current
   );
-  const [setupDone, setSetupDone] = useState(participantId === 0);
+  const [setupDone, setSetupDone] = useState(isHost);
   const completedStepsRef = useRef([]);
   const [completedSteps, _setCompletedSteps] = useState(
     completedStepsRef.current
@@ -154,7 +153,7 @@ function App() {
     console.log({ currentStepItem });
     const currentStepId = currentStepItem.id;
     setCompletedSteps([...completedStepsRef.current, currentStepId]);
-    if (participantId === 0) {
+    if (isHost) {
       await sendCompletedSteps();
     } else {
       await sendStepCompleted(currentStepId);
@@ -274,7 +273,7 @@ function App() {
       participantId,
       (peer) => {
         p.current = peer;
-        if (participantId === 0) {
+        if (isHost) {
           peer.on("connection", handleConnection);
         } else {
           const connection = peer.connect(hostId);
@@ -295,7 +294,7 @@ function App() {
   };
 
   const updateName = (name) => {
-    if (participantId === 0) {
+    if (isHost) {
       const newConnections = mergeConnection(
         {
           id: hostId,
@@ -332,7 +331,7 @@ function App() {
   }, [recipe]);
 
   useEffect(() => {
-    if (!recipe || (participantId !== 0 && connections.length < 2)) {
+    if (!recipe || (!isHost && connections.length < 2)) {
       return;
     }
 
@@ -456,10 +455,10 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {connections.map(({ name, id }, i) => (
+                  {connections.map(({ name, id }) => (
                     <tr key={id}>
                       <td>
-                        {participantId === i ? (
+                        {participantId === id ? (
                           <input
                             name="name"
                             value={name}
@@ -476,12 +475,10 @@ function App() {
                 </tbody>
               </table>
             )}
-            {participantId === 0 && (
+            {isHost && (
               <>
                 <h3>Add participant</h3>
-                <QRCodeSVG
-                  value={`${baseUrl}?session=${sessionId}&participant=${nextConnectionNumber}`}
-                />
+                <QRCodeSVG value={`${baseUrl}?session=${sessionId}`} />
               </>
             )}
           </div>
