@@ -35,10 +35,10 @@ export function getChildren(node, selector) {
 }
 
 // TODO: rename ingredient -> input as it is not always an ingredient
-export function getIngredients(recipe, node) {
+export function getInputRefNodes(recipe, node) {
   return getInputs(node).map((input) => {
-    const ingredientId = input.getAttribute("ref");
-    return recipe.getElementById(ingredientId);
+    const inputId = input.getAttribute("ref");
+    return recipe.getElementById(inputId);
   });
 }
 
@@ -57,7 +57,7 @@ export function getAmounts(recipe, node) {
 }
 
 export function getNameForInputAtIndex(recipe, node, i) {
-  const ingredients = getIngredients(recipe, node);
+  const ingredients = getInputRefNodes(recipe, node);
   return ingredients[i].getAttribute("name");
 }
 

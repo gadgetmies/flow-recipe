@@ -1,3 +1,4 @@
+import "./reset.css";
 import "./App.css";
 import xml_data from "./recipe/buns";
 import { useEffect, useRef, useState } from "react";
@@ -52,7 +53,7 @@ const findMatchingStep = (
 const formatTime = (seconds) =>
   seconds ? new Date(seconds * 1000).toISOString().substr(11, 8) : 0;
 
-const laneHeight = 40;
+const laneHeight = 80;
 const zoom = 0.4;
 
 function Navigation({
@@ -130,6 +131,8 @@ function App() {
   const [shoppingList, setShoppingList] = useState([]);
   const [timelines, setTimelines] = useState([[], []]);
   const [currentStep, setCurrentStep] = useState(0);
+  const [selectedStep, setSelectedStep] = useState({ timeline: 0, step: 0 });
+  const [ownLane, setOwnLane] = useState(0);
   const [currentTimeline, setCurrentTimeline] = useState(0);
   const [recipe, setRecipe] = useState();
   const [recipeDuration, setRecipeDuration] = useState();
@@ -137,6 +140,9 @@ function App() {
     JSON.parse(window.localStorage.getItem(sessionId))?.name || ""
   );
   const [nameSet, setNameSet] = useState(name !== "");
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
+  const [currentState, setCurrentState] = useState("settings");
+
   const connectionsRef = useRef([{ id: hostId, name }]);
   const [connections, _setConnections] = useState(connectionsRef.current);
   const nextConnectionNumberRef = useRef(1);
@@ -163,7 +169,9 @@ function App() {
     } else {
       await sendStepCompleted(currentStepId);
     }
-    setCurrentStep(currentStep - 1);
+    const nextStep = currentStep - 1;
+    setCurrentStep(nextStep);
+    setSelectedStep({ step: nextStep, timeline: ownLane });
   };
 
   const connectionRef = useRef();
@@ -378,26 +386,36 @@ function App() {
     );
     const ownLane = connections.findIndex(({ id }) => id === ownId);
     if (ownLane !== -1) {
+      setOwnLane(ownLane);
       setCurrentTimeline(ownLane);
-      setCurrentStep(newTimelines[ownLane].length - 1);
+      const nextStep = newTimelines[ownLane].length - 1;
+      setCurrentStep(nextStep);
+      setSelectedStep({ step: nextStep, timeline: ownLane });
     }
 
     setSetupDone(true);
   }, [recipe, connections]);
 
-  const width = Math.max(
-    ...timelines.map((timeline) => -(timeline[timeline.length - 1]?.start ?? 0))
-  );
+  const nameLabelWidth = 200;
+  const width =
+    Math.max(
+      ...timelines.map(
+        (timeline) => -(timeline[timeline.length - 1]?.start ?? 0)
+      )
+    ) + nameLabelWidth;
 
   const position = formatTime(
-    -(recipeDuration - timelines[currentTimeline][currentStep]?.start)
+    -(
+      recipeDuration -
+      timelines[selectedStep.timeline][selectedStep.step]?.start
+    )
   );
   const timeUntilFinished = formatTime(
-    timelines[currentTimeline][currentStep]?.start
+    timelines[selectedStep.timeline][selectedStep.step]?.start
   );
 
   const height = laneHeight * timelines.length;
-  const step = timelines[currentTimeline][currentStep];
+  const step = timelines[selectedStep.timeline][selectedStep.step];
   const pendingInputs = step?.inputs?.filter(
     (i) => !completedSteps.includes(i)
   );
@@ -412,8 +430,11 @@ function App() {
     };
   });
   console.log({ inputsForStep, pendingInputs });
+  const joinSessionLink = `${baseUrl}?session=${sessionId}`;
+  const currentIsSelected =
+    currentStep === selectedStep.step && selectedStep.timeline === ownLane;
   return (
-    <div className="App">
+    <div className="App" style={{ minHeight: "100vh", overflow: "hidden" }}>
       {!nameSet ? (
         <div style={{ display: "flex", minHeight: "100vh" }}>
           <div
@@ -458,149 +479,227 @@ function App() {
         </div>
       ) : (
         <>
-          <h1>{title}</h1>
-          <div className={"container"}>
-            <h2 className="title">Settings</h2>
-            <h3>Participants:</h3>
-            {!setupDone ? (
-              "Connecting..."
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <td>Name</td>
-                  </tr>
-                </thead>
-                <tbody>
-                  {connections.map(({ name, id }) => (
-                    <tr key={id}>
-                      <td>
-                        {participantId === id ? (
-                          <input
-                            name="name"
-                            value={name}
-                            onChange={(e) => {
-                              setName(e.target.value);
-                            }}
-                          />
-                        ) : (
-                          name
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            {isHost && (
-              <>
-                <h3>Add participant</h3>
-                <QRCodeSVG value={`${baseUrl}?session=${sessionId}`} />
-              </>
-            )}
-          </div>
-          <h2>Steps</h2>
-          <div style={{ overflowX: "auto" }}>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox={`0 0 ${width} ${height}`}
-              style={{
-                width: width * zoom,
-                height: `100%`,
-                border: "1px solid black",
-                marginBottom: 20,
-              }}
-            >
-              {timelines.map((timeline, timelineNumber) =>
-                timeline.map(({ start, end, title, id }, i) => (
-                  <rect
-                    key={id}
-                    width={end - start}
-                    height={laneHeight}
-                    x={width + start}
-                    y={timelineNumber * laneHeight}
-                    onClick={() => {
-                      setCurrentTimeline(timelineNumber);
-                      setCurrentStep(i);
-                    }}
-                    style={{
-                      fill:
-                        timelineNumber === currentTimeline && i === currentStep
-                          ? "rgb(200,200,255)"
-                          : completedSteps.includes(id)
-                          ? "rgb(240,255,240)"
-                          : "rgb(240,240,255)",
-                      strokeWidth: 3,
-                      rx: 5,
-                      ry: 5,
-                      stroke: "rgb(0,0,0)",
-                    }}
-                  />
-                ))
-              )}
-            </svg>
-          </div>
-
-          <div className={"container"}>
-            <h2 className="title">Step: {step?.title}</h2>
-            {timelines[0]?.length > 0 && (
-              <>
-                {pendingInputs.length > 0 && (
-                  <>
-                    Waiting for: <br />
-                    <ul>
-                      {pendingInputs
-                        .map((pi) => inputsForStep.find((i) => i.id === pi))
-                        .map(({ input, participant }) => (
-                          <li>
-                            {input}{" "}
-                            {participant !== null && `from ${participant}`}
-                          </li>
-                        ))}
-                    </ul>
-                  </>
-                )}
-                {inputsForStep.length > 0 && (
-                  <p>
-                    Get: <br />
-                    <ul>
-                      {inputsForStep.map(({ participant, input }) => (
-                        <li>
-                          {input}{" "}
-                          {participant !== null && `from ${participant}`}
+          <div style={{ marginBottom: "4em" }}>
+            {currentState === "settings" && (
+              <div className={"container"}>
+                <>
+                  <h2>Recipe</h2>
+                  Buns
+                  <h2>Participants:</h2>
+                  {!setupDone
+                    ? "Connecting..."
+                    : connections.map(({ name, id }) => (
+                        <li key={id}>
+                          {participantId === id ? (
+                            <input
+                              name="name"
+                              value={name}
+                              onChange={(e) => {
+                                setName(e.target.value);
+                              }}
+                            />
+                          ) : (
+                            name
+                          )}
                         </li>
                       ))}
-                    </ul>
-                  </p>
-                )}
-                <p>{getInstructions(recipe, step)}</p>
-                <p>Estimated step duration: {formatTime(step.duration)}</p>
-                <div
-                  style={{ display: "flex", justifyContent: "center" }}
-                  onClick={markCurrentStepDone}
-                >
-                  <button>Done!</button>
-                </div>
-                <p>Time until finished: {timeUntilFinished}</p>
-              </>
+                  <>
+                    <h3>Invite participants:</h3>
+                    <p>Use QR:</p>
+                    <QRCodeSVG value={joinSessionLink} />
+                    <p>or</p>
+                    <p>Use a link:</p>
+                    <button
+                      className="button button-push_button-large button-push_button-primary"
+                      onClick={() => {
+                        navigator.clipboard.writeText(joinSessionLink);
+                        setShareLinkCopied(true);
+                        window.setTimeout(
+                          () => setShareLinkCopied(false),
+                          2000
+                        );
+                      }}
+                    >
+                      {shareLinkCopied
+                        ? "Link copied!"
+                        : "Copy link to clipboard"}
+                    </button>
+                  </>
+                </>
+              </div>
             )}
-          </div>
-          <div className="container">
-            <h2 className="title">Shopping list</h2>
-            {shoppingList ? (
-              <ul>
-                {Object.entries(shoppingList).map(
-                  ([name, { amount, unit }], i) => (
-                    <li key={`${name}-${i}`}>
-                      {amount} {unit} {name}
-                    </li>
-                  )
+            {currentState === "shopping" && (
+              <div className="container">
+                {shoppingList ? (
+                  <ul>
+                    {Object.entries(shoppingList).map(
+                      ([name, { amount, unit }], i) => (
+                        <li key={`${name}-${i}`}>
+                          {amount} {unit} {name}
+                        </li>
+                      )
+                    )}
+                  </ul>
+                ) : null}
+              </div>
+            )}
+
+            {currentState === "cooking" && (
+              <div className="container">
+                <h2 className={"title"}>Steps for: buns</h2>
+                <div style={{ overflowX: "auto" }}>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox={`0 0 ${width} ${height}`}
+                    style={{
+                      width: width * zoom,
+                      height: `100%`,
+                      border: "1px solid black",
+                      marginBottom: 20,
+                    }}
+                  >
+                    {timelines.map((timeline, timelineNumber) => {
+                      const y = timelineNumber * laneHeight;
+
+                      return (
+                        <>
+                          <text
+                            x={0}
+                            y={y + laneHeight / 2}
+                            style={{ fontSize: Math.round(laneHeight / 2) }}
+                          >
+                            {connections[timelineNumber]?.name}
+                          </text>
+                          {timeline.map(({ start, end, title, id }, i) => {
+                            const currentTimelineIsOwn =
+                              timelineNumber === ownLane;
+                            return (
+                              <rect
+                                key={id}
+                                width={end - start}
+                                height={laneHeight}
+                                x={width + start}
+                                y={y}
+                                onClick={() => {
+                                  setCurrentTimeline(timelineNumber);
+                                  setSelectedStep({
+                                    step: i,
+                                    timeline: timelineNumber,
+                                  });
+                                }}
+                                style={{
+                                  fill:
+                                    currentTimelineIsOwn && i === currentStep
+                                      ? "rgb(200,200,255)"
+                                      : timelineNumber ===
+                                          selectedStep.timeline &&
+                                        i === selectedStep.step
+                                      ? "rgb(255,200,200)"
+                                      : completedSteps.includes(id)
+                                      ? "rgb(240,255,240)"
+                                      : "rgb(240,240,255)",
+                                  strokeWidth: 3,
+                                  rx: 5,
+                                  ry: 5,
+                                  stroke: "rgb(0,0,0)",
+                                }}
+                              />
+                            );
+                          })}
+                        </>
+                      );
+                    })}
+                  </svg>
+                </div>
+
+                <h2 className="title">
+                  {currentIsSelected ? "Step" : "Preview"}: {step?.title}
+                </h2>
+                {timelines[0]?.length > 0 && (
+                  <>
+                    {currentIsSelected && pendingInputs.length > 0 && (
+                      <>
+                        Waiting for: <br />
+                        <ul>
+                          {pendingInputs
+                            .map((pi) => inputsForStep.find((i) => i.id === pi))
+                            .map(({ input, participant }) => (
+                              <li>
+                                {input}{" "}
+                                {participant !== null && `from ${participant}`}
+                              </li>
+                            ))}
+                        </ul>
+                      </>
+                    )}
+                    {inputsForStep.length > 0 && (
+                      <p>
+                        Get: <br />
+                        <ul>
+                          {inputsForStep.map(({ participant, input }) => (
+                            <li>
+                              {input}{" "}
+                              {participant !== null && `from ${participant}`}
+                            </li>
+                          ))}
+                        </ul>
+                      </p>
+                    )}
+                    <p>{getInstructions(recipe, step)}</p>
+                    <p>Estimated step duration: {formatTime(step.duration)}</p>
+                    <p>
+                      <small>Time until finished: {timeUntilFinished}</small>
+                    </p>
+                    {currentIsSelected && (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "center",
+                        }}
+                        onClick={markCurrentStepDone}
+                      >
+                        <button
+                          className={
+                            "button button-push_button-primary button-push_button-large"
+                          }
+                        >
+                          Done, next!
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
-              </ul>
-            ) : null}
+              </div>
+            )}
           </div>
         </>
       )}
+      <div className={"nav"}>
+        <div
+          className={`nav-item clickable ${
+            currentState === "settings" ? "nav-item_current" : ""
+          }`}
+          onClick={() => setCurrentState("settings")}
+        >
+          Settings
+        </div>
+        <div
+          className={`nav-item clickable ${
+            currentState === "shopping" ? "nav-item_current" : ""
+          }`}
+          onClick={() => setCurrentState("shopping")}
+        >
+          Shopping list
+        </div>
+        <div
+          className={`nav-item clickable ${
+            currentState === "cooking" ? "nav-item_current" : ""
+          }`}
+          onClick={() => setCurrentState("cooking")}
+        >
+          Steps
+        </div>
+      </div>
     </div>
   );
 }

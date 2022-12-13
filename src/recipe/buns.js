@@ -56,6 +56,15 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                     <numeric-value number="0.5" unit="liters"/>
                 </option>
             </options>
+            <tools>
+                <tool ref="bowl"/>
+                <!-- TODO: 
+                When selecting the bowl, how to know how big it should be?
+                Perhaps it would be best to just define the right size and scale according to the recipe multiplier?
+                This however would need to take into account the sizes of available bowls. If the size of the dough
+                would be larger than the largest bowl then there needs to be multiple bowls used. 
+                -->
+            </tools>
             <inputs>
                 <input ref="milk"/>
             </inputs>
@@ -65,9 +74,9 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
         </step>
         <step operation="measure">
             <options>
-              <option name="amount">
-                  <numeric-value number="50" unit="grams"/>
-              </option>
+                <option name="amount">
+                    <numeric-value number="50" unit="grams"/>
+                </option>
             </options>
             <inputs>
                 <input ref="yeast"/>
@@ -147,6 +156,10 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                     <numeric-value number="30" unit="celsius"/>
                 </option>
             </options>
+            <tools>
+                <tool ref="microwave"/>
+                <!-- TODO: Would it be difficult to defer from the use of a microwave that the bowl cannot be metallic? -->
+            </tools>
             <inputs>
                 <input ref="0.5l-milk"/>
             </inputs>
@@ -154,24 +167,32 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <output id="warm-milk" name="warm milk"/>
             </outputs>
         </step>
-        <step operation="crumble">
-            <inputs>
-                <input ref="50g-yeast"/>
-            </inputs>
-            <outputs>
-                <output id="crumbled-yeast" name="crumbled yeast"/>
-            </outputs>
-        </step>
-        <step operation="mix">
-            <inputs>
-                <input ref="warm-milk"/>
-                <input ref="crumbled-yeast"/>
-            </inputs>
-            <outputs>
-                <output id="milk+yeast" name="milk and yeast"/>
-            </outputs>
-        </step>
-        <step operation="mix">
+        <join>
+            <!-- TODO: preprocess the recipe and replace join with a step that combines the steps inside it -->
+            <!-- i.e. here the output would be a step that would get the timeline from crumble and incorporate and
+                 also join the instructions.
+                 Will the instructions be clear enough though? Perhaps in here, but is that universal? 
+                 What should the instruction be here? Crumble yeast *and* mix *crumbled* yeast into the warm milk?
+                 A more natural way would be to say to crumble the yeast into the milk and mix it --> 
+            <step operation="crumble">
+                <inputs>
+                    <input ref="50g-yeast"/>
+                </inputs>
+                <outputs>
+                    <output id="crumbled-yeast" name="crumbled yeast"/>
+                </outputs>
+            </step>
+            <step operation="incorporate">
+                <inputs>
+                    <input ref="warm-milk"/>
+                    <input ref="crumbled-yeast"/>
+                </inputs>
+                <outputs>
+                    <output id="milk+yeast" name="milk and yeast"/>
+                </outputs>
+            </step>
+        </join>
+        <step operation="incorporate">
             <inputs>
                 <input ref="milk+yeast"/>
                 <input ref="egg-for-dough"/>
@@ -196,8 +217,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <output id="dough-without-butter" name="dough"/>
             </outputs>
         </step>
-        <step operation="mix">
-            <!-- TODO: perhaps better operation name here would be "incorporate" when one of the inputs comes from a previous step -->
+        <step operation="incorporate">
             <inputs>
                 <input ref="dough-without-butter"/>
                 <input ref="200g-butter"/>
@@ -215,16 +235,34 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                     <numeric-value number="30" unit="celcius"/>
                 </option>
             </options>
+            <tools>
+                <tool ref="towel"/>
+                <!-- TODO: how to refer to the towel from the instructions? -->
+            </tools>
             <inputs>
                 <input ref="dough"/>
             </inputs>
             <outputs>
                 <output id="raised-dough" name="raised dough"/>
+                <!-- TODO: should there be a timer output? -->
             </outputs>
         </step>
         <!-- TODO: is this a good way to express this?
-         Would need to somehow be able to express that there are multiple batches produced, which can then be processed
-         in parallel + processing can start when the first batch is ready -->
+        Would need to somehow be able to express that there are multiple batches produced, which can then be processed
+        in parallel + processing can start when the first batch is ready 
+        -->
+        
+        <!-- 
+        There would need to be a calculation of what utilities are available to know how many batches could be
+        processed in parallel.
+        When going back from the end result, it is not possible to know how many batches should be created as the
+        inputs have not been calculated yet. Perhaps another pass in the opposite direction is needed i.e. start
+        from the "branches" calculating the grams and when encountering a batch operation, calculate how many
+        batches should be created.
+        Would it though be possible to define a certain formula for the recipe that would define the amount of 
+        batches? i.e. 1kg dough would result in 4 batches (i.e. sheets) of 20 buns. Scaling the dough would scale
+        the amount of batches proportionally as would scaling the sheet size.  
+        -->
         <step operation="batch">
             <options>
                 <option name="batch-size">
@@ -237,7 +275,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                     some kind of bun size to sheet area mapping still and have that scale logarithmically
                     (or exponentially)? 
                     -->
-                    <numeric-value number="30" unit="grams"/> 
+                    <numeric-value number="30" unit="grams"/>
                 </option>
             </options>
             <inputs>
@@ -247,81 +285,92 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <output id="split-dough" name="split dough"/>
             </outputs>
         </step>
-        <step operation="spherify">
-            <inputs>
-                <input ref="split-dough"/>
-            </inputs>
-            <outputs>
-                <output id="dough-spheres" name="dough spheres"/>
-            </outputs>
-        </step>
-        <step operation="place-on-sheet">
-            <inputs>
-                <input ref="dough-spheres"/>
-            </inputs>
-            <outputs>
-                <output id="buns-on-sheet" name="buns on sheet"/>
-            </outputs>
-        </step>
-        <step operation="measure">
-            <options>
-                <option name="amount">
-                    <numeric-value number="1" unit="pieces"/>
-                </option>
-            </options>
-            <inputs>
-                <input ref="egg"/>
-            </inputs>
-            <outputs>
-                <output id="egg-for-brushing" name="egg"/>
-            </outputs>
-        </step>
-        <step operation="beat">
-            <inputs>
-                <input ref="egg-for-brushing"/>
-            </inputs>
-            <outputs>
-                <output id="beaten-egg" name="beaten egg"/>
-            </outputs>
-        </step>
-        <step operation="brush">
-            <inputs>
-                <input ref="buns-on-sheet"/>
-                <input ref="beaten-egg"/>
-            </inputs>
-            <outputs>
-                <output id="brushed-buns" name="brushed buns"/>
-            </outputs>
-        </step>
-        <!-- TODO: how to calculate this in the shopping list? -->
-        <step operation="sprinkle">
-            <inputs>
-                <input ref="brushed-buns"/>
-                <input ref="pearl-sugar"/>
-            </inputs>
-            <outputs>
-                <output id="oven-ready-buns" name="oven ready buns"/>
-            </outputs>
-        </step>
-        <step operation="bake"> 
-            <!-- TODO: add a sequence meta step, that takes the inputs of the parent step and forwards those to the first step, of which outputs will be the inputs of the next one. 
-            How will the next steps know which inputs to use though? Need to generate automatic ids and expect a certain order? -->
-            <!-- TODO: add interrupt i.e. suspend other operations when this finishes and split their processing time -->
-            <options>
-                <option name="temperature">
-                    <numeric-value number="250" unit="celcius"/>
-                </option>
-                <option name="duration">
-                    <numeric-value number="15" unit="minutes"/>
-                </option>
-            </options>
-            <inputs>
-                <input ref="oven-ready-buns"/>
-            </inputs>
-            <outputs>
-                <output id="baked-buns" name="baked buns"/>
-            </outputs>
-        </step>
+        <map>
+            <step operation="spherify">
+                <inputs>
+                    <input ref="split-dough"/>
+                </inputs>
+                <outputs>
+                    <output id="dough-spheres" name="dough spheres"/>
+                </outputs>
+            </step>
+            <step operation="place-on-sheet">
+                <tools>
+                    <tool ref="sheet"/>
+                </tools>
+                <inputs>
+                    <input ref="dough-spheres"/>
+                </inputs>
+                <outputs>
+                    <output id="buns-on-sheet" name="buns on sheet"/>
+                </outputs>
+            </step>
+            <step operation="measure">
+                <options>
+                    <option name="amount">
+                        <numeric-value number="1" unit="pieces"/>
+                    </option>
+                </options>
+                <inputs>
+                    <input ref="egg"/>
+                </inputs>
+                <outputs>
+                    <output id="egg-for-brushing" name="egg"/>
+                </outputs>
+            </step>
+            <step operation="beat">
+                <inputs>
+                    <input ref="egg-for-brushing"/>
+                </inputs>
+                <outputs>
+                    <output id="beaten-egg" name="beaten egg"/>
+                </outputs>
+            </step>
+            <step operation="brush">
+                <inputs>
+                    <input ref="buns-on-sheet"/>
+                    <input ref="beaten-egg"/>
+                </inputs>
+                <outputs>
+                    <output id="brushed-buns" name="brushed buns"/>
+                </outputs>
+            </step>
+            <!-- TODO: how to calculate this in the shopping list? -->
+            <step operation="sprinkle">
+                <inputs>
+                    <input ref="brushed-buns"/>
+                    <input ref="pearl-sugar"/>
+                </inputs>
+                <outputs>
+                    <output id="oven-ready-buns" name="oven ready buns"/>
+                </outputs>
+            </step>
+            <step operation="bake">
+                <!-- TODO: 
+                add a sequence meta step, that takes the inputs of the parent step and forwards those to the first step, of which outputs will be the inputs of the next one. 
+                How will the next steps know which inputs to use though? Need to generate automatic ids and expect a certain order? -->
+                <!-- TODO: 
+                add interrupt i.e. suspend other operations when this finishes and split their processing time 
+                -->
+                <options>
+                    <option name="temperature">
+                        <numeric-value number="250" unit="celcius"/>
+                    </option>
+                    <option name="duration">
+                        <numeric-value number="15" unit="minutes"/>
+                    </option>
+                </options>
+                <tools>
+                    <tool ref="oven"/>
+                </tools>
+                <inputs>
+                    <input ref="oven-ready-buns"/>
+                </inputs>
+                <outputs>
+                    <output id="baked-buns" name="baked buns"/>
+                </outputs>
+            </step>
+        </map>
     </steps>
 </recipe>`;
 

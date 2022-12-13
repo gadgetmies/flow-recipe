@@ -3,7 +3,7 @@ import {
   getDuration,
   getFirstInputName,
   getFirstInputRef,
-  getIngredients,
+  getInputRefNodes,
   getNameForInputAtIndex,
   getNumericValueFromOption,
   getOptions,
@@ -74,18 +74,33 @@ export const operations = {
   },
   mix: {
     instruction: (recipe, node) => {
-      const ingredients = getIngredients(recipe, node).map((ingredient) =>
-        ingredient.getAttribute("name")
+      const inputs = getInputRefNodes(recipe, node).map((i) =>
+        i.getAttribute("name")
       );
+
+      const last = inputs.splice(-1, 1)
 
       return (
         <div>
-          Mix:
-          <ul>
-            {ingredients.map((name) => (
-              <li>{name}</li>
-            ))}
-          </ul>
+          Mix {`${inputs.join(',')}${inputs.length > 0 ? ' & ' : ''}${last}`}
+        </div>
+      );
+    },
+    timeline: (node) => ({ active: 60, passive: 0 }),
+    title: (node) => "Mix",
+  },
+  incorporate: {
+    instruction: (recipe, node) => {
+      const inputs = getInputRefNodes(recipe, node).map((i) =>
+        i.getAttribute("name")
+      );
+
+      const [first, ...rest] = inputs;
+      const last = rest.splice(-1, 1)
+
+      return (
+        <div>
+          Incorporate {`${rest.join(',')}${rest.length > 0 ? ' & ' : ''}${last}`} into {first}
         </div>
       );
     },
