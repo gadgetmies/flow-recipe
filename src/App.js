@@ -1,14 +1,14 @@
 import "./reset.css";
 import "./App.css";
-import xml_data from "./recipe/buns";
+//import xml_data from "./recipe/buns";
+import xml_data from "./recipe/cheese-cake";
 import { useEffect, useRef, useState } from "react";
 import {
+  calculateToolList,
   findFinalOutputId,
   findOutputWithId,
-  findStepProducing,
-  getInputs,
+  findTaskProducing,
   getInstructions,
-  getOutputs,
 } from "./recipeTools";
 import { calculateShoppingList } from "./shoppingListGenerator";
 import { scheduleItemsInTimelines } from "./timelineScheduler";
@@ -37,13 +37,13 @@ window.history.replaceState(
 const ownId = `recipes-${sessionId}-${participantId}`;
 const hostId = `recipes-${sessionId}-0`;
 
-const findMatchingStep = (
+const findMatchingTask = (
   timelines,
   currentTimelineIndex,
   nextTimelineIndex,
-  currentStep
+  currentTask
 ) => {
-  const currentStart = timelines[currentTimelineIndex][currentStep].start;
+  const currentStart = timelines[currentTimelineIndex][currentTask].start;
   const nextTimeline = timelines[nextTimelineIndex];
   console.log(nextTimeline);
   const index = nextTimeline.findIndex(({ start }) => start <= currentStart);
@@ -59,9 +59,9 @@ const zoom = 0.4;
 function Navigation({
   currentTimeline,
   setCurrentTimeline,
-  setCurrentStep,
+  setCurrentTask,
   timelines,
-  currentStep,
+  currentTask,
 }) {
   return (
     <>
@@ -69,12 +69,12 @@ function Navigation({
         onClick={() => {
           const nextTimelineIndex = currentTimeline - 1;
           setCurrentTimeline(nextTimelineIndex);
-          setCurrentStep(
-            findMatchingStep(
+          setCurrentTask(
+            findMatchingTask(
               timelines,
               currentTimeline,
               nextTimelineIndex,
-              currentStep
+              currentTask
             )
           );
         }}
@@ -84,14 +84,14 @@ function Navigation({
       </button>
       <br />
       <button
-        onClick={() => setCurrentStep(currentStep + 1)}
-        disabled={currentStep + 1 === timelines[currentTimeline]?.length ?? 1}
+        onClick={() => setCurrentTask(currentTask + 1)}
+        disabled={currentTask + 1 === timelines[currentTimeline]?.length ?? 1}
       >
         Previous
       </button>
       <button
-        onClick={() => setCurrentStep(currentStep - 1)}
-        disabled={currentStep === 0}
+        onClick={() => setCurrentTask(currentTask - 1)}
+        disabled={currentTask === 0}
       >
         Next
       </button>
@@ -100,12 +100,12 @@ function Navigation({
         onClick={() => {
           const nextTimelineIndex = currentTimeline + 1;
           setCurrentTimeline(nextTimelineIndex);
-          setCurrentStep(
-            findMatchingStep(
+          setCurrentTask(
+            findMatchingTask(
               timelines,
               currentTimeline,
               nextTimelineIndex,
-              currentStep
+              currentTask
             )
           );
         }}
@@ -129,9 +129,10 @@ const createPeer = (sessionId, participantId, callback = () => {}) => {
 function App() {
   const [title, setTitle] = useState("");
   const [shoppingList, setShoppingList] = useState([]);
+  const [tools, setTools] = useState([]);
   const [timelines, setTimelines] = useState([[], []]);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [selectedStep, setSelectedStep] = useState({ timeline: 0, step: 0 });
+  const [currentTask, setCurrentTask] = useState(0);
+  const [selectedTask, setSelectedTask] = useState({ timeline: 0, task: 0 });
   const [ownLane, setOwnLane] = useState(0);
   const [currentTimeline, setCurrentTimeline] = useState(0);
   const [recipe, setRecipe] = useState();
@@ -150,28 +151,28 @@ function App() {
     nextConnectionNumberRef.current
   );
   const [setupDone, setSetupDone] = useState(isHost);
-  const completedStepsRef = useRef([]);
-  const [completedSteps, _setCompletedSteps] = useState(
-    completedStepsRef.current
+  const completedTasksRef = useRef([]);
+  const [completedTasks, _setCompletedTasks] = useState(
+    completedTasksRef.current
   );
-  const setCompletedSteps = (newValue) => {
-    completedStepsRef.current = newValue;
-    _setCompletedSteps(newValue);
+  const setCompletedTasks = (newValue) => {
+    completedTasksRef.current = newValue;
+    _setCompletedTasks(newValue);
   };
 
-  const markCurrentStepDone = async () => {
-    const currentStepItem = timelines[currentTimeline][currentStep];
-    console.log({ currentStepItem });
-    const currentStepId = currentStepItem.id;
-    setCompletedSteps([...completedStepsRef.current, currentStepId]);
+  const markCurrentTaskDone = async () => {
+    const currentTaskItem = timelines[currentTimeline][currentTask];
+    console.log({ currentTaskItem });
+    const currentTaskId = currentTaskItem.id;
+    setCompletedTasks([...completedTasksRef.current, currentTaskId]);
     if (isHost) {
-      await sendCompletedSteps();
+      await sendCompletedTasks();
     } else {
-      await sendStepCompleted(currentStepId);
+      await sendTaskCompleted(currentTaskId);
     }
-    const nextStep = currentStep - 1;
-    setCurrentStep(nextStep);
-    setSelectedStep({ step: nextStep, timeline: ownLane });
+    const nextTask = currentTask - 1;
+    setCurrentTask(nextTask);
+    setSelectedTask({ task: nextTask, timeline: ownLane });
   };
 
   const connectionRef = useRef();
@@ -217,16 +218,16 @@ function App() {
     });
   };
 
-  const sendStepCompleted = (stepId) => {
+  const sendTaskCompleted = (taskId) => {
     connectionRef.current.send(
-      JSON.stringify({ type: "stepCompleted", data: stepId })
+      JSON.stringify({ type: "taskCompleted", data: taskId })
     );
   };
 
-  const sendCompletedSteps = async () => {
+  const sendCompletedTasks = async () => {
     await sendMessageToAllConnections({
-      type: "completedSteps",
-      data: completedStepsRef.current,
+      type: "completedTasks",
+      data: completedTasksRef.current,
     });
   };
 
@@ -257,9 +258,9 @@ function App() {
             )
           );
           await sendConnections();
-        } else if (json.type === "stepCompleted") {
-          setCompletedSteps([...completedStepsRef.current, json.data]);
-          await sendCompletedSteps();
+        } else if (json.type === "taskCompleted") {
+          setCompletedTasks([...completedTasksRef.current, json.data]);
+          await sendCompletedTasks();
         }
         console.log(data);
       }).bind(null, connectionId)
@@ -274,8 +275,8 @@ function App() {
       const json = JSON.parse(data);
       if (json.type === "connections") {
         setConnections(json.data);
-      } else if (json.type === "completedSteps") {
-        setCompletedSteps(json.data);
+      } else if (json.type === "completedTasks") {
+        setCompletedTasks(json.data);
       }
     });
   };
@@ -344,6 +345,13 @@ function App() {
   }, [recipe]);
 
   useEffect(() => {
+    if (!recipe) {
+      return;
+    }
+    setTools(calculateToolList(recipe));
+  }, [recipe]);
+
+  useEffect(() => {
     if (!recipe || (!isHost && connections.length < 2)) {
       return;
     }
@@ -353,30 +361,29 @@ function App() {
       newTimelines.push([]);
     }
     const finalOutputId = findFinalOutputId(recipe);
-    console.log({ finalOutputId });
-    const lastStep = findStepProducing(recipe, finalOutputId);
+    const lastTask = findTaskProducing(recipe, finalOutputId);
+
+    const ingredientsAndTools = [];
     const xPathResult = recipe.evaluate(
-      "//ingredient",
+      "//ingredient|//tool",
       recipe,
       null,
       XPathResult.UNORDERED_NODE_ITERATOR_TYPE,
       null
     );
-
-    const ingredients = [];
     let node = xPathResult.iterateNext();
     while (node) {
-      ingredients.push(node.getAttribute("id"));
+      ingredientsAndTools.push(node.getAttribute("id"));
       node = xPathResult.iterateNext();
     }
-    setCompletedSteps(ingredients);
+    setCompletedTasks(ingredientsAndTools);
 
     console.log(
-      `Calculating graph starting from ${lastStep.getAttribute("operation")}`,
+      `Calculating graph starting from ${lastTask.getAttribute("operation")}`,
       newTimelines
     );
 
-    scheduleItemsInTimelines(recipe, [lastStep], newTimelines, 0);
+    scheduleItemsInTimelines(recipe, [lastTask], newTimelines, 0);
     setTimelines(newTimelines);
     setRecipeDuration(
       newTimelines.reduce(
@@ -388,9 +395,9 @@ function App() {
     if (ownLane !== -1) {
       setOwnLane(ownLane);
       setCurrentTimeline(ownLane);
-      const nextStep = newTimelines[ownLane].length - 1;
-      setCurrentStep(nextStep);
-      setSelectedStep({ step: nextStep, timeline: ownLane });
+      const nextTask = newTimelines[ownLane].length - 1;
+      setCurrentTask(nextTask);
+      setSelectedTask({ task: nextTask, timeline: ownLane });
     }
 
     setSetupDone(true);
@@ -407,32 +414,33 @@ function App() {
   const position = formatTime(
     -(
       recipeDuration -
-      timelines[selectedStep.timeline][selectedStep.step]?.start
+      timelines[selectedTask.timeline][selectedTask.task]?.start
     )
   );
   const timeUntilFinished = formatTime(
-    timelines[selectedStep.timeline][selectedStep.step]?.start
+    timelines[selectedTask.timeline][selectedTask.task]?.start
   );
 
   const height = laneHeight * timelines.length;
-  const step = timelines[selectedStep.timeline][selectedStep.step];
-  const pendingInputs = step?.inputs?.filter(
-    (i) => !completedSteps.includes(i)
+  const task = timelines[selectedTask.timeline][selectedTask.task];
+  const pendingInputs = task?.inputs?.filter(
+    (i) => !completedTasks.includes(i)
   );
   // TODO: get participants and outputs for inputs
-  const inputsForStep = step?.inputs?.map((id) => {
+  const inputsForTask = task?.inputs?.map((id) => {
     const timeline = timelines.findIndex((t) => t.some((s) => s.id === id));
     return {
       id,
       input: findOutputWithId(id, recipe).getAttribute("name"),
       participant:
-        timeline === currentTimeline ? null : connections[timeline].name,
+        timeline === ownLane ? null : connections[timeline]?.name,
     };
   });
-  console.log({ inputsForStep, pendingInputs });
+  console.log({ inputsForTask, pendingInputs });
   const joinSessionLink = `${baseUrl}?session=${sessionId}`;
   const currentIsSelected =
-    currentStep === selectedStep.step && selectedStep.timeline === ownLane;
+    currentTask === selectedTask.task && selectedTask.timeline === ownLane;
+  const inputsReady = pendingInputs?.length === 0;
   return (
     <div className="App" style={{ minHeight: "100vh", overflow: "hidden" }}>
       {!nameSet ? (
@@ -484,7 +492,7 @@ function App() {
               <div className={"container"}>
                 <>
                   <h2>Recipe</h2>
-                  Buns
+                  {title}
                   <h2>Participants:</h2>
                   {!setupDone
                     ? "Connecting..."
@@ -543,10 +551,20 @@ function App() {
                 ) : null}
               </div>
             )}
-
+            {currentState === "tools" && (
+              <div className="container">
+                {tools ? (
+                  <ul>
+                    {tools.map(({ name }) => (
+                      <li key={`${name}`}>{name}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            )}
             {currentState === "cooking" && (
               <div className="container">
-                <h2 className={"title"}>Steps for: buns</h2>
+                <h2 className={"title"}>Tasks for: {title}</h2>
                 <div style={{ overflowX: "auto" }}>
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -582,20 +600,20 @@ function App() {
                                 y={y}
                                 onClick={() => {
                                   setCurrentTimeline(timelineNumber);
-                                  setSelectedStep({
-                                    step: i,
+                                  setSelectedTask({
+                                    task: i,
                                     timeline: timelineNumber,
                                   });
                                 }}
                                 style={{
                                   fill:
-                                    currentTimelineIsOwn && i === currentStep
+                                    currentTimelineIsOwn && i === currentTask
                                       ? "rgb(200,200,255)"
                                       : timelineNumber ===
-                                          selectedStep.timeline &&
-                                        i === selectedStep.step
+                                          selectedTask.timeline &&
+                                        i === selectedTask.task
                                       ? "rgb(255,200,200)"
-                                      : completedSteps.includes(id)
+                                      : completedTasks.includes(id)
                                       ? "rgb(240,255,240)"
                                       : "rgb(240,240,255)",
                                   strokeWidth: 3,
@@ -613,16 +631,17 @@ function App() {
                 </div>
 
                 <h2 className="title">
-                  {currentIsSelected ? "Step" : "Preview"}: {step?.title}
+                  {currentIsSelected ? "Current task" : "Preview"}:{" "}
+                  {task?.title}
                 </h2>
                 {timelines[0]?.length > 0 && (
                   <>
-                    {currentIsSelected && pendingInputs.length > 0 && (
+                    {currentIsSelected && !inputsReady && (
                       <>
                         Waiting for: <br />
                         <ul>
                           {pendingInputs
-                            .map((pi) => inputsForStep.find((i) => i.id === pi))
+                            .map((pi) => inputsForTask.find((i) => i.id === pi))
                             .map(({ input, participant }) => (
                               <li>
                                 {input}{" "}
@@ -632,11 +651,11 @@ function App() {
                         </ul>
                       </>
                     )}
-                    {inputsForStep.length > 0 && (
+                    {inputsForTask.length > 0 && (
                       <p>
                         Get: <br />
                         <ul>
-                          {inputsForStep.map(({ participant, input }) => (
+                          {inputsForTask.map(({ participant, input }) => (
                             <li>
                               {input}{" "}
                               {participant !== null && `from ${participant}`}
@@ -645,18 +664,18 @@ function App() {
                         </ul>
                       </p>
                     )}
-                    <p>{getInstructions(recipe, step)}</p>
-                    <p>Estimated step duration: {formatTime(step.duration)}</p>
+                    <p>{getInstructions(recipe, task)}</p>
+                    <p>Estimated task duration: {formatTime(task.duration)}</p>
                     <p>
                       <small>Time until finished: {timeUntilFinished}</small>
                     </p>
-                    {currentIsSelected && (
+                    {currentIsSelected && inputsReady && (
                       <div
                         style={{
                           display: "flex",
                           justifyContent: "center",
                         }}
-                        onClick={markCurrentStepDone}
+                        onClick={markCurrentTaskDone}
                       >
                         <button
                           className={
@@ -693,11 +712,19 @@ function App() {
         </div>
         <div
           className={`nav-item clickable ${
+            currentState === "tools" ? "nav-item_current" : ""
+          }`}
+          onClick={() => setCurrentState("tools")}
+        >
+          Tools
+        </div>
+        <div
+          className={`nav-item clickable ${
             currentState === "cooking" ? "nav-item_current" : ""
           }`}
           onClick={() => setCurrentState("cooking")}
         >
-          Steps
+          Tasks
         </div>
       </div>
     </div>

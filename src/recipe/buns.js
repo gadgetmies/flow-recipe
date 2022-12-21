@@ -49,8 +49,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             </properties>
         </ingredient>
     </ingredients>
-    <steps>
-        <step operation="measure">
+    <tasks>
+        <task operation="measure">
             <options>
                 <option name="amount">
                     <numeric-value number="0.5" unit="liters"/>
@@ -71,8 +71,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="0.5l-milk" name="milk"/>
             </outputs>
-        </step>
-        <step operation="measure">
+        </task>
+        <task operation="measure">
             <options>
                 <option name="amount">
                     <numeric-value number="50" unit="grams"/>
@@ -84,8 +84,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="50g-yeast" name="yeast"/>
             </outputs>
-        </step>
-        <step operation="measure">
+        </task>
+        <task operation="measure">
             <options>
                 <option name="amount">
                     <numeric-value number="500" unit="grams"/>
@@ -97,8 +97,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="500g-sugar" name="sugar"/>
             </outputs>
-        </step>
-        <step operation="measure">
+        </task>
+        <task operation="measure">
             <options>
                 <option name="amount">
                     <numeric-value number="50" unit="grams"/>
@@ -110,8 +110,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="50g-cardamom" name="cardamom"/>
             </outputs>
-        </step>
-        <step operation="measure">
+        </task>
+        <task operation="measure">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="pieces"/>
@@ -123,8 +123,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="egg-for-dough" name="egg"/>
             </outputs>
-        </step>
-        <step operation="measure">
+        </task>
+        <task operation="measure">
             <options>
                 <option name="amount">
                     <numeric-value number="900" unit="grams"/>
@@ -136,8 +136,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="flour-for-dough" name="flour"/>
             </outputs>
-        </step>
-        <step operation="measure">
+        </task>
+        <task operation="measure">
             <options>
                 <option name="amount">
                     <numeric-value number="200" unit="grams"/>
@@ -149,8 +149,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="200g-butter" name="butter"/>
             </outputs>
-        </step>
-        <step operation="heat">
+        </task>
+        <task operation="heat">
             <options>
                 <option name="temperature">
                     <numeric-value number="30" unit="celsius"/>
@@ -166,23 +166,23 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="warm-milk" name="warm milk"/>
             </outputs>
-        </step>
+        </task>
         <join>
-            <!-- TODO: preprocess the recipe and replace join with a step that combines the steps inside it -->
-            <!-- i.e. here the output would be a step that would get the timeline from crumble and incorporate and
+            <!-- TODO: preprocess the recipe and replace join with a task that combines the tasks inside it -->
+            <!-- i.e. here the output would be a task that would get the timeline from crumble and incorporate and
                  also join the instructions.
                  Will the instructions be clear enough though? Perhaps in here, but is that universal? 
                  What should the instruction be here? Crumble yeast *and* mix *crumbled* yeast into the warm milk?
                  A more natural way would be to say to crumble the yeast into the milk and mix it --> 
-            <step operation="crumble">
+            <task operation="crumble">
                 <inputs>
                     <input ref="50g-yeast"/>
                 </inputs>
                 <outputs>
                     <output id="crumbled-yeast" name="crumbled yeast"/>
                 </outputs>
-            </step>
-            <step operation="incorporate">
+            </task>
+            <task operation="incorporate">
                 <inputs>
                     <input ref="warm-milk"/>
                     <input ref="crumbled-yeast"/>
@@ -190,9 +190,9 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <outputs>
                     <output id="milk+yeast" name="milk and yeast"/>
                 </outputs>
-            </step>
+            </task>
         </join>
-        <step operation="incorporate">
+        <task operation="incorporate">
             <inputs>
                 <input ref="milk+yeast"/>
                 <input ref="egg-for-dough"/>
@@ -202,10 +202,10 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="wet-mix" name="wet mix"/>
             </outputs>
-        </step>
-        <step operation="mix-in-steps">
+        </task>
+        <task operation="mix-in-steps">
             <options>
-                <option name="step-size">
+                <option name="task-size">
                     <numeric-value number="1" unit="deciliters"/>
                 </option>
             </options>
@@ -216,8 +216,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="dough-without-butter" name="dough"/>
             </outputs>
-        </step>
-        <step operation="incorporate">
+        </task>
+        <task operation="incorporate">
             <inputs>
                 <input ref="dough-without-butter"/>
                 <input ref="200g-butter"/>
@@ -225,8 +225,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="dough" name="dough"/>
             </outputs>
-        </step>
-        <step operation="raise">
+        </task>
+        <task operation="raise">
             <options>
                 <option name="duration">
                     <numeric-value number="20" unit="minutes"/>
@@ -246,7 +246,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <output id="raised-dough" name="raised dough"/>
                 <!-- TODO: should there be a timer output? -->
             </outputs>
-        </step>
+        </task>
         <!-- TODO: is this a good way to express this?
         Would need to somehow be able to express that there are multiple batches produced, which can then be processed
         in parallel + processing can start when the first batch is ready 
@@ -263,7 +263,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
         batches? i.e. 1kg dough would result in 4 batches (i.e. sheets) of 20 buns. Scaling the dough would scale
         the amount of batches proportionally as would scaling the sheet size.  
         -->
-        <step operation="batch">
+        <task operation="batch">
             <options>
                 <option name="batch-size">
                     <!-- TODO: would it be better to just express this as number of batches? -->
@@ -284,17 +284,17 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <outputs>
                 <output id="split-dough" name="split dough"/>
             </outputs>
-        </step>
+        </task>
         <map>
-            <step operation="spherify">
+            <task operation="spherify">
                 <inputs>
                     <input ref="split-dough"/>
                 </inputs>
                 <outputs>
                     <output id="dough-spheres" name="dough spheres"/>
                 </outputs>
-            </step>
-            <step operation="place-on-sheet">
+            </task>
+            <task operation="place-on-sheet">
                 <tools>
                     <tool ref="sheet"/>
                 </tools>
@@ -304,8 +304,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <outputs>
                     <output id="buns-on-sheet" name="buns on sheet"/>
                 </outputs>
-            </step>
-            <step operation="measure">
+            </task>
+            <task operation="measure">
                 <options>
                     <option name="amount">
                         <numeric-value number="1" unit="pieces"/>
@@ -317,16 +317,16 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <outputs>
                     <output id="egg-for-brushing" name="egg"/>
                 </outputs>
-            </step>
-            <step operation="beat">
+            </task>
+            <task operation="beat">
                 <inputs>
                     <input ref="egg-for-brushing"/>
                 </inputs>
                 <outputs>
                     <output id="beaten-egg" name="beaten egg"/>
                 </outputs>
-            </step>
-            <step operation="brush">
+            </task>
+            <task operation="brush">
                 <inputs>
                     <input ref="buns-on-sheet"/>
                     <input ref="beaten-egg"/>
@@ -334,9 +334,9 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <outputs>
                     <output id="brushed-buns" name="brushed buns"/>
                 </outputs>
-            </step>
+            </task>
             <!-- TODO: how to calculate this in the shopping list? -->
-            <step operation="sprinkle">
+            <task operation="sprinkle">
                 <inputs>
                     <input ref="brushed-buns"/>
                     <input ref="pearl-sugar"/>
@@ -344,11 +344,11 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <outputs>
                     <output id="oven-ready-buns" name="oven ready buns"/>
                 </outputs>
-            </step>
-            <step operation="bake">
+            </task>
+            <task operation="bake">
                 <!-- TODO: 
-                add a sequence meta step, that takes the inputs of the parent step and forwards those to the first step, of which outputs will be the inputs of the next one. 
-                How will the next steps know which inputs to use though? Need to generate automatic ids and expect a certain order? -->
+                add a sequence meta task, that takes the inputs of the parent task and forwards those to the first task, of which outputs will be the inputs of the next one. 
+                How will the next tasks know which inputs to use though? Need to generate automatic ids and expect a certain order? -->
                 <!-- TODO: 
                 add interrupt i.e. suspend other operations when this finishes and split their processing time 
                 -->
@@ -369,9 +369,9 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <outputs>
                     <output id="baked-buns" name="baked buns"/>
                 </outputs>
-            </step>
+            </task>
         </map>
-    </steps>
+    </tasks>
 </recipe>`;
 
 export default xml_data;

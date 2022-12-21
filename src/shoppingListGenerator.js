@@ -7,7 +7,7 @@ import {
 } from "./recipeTools";
 
 export function calculateShoppingList(recipe) {
-  return getChildren(recipe, "step[operation='measure'] inputs input")
+  return getChildren(recipe, "task[operation='measure'] inputs input")
     .map((input) => {
       const ingredient = findIngredientWithId(
         recipe,

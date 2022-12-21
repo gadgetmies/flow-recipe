@@ -1,12 +1,12 @@
 import { operations } from "./operations";
 import {
   findIngredientWithId,
-  findStepProducing,
+  findTaskProducing,
+  getOutputsForInputs,
   getInputs,
 } from "./recipeTools";
 
 const log = (...args) => {
-  return;
   console.log(...args);
 };
 
@@ -22,7 +22,11 @@ function value(valueOrFunction, ...args) {
 
 function getOperationForNode(node) {
   const operationId = node.getAttribute("operation");
-  return operations[operationId];
+  const operation = operations[operationId];
+  if (operation === undefined) {
+    throw new Error(`Operation for id '${operationId}' not found!`);
+  }
+  return operation;
 }
 
 function expandNode(graph, node) {
@@ -30,13 +34,13 @@ function expandNode(graph, node) {
 
   if (operation.expand) {
     log("Expanding node", node);
-    const steps = operation.expand(graph, node);
+    const tasks = operation.expand(graph, node);
     node.remove();
-    const stepsElement = graph.getElementsByTagName("steps")[0];
-    log("expanded", ...steps);
-    steps.forEach((step) => stepsElement.append(step));
-    const [last] = steps.splice(-1, 1);
-    steps.forEach((node) => expandNode(graph, node));
+    const tasksElement = graph.getElementsByTagName("tasks")[0];
+    log("expanded", ...tasks);
+    tasks.forEach((task) => tasksElement.append(task));
+    const [last] = tasks.splice(-1, 1);
+    tasks.forEach((node) => expandNode(graph, node));
     return last;
   } else {
     return node;
@@ -72,14 +76,16 @@ export function scheduleItemsInTimelines(
     const outputs = node.querySelectorAll("output");
     const operationTimelineItem = operation.timeline(node);
     const title = operation.title(node);
-    let stepStartsAt;
-    const inputs = getInputs(node);
-    const inputIds = inputs
-      .filter((n) => {
-        const producer = findIngredientWithId(graph, n.getAttribute("ref"));
-        return producer === null;
-      })
-      .map((n) => n.getAttribute("ref"));
+    let taskStartsAt;
+    const outputsForInputs = getOutputsForInputs(graph, node);
+    const tasksProducingOutputs = outputsForInputs.map(
+      (i) => i.parentNode.parentNode
+    );
+    console.log({ inputs: outputsForInputs });
+    const inputIds = outputsForInputs.map((n) => {
+      return n.getAttribute("id");
+    });
+    console.log(inputIds);
 
     log("Calculating timeline");
     // TODO: Sort operations by longest passive time?
@@ -195,7 +201,7 @@ export function scheduleItemsInTimelines(
         ...timelineItem,
       };
 
-      stepStartsAt = start;
+      taskStartsAt = start;
       log(
         "Splicing",
         spotTimelineNumber,
@@ -206,12 +212,12 @@ export function scheduleItemsInTimelines(
       timelines[spotTimelineNumber].splice(index, 0, item);
     }
 
-    for (const input of inputs) {
-      const step = findStepProducing(graph, input.getAttribute("ref"));
-      if (step !== null) {
-        dependencies.push(step);
+    for (const task of tasksProducingOutputs) {
+      //const task = findTaskProducing(graph, input.getAttribute("ref"));
+      if (task !== null) {
+        dependencies.push(task);
       } else {
-        log(`Ingredient ${input.getAttribute("ref")}`);
+        log(`Ingredient ${task.getAttribute("id")}`);
       }
     }
     log("Next nodes", ...dependencies);
@@ -219,7 +225,7 @@ export function scheduleItemsInTimelines(
       graph,
       dependencies,
       timelines,
-      stepStartsAt,
+      taskStartsAt,
       round + 1
     );
   }
