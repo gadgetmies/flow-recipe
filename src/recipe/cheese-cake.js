@@ -95,19 +95,6 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
         <task operation="measure">
             <options>
                 <option name="amount">
-                    <numeric-value number="1" unit="sheets"/>
-                </option>
-            </options>
-            <inputs>
-                <input ref="gelatin"/>
-            </inputs>
-            <outputs>
-                <output id="gelatin-for-glaze" name="gelatin for glaze"/>
-            </outputs>
-        </task>
-        <task operation="measure">
-            <options>
-                <option name="amount">
                     <numeric-value number="2" unit="deciliters"/>
                 </option>
             </options>
