@@ -167,7 +167,7 @@ export function findFinalOutputId(xml) {
 }
 
 export function getInstructions(recipe, item) {
-  const node = findTaskProducing(recipe, item.id)
+  const node = item.task
   const operation = operations[node.getAttribute('operation')]
   return operation.instruction(recipe, node)
 }

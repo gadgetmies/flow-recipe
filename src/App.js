@@ -6,7 +6,7 @@ import xml_data from './recipe/layer-cake'
 import { useEffect, useRef, useState } from 'react'
 import { calculateToolList, findFinalOutputId, findTaskProducing, getInstructions } from './recipeTools'
 import { calculateShoppingList } from './shoppingListGenerator'
-import { scheduleItemsInTimelines } from './timelineScheduler'
+import { expandNode, scheduleItemsInTimelines } from './timelineScheduler'
 import { v4 as uuidV4 } from 'uuid'
 import { QRCodeSVG } from 'qrcode.react'
 import Peer from 'peerjs'
@@ -205,23 +205,30 @@ function Tools(tools) {
   )
 }
 
-function Task({
-  task,
-  isCurrent,
-  inputsReady,
-  pendingInputs,
-  inputsForTask,
-  recipe,
-  timeUntilFinished,
-  markCurrentTaskDone,
-}) {
+function Task(props) {
+  if (props === undefined) return ''
+  const {
+    task,
+    isDone,
+    isCurrent,
+    inputsReady,
+    pendingInputs,
+    inputsForTask,
+    recipe,
+    timeUntilFinished,
+    markCurrentTaskDone,
+    startTimer,
+  } = props
   return (
     <>
-      <h3 id={task.uuid}>{task?.title}</h3>
+      <h3 id={task.uuid} style={{ scrollMarginTop: 10 }}>
+        {task?.title} {isCurrent && '👈'}
+        {isDone && '✅'}
+      </h3>
       <>
         {isCurrent && !inputsReady && (
           <>
-            Waiting for: <br />
+            Wait for: <br />
             <ul>
               {pendingInputs
                 .map(({ uuid: pi }) => inputsForTask.find((i) => i.uuid === pi))
@@ -233,7 +240,7 @@ function Task({
             </ul>
           </>
         )}
-        {inputsForTask.length > 0 && (
+        {isCurrent && inputsForTask.length > 0 && (
           <p>
             Get: <br />
             <ul>
@@ -246,23 +253,170 @@ function Task({
           </p>
         )}
         <p>{getInstructions(recipe, task)}</p>
-        <p>Estimated task duration: {formatTime(task.duration)}</p>
-        <p>
-          <small>Time until finished: {timeUntilFinished}</small>
-        </p>
-        {isCurrent && inputsReady && (
+        {!isDone && <p>Estimated task duration: {formatTime(task.duration)}</p>}
+        {isCurrent && (
+          <p>
+            <small>Time until finished: {timeUntilFinished}</small>
+          </p>
+        )}
+        {!isHost && !isDone && isCurrent && inputsReady && (
           <div
             style={{
               display: 'flex',
               justifyContent: 'center',
             }}
-            onClick={markCurrentTaskDone}
+            onClick={() => {
+              if (task.timer) {
+                startTimer(task)
+              }
+              // TODO: this should not be marked done yet, but only after the timer has completed. However, the user should be able to continue with other tasks
+              markCurrentTaskDone()
+            }}
           >
-            <button className={'button button-push_button-primary button-push_button-large'}>Done, next!</button>
+            <button className={'button button-push_button-primary button-push_button-large'}>
+              {task.timer ? 'Start timer' : 'Done, next!'}
+            </button>
           </div>
         )}
       </>
     </>
+  )
+}
+
+function Timeline(props) {
+  if (props === undefined) return ''
+  const {
+    width,
+    height,
+    timelines,
+    connections,
+    ownLane,
+    setCurrentTimeline,
+    setSelectedTask,
+    scrollToIndex,
+    currentTask,
+    selectedTimeline,
+    selectedTask,
+    completedTasks,
+  } = props
+  return (
+    <div
+      style={{
+        bottom: 40,
+        width: '100%',
+        backgroundColor: '#eee',
+        margin: 0,
+        padding: 10,
+        boxSizing: 'border-box',
+        position: 'fixed',
+      }}
+    >
+      <div style={{ overflowX: 'auto' }}>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox={`0 0 ${width} ${height}`}
+          style={{
+            width: width * zoom,
+            height: `100%`,
+            border: '0px solid black',
+            marginBottom: 15,
+          }}
+        >
+          {timelines.map((timeline, timelineNumber) => {
+            const y = timelineNumber * laneHeight
+
+            return (
+              <>
+                <text x={0} y={y + laneHeight / 2} style={{ fontSize: Math.round(laneHeight / 2) }}>
+                  {connections[timelineNumber]?.name}
+                </text>
+                {timeline.map(({ start, end, title, uuid }, i) => {
+                  const currentTimelineIsOwn = timelineNumber === ownLane
+                  return (
+                    <rect
+                      key={uuid}
+                      width={end - start}
+                      height={laneHeight}
+                      x={width + start}
+                      y={y}
+                      onClick={() => {
+                        setCurrentTimeline(timelineNumber)
+                        setSelectedTask({
+                          task: i,
+                          timeline: timelineNumber,
+                        })
+                        scrollToIndex(i)
+                      }}
+                      style={{
+                        fill:
+                          currentTimelineIsOwn && i === currentTask
+                            ? 'rgb(200,200,255)'
+                            : timelineNumber === selectedTimeline && i === selectedTask.task
+                            ? 'rgb(255,200,200)'
+                            : completedTasks.includes(uuid)
+                            ? 'rgb(240,255,240)'
+                            : 'rgb(240,240,255)',
+                        strokeWidth: 3,
+                        rx: 5,
+                        ry: 5,
+                        stroke: 'rgb(0,0,0)',
+                      }}
+                    />
+                  )
+                })}
+              </>
+            )
+          })}
+        </svg>
+      </div>
+    </div>
+  )
+}
+
+function Timers({ timers, scrollToTask, clearTimer }) {
+  const [currentTime, setCurrentTime] = useState(Date.now())
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 1000)
+
+    return () => clearInterval(intervalId)
+  }, [currentTime])
+
+  return (
+    <div style={{ position: 'fixed', bottom: 110, right: 10 }}>
+      {timers.map(({ title, end, taskUuid }, i) => {
+        const timeLeft = Math.max(0, (end - currentTime) / 1000)
+        return (
+          <div
+            className={timeLeft === 0 ? 'wiggle' : ''}
+            style={{
+              width: '7em',
+              background: timeLeft === 0 ? '#f99' : 'white',
+              borderRadius: 6,
+              marginBottom: '0.5em',
+              padding: '0.5em',
+              boxShadow: '2px 2px 10px rgba(0, 0, 0, 0.2)',
+              textAlign: 'center',
+            }}
+            onClick={() => scrollToTask(taskUuid)}
+          >
+            <div style={{ fontSize: '75%' }}>{title}</div>
+            <div>
+              {timeLeft === 0 ? (
+                <>
+                  <div>Time's up!</div>
+                  <button onClick={() => clearTimer(i)}>Clear</button>
+                </>
+              ) : (
+                formatTime(timeLeft)
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -272,7 +426,7 @@ function App() {
   const [title, setTitle] = useState('')
   const [shoppingList, setShoppingList] = useState([])
   const [tools, setTools] = useState([])
-  const [timelines, setTimelines] = useState([[], []])
+  const [timelines, setTimelines] = useState([[]])
   const [currentTask, setCurrentTask] = useState(0)
   const [selectedTask, setSelectedTask] = useState({ timeline: 0, task: 0 })
   const [ownLane, setOwnLane] = useState(0)
@@ -297,18 +451,33 @@ function App() {
   const [setupDone, setSetupDone] = useState(isHost)
   const completedTasksRef = useRef(settings.completedTasks || [])
   const [completedTasks, _setCompletedTasks] = useState(completedTasksRef.current)
+  const [timers, setTimers] = useState([])
+
   const setTasksCompleted = (completed) => {
     // TODO: use uuids
-    const settings = JSON.parse(window.localStorage.getItem(sessionId)) || {}
     const merged = Array.from(new Set([...(settings.completedTasks || []), ...completed]))
     window.localStorage.setItem(sessionId, JSON.stringify({ ...settings, completedTasks: merged }))
     completedTasksRef.current = merged
     _setCompletedTasks(merged)
   }
 
-  const scrollToTask = (taskIndex) => {
-    const uuid = timelines[ownLane][taskIndex].uuid
-    document.getElementById(uuid).scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const scrollToTask = (uuid) =>
+    document.getElementById(uuid).scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' })
+
+  const scrollToIndex = (taskIndex) => {
+    const uuid = timelines[selectedTimeline][taskIndex].uuid
+    scrollToTask(uuid)
+  }
+
+  const startTimer = ({ timer: { duration, title }, uuid }) => {
+    const newTimers = [{ end: Date.now() + duration * 1000, taskUuid: uuid, title }, ...timers]
+    setTimers(newTimers)
+  }
+
+  const clearTimer = (index) => {
+    let newTimers = timers.slice()
+    newTimers.splice(index, 1)
+    setTimers(newTimers)
   }
 
   const markCurrentTaskDone = async () => {
@@ -323,7 +492,7 @@ function App() {
     const nextTask = currentTask - 1
     setCurrentTask(nextTask)
     setSelectedTask({ task: nextTask, timeline: ownLane })
-    scrollToTask(nextTask)
+    scrollToIndex(nextTask)
   }
 
   const connectionRef = useRef()
@@ -407,7 +576,10 @@ function App() {
           )
           await sendConnections()
         } else if (json.type === 'taskCompleted') {
-          setTasksCompleted([...completedTasksRef.current, json.data])
+          const taskUuid = json.data
+          setTasksCompleted([...completedTasksRef.current, taskUuid])
+          setCurrentTask(tasks.findIndex(({ uuid }) => uuid === taskUuid))
+          scrollToTask(taskUuid)
           await sendCompletedTasks()
         }
       }).bind(null, connectionId)
@@ -498,14 +670,12 @@ function App() {
   }, [recipe])
 
   useEffect(() => {
-    if (!recipe || (!isHost && connections.length < 2)) {
+    if (!recipe || connections.length < 2) {
       return
     }
 
     let newTimelines = []
-    for (let i = 0; i < connections.length; ++i) {
-      newTimelines.push([])
-      newTimelines.push([])
+    for (let i = 1; i < connections.length; ++i) {
       newTimelines.push([])
     }
     const finalOutputId = findFinalOutputId(recipe)
@@ -520,7 +690,10 @@ function App() {
     )
     for (let i = 0; i < xPathResult.snapshotLength; ++i) {
       const node = xPathResult.snapshotItem(i)
-      node.setAttribute('uuid', uuidV4())
+      node.setAttribute('uuid', i)
+      if (node.tagName === 'task') {
+        expandNode(recipe, node)
+      }
     }
 
     console.log('recipe', new XMLSerializer().serializeToString(recipe))
@@ -542,17 +715,31 @@ function App() {
 
     console.log(`Calculating graph starting from ${lastTask.getAttribute('operation')}`, newTimelines)
 
-    scheduleItemsInTimelines(recipe, { [finalOutputId]: { task: lastTask, count: 1 /*TODO: scale*/ } }, newTimelines, 0)
-    window.timelines = timelines
+    // TODO: The pour operation is duplicated in the timeline!
+    scheduleItemsInTimelines(
+      recipe,
+      [{ uuid: finalOutputId, task: lastTask, amountLeft: 1 /*TODO: scale*/ }],
+      newTimelines,
+      0
+    )
     setTimelines(newTimelines)
     setRecipeDuration(newTimelines.reduce((acc, items) => Math.min(acc, items[items.length - 1]?.start), 0))
-    const ownLane = connections.findIndex(({ id }) => id === ownId)
-    if (ownLane !== -1) {
-      setOwnLane(ownLane)
-      setCurrentTimeline(ownLane)
-      const nextTask = newTimelines[ownLane].findLastIndex((task) => !completedTasks.includes(task.uuid))
+    if (isHost) {
+      // TODO: remove duplication
+      setOwnLane(undefined)
+      setCurrentTimeline(0)
+      const nextTask = newTimelines[0].findLastIndex((task) => !completedTasks.includes(task.uuid))
       setCurrentTask(nextTask)
-      setSelectedTask({ task: nextTask, timeline: ownLane })
+      setSelectedTask({ task: nextTask, timeline: 0 })
+    } else {
+      const ownLane = connections.findIndex(({ id }) => id === ownId) - 1
+      if (ownLane !== -1) {
+        setOwnLane(ownLane)
+        setCurrentTimeline(ownLane)
+        const nextTask = newTimelines[ownLane].findLastIndex((task) => !completedTasks.includes(task.uuid))
+        setCurrentTask(nextTask)
+        setSelectedTask({ task: nextTask, timeline: ownLane })
+      }
     }
 
     setSetupDone(true)
@@ -560,9 +747,9 @@ function App() {
 
   const dependencyGraph = timelines.reduce(
     (g, timeline) => {
-      timeline.forEach(({ uuid, title, inputs }) => {
+      timeline.forEach(({ uuid, title, dependencies }) => {
         g?.nodes.push({ uuid, title })
-        inputs.forEach((iuuid) => g?.links.push({ source: iuuid, target: uuid }))
+        dependencies.forEach((iuuid) => g?.links.push({ source: iuuid, target: uuid }))
       })
       return g
     },
@@ -576,15 +763,24 @@ function App() {
 
   const selectedTimeline = selectedTask.timeline
   const position = formatTime(-(recipeDuration - timelines[selectedTimeline][selectedTask.task]?.start))
-  const timeUntilFinished = formatTime(timelines[selectedTimeline][selectedTask.task]?.start)
+  const timeUntilFinished = formatTime(-timelines[selectedTimeline][selectedTask.task]?.start)
 
   const height = laneHeight * timelines.length
   const task = timelines[selectedTimeline][selectedTask.task]
-  const ownTimeline = timelines[ownLane]
-  const ownTasks = R.reverse(ownTimeline)
-  const pendingInputs = task?.inputs?.filter(({ uuid }) => !completedTasks.includes(uuid))
+
+  let timeline
+  let tasks
+
+  if (isHost) {
+    timeline = timelines.flat()
+    tasks = timeline.sort(({ start: a }, { start: b }) => a - b)
+  } else {
+    timeline = timelines[selectedTimeline]
+    tasks = R.reverse(timeline)
+  }
+  const pendingInputs = task?.dependencies?.filter(({ uuid }) => !completedTasks.includes(uuid))
   // TODO: get participants and outputs for inputs
-  const inputsForTask = task?.inputs?.map(({ uuid, name }) => {
+  const inputsForTask = task?.dependencies?.map(({ uuid, input: { name } }) => {
     let uuidMatches = (s) => s.uuid === uuid
     const timelineIndex = timelines.findIndex((t) => t.some(uuidMatches)) // This should probably use the uuid instead of the id
     // Perhaps it would be possible to fetch the output name from the task?
@@ -592,12 +788,12 @@ function App() {
     return {
       uuid,
       input: name,
-      participant: timelineIndex === ownLane ? null : connections[timelineIndex]?.name,
+      participant: timelineIndex === ownLane ? null : connections[timelineIndex + 1]?.name,
     }
   })
   const joinSessionLink = `${baseUrl}?session=${sessionId}`
   const ownLaneSelected = selectedTimeline === ownLane
-  const selectedTimelineOwner = connections[selectedTimeline]?.name
+  const selectedTimelineOwner = connections[selectedTimeline + 1]?.name
   const inputsReady = pendingInputs?.length === 0
   return (
     <div className="App" style={{ minHeight: '100vh', overflow: 'hidden' }}>
@@ -633,7 +829,7 @@ function App() {
         <NameInput {...{ setName, name, updateName, setNameSet }} />
       ) : (
         <>
-          <div style={{ marginBottom: '4em' }}>
+          <div style={{ marginBottom: '4em', width: '100%', position: 'absolute' }}>
             {currentState === 'settings' && (
               <Settings
                 {...{ title, setupDone, connections, setName, joinSessionLink, setShareLinkCopied, shareLinkCopied }}
@@ -643,107 +839,59 @@ function App() {
             {currentState === 'tools' && <Tools {...{ tools }} />}
             {currentState === 'cooking' && (
               <>
-                <div className="container">
-                  <h2 className={'title'}>Timeline</h2>
-                  <div style={{ overflowX: 'auto' }}>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox={`0 0 ${width} ${height}`}
-                      style={{
-                        width: width * zoom,
-                        height: `100%`,
-                        border: '1px solid black',
-                        marginBottom: 20,
-                      }}
-                    >
-                      {timelines.map((timeline, timelineNumber) => {
-                        const y = timelineNumber * laneHeight
-
-                        return (
-                          <>
-                            <text x={0} y={y + laneHeight / 2} style={{ fontSize: Math.round(laneHeight / 2) }}>
-                              {connections[timelineNumber]?.name}
-                            </text>
-                            {timeline.map(({ start, end, title, uuid }, i) => {
-                              const currentTimelineIsOwn = timelineNumber === ownLane
-                              return (
-                                <rect
-                                  key={uuid}
-                                  width={end - start}
-                                  height={laneHeight}
-                                  x={width + start}
-                                  y={y}
-                                  onClick={() => {
-                                    setCurrentTimeline(timelineNumber)
-                                    setSelectedTask({
-                                      task: i,
-                                      timeline: timelineNumber,
-                                    })
-                                  }}
-                                  style={{
-                                    fill:
-                                      currentTimelineIsOwn && i === currentTask
-                                        ? 'rgb(200,200,255)'
-                                        : timelineNumber === selectedTimeline && i === selectedTask.task
-                                        ? 'rgb(255,200,200)'
-                                        : completedTasks.includes(uuid)
-                                        ? 'rgb(240,255,240)'
-                                        : 'rgb(240,240,255)',
-                                    strokeWidth: 3,
-                                    rx: 5,
-                                    ry: 5,
-                                    stroke: 'rgb(0,0,0)',
-                                  }}
-                                />
-                              )
-                            })}
-                          </>
-                        )
-                      })}
-                    </svg>
-                  </div>
-                </div>
-                <div className="container">
-                  {timelines[0]?.length > 0 && (
+                <div className="container" style={{ top: height + 40, marginBottom: 260 }}>
+                  {timelines[0]?.length === 0 ? (
+                    'Waiting for connections'
+                  ) : (
                     <>
-                      <h2 className="title">{ownLaneSelected ? 'My tasks' : `${selectedTimelineOwner}'s tasks`}</h2>
-                      {!ownLaneSelected && (
-                        <Task
-                          {...{
-                            task,
-                            isCurrent: false,
-                            inputsReady,
-                            pendingInputs,
-                            inputsForTask,
-                            recipe,
-                            timeUntilFinished,
-                          }}
-                        />
-                      )}
-                      {ownLaneSelected &&
-                        ownTasks.map((task, i) => (
+                      <h2 className="title">
+                        {ownLaneSelected ? 'My tasks' : isHost ? 'Tasks' : `${selectedTimelineOwner}'s tasks`}
+                      </h2>
+                      {tasks.map((task, i) => {
+                        const currentTaskIndex = timelines[selectedTimeline].length - currentTask - 1
+                        return (
                           <>
                             <Task
                               {...{
                                 task,
-                                isCurrent: i === timelines[ownLane].length - currentTask - 1,
+                                isDone: completedTasks.includes(task.uuid),
+                                isCurrent: !isHost && i === currentTaskIndex,
                                 inputsReady,
                                 pendingInputs,
                                 inputsForTask,
                                 recipe,
                                 timeUntilFinished,
                                 markCurrentTaskDone,
+                                startTimer,
                               }}
                             />
                             <hr />
                           </>
-                        ))}
+                        )
+                      })}
                     </>
                   )}
                 </div>
+                <Timeline
+                  {...{
+                    width,
+                    height,
+                    timelines,
+                    connections: connections.slice(1),
+                    ownLane,
+                    setCurrentTimeline,
+                    setSelectedTask,
+                    scrollToIndex,
+                    currentTask,
+                    selectedTimeline,
+                    selectedTask,
+                    completedTasks,
+                  }}
+                />
               </>
             )}
           </div>
+          <Timers {...{ timers, scrollToTask, clearTimer }} />
         </>
       )}
       <div className={'nav'}>

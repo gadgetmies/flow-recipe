@@ -23,6 +23,25 @@ const xmlToElement = (xml) => {
   return template.content.firstChild
 }
 
+const getTextInstructions = (graph, node) => {
+  const instructionNode = node.querySelector('instructions')
+  if (!instructionNode) {
+    return undefined
+  }
+  return Array.from(instructionNode.childNodes)
+    .map((node) => {
+      if (node instanceof Text) {
+        return node.wholeText
+      } else {
+        if (node.childNodes.length > 0) {
+          return node.childNodes[0].wholeText
+        } else {
+          return graph.getElementById(node.getAttribute('ref')).getAttribute('name')
+        }
+      }
+    })
+    .join(' ')
+}
 export const operations = {
   measure: {
     timeline: (node) => ({ active: 60, passive: 0 }),
@@ -90,7 +109,7 @@ export const operations = {
 
       const last = inputs.splice(-1, 1)
 
-      return <div>Mix {`${inputs.join(',')}${inputs.length > 0 ? ' & ' : ''}${last}`}</div>
+      return <div>Mix {`${inputs.join(', ')}${inputs.length > 0 ? ' & ' : ''}${last}`}</div>
     },
     timeline: (node) => ({ active: 60, passive: 0 }),
     title: (node) => 'Mix',
@@ -220,9 +239,7 @@ export const operations = {
     },
     title: (node) => 'Bake',
   },
-  'split-expanded': {
-    instruction: (recipe, node) => operations.split.instruction(recipe, node),
-    title: (recipe, node) => operations.split.title(recipe, node),
+  split: {
     timeline: (node) => {
       const options = getOptions(node)
       const parts = `${getNumericValueFromOption('parts', options)}`
@@ -232,8 +249,6 @@ export const operations = {
         passive: 0,
       }
     },
-  },
-  split: {
     instruction: (recipe, node) => {
       const options = getOptions(node)
       const parts = `${getNumericValueFromOption('parts', options)}`
@@ -244,7 +259,7 @@ export const operations = {
       const parts = getNumericValueFromOption('parts', options)
       const output = getOutputs(node)[0]
       return [
-        `<task operation="split-expanded">
+        `<task operation="split">
 ${node.querySelector('options').outerHTML}
 <inputs>
     ${Array.from(node.querySelectorAll('input'))
@@ -350,6 +365,10 @@ ${node.querySelector('options').outerHTML}
   },
   sprinkle: {
     instruction: (recipe, node) => {
+      const text = getTextInstructions(recipe, node)
+      if (text !== undefined) {
+        return text
+      }
       const firstInputName = getNameForInputAtIndex(recipe, node, 0)
       const secondInputName = getNameForInputAtIndex(recipe, node, 1)
       return `Sprinkle ${secondInputName} on ${firstInputName}`
@@ -413,6 +432,10 @@ ${node.querySelector('options').outerHTML}
       passive: getDurationInSeconds(getOptions(node)),
     }),
     title: (node) => 'Chill',
+    timer: (recipe, node) => ({
+      title: `Chill ${getFirstInputName(recipe, node)}`,
+      duration: getDurationInSeconds(getOptions(node)),
+    }),
   },
   spoon: {
     instruction: (recipe, node) => {

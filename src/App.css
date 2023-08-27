@@ -80,3 +80,22 @@ th {
 .nav-item_current {
   background: #ffb6b6;
 }
+
+@keyframes wiggle {
+  0% { transform: rotate(0deg); }
+  50% { transform: rotate(0deg); }
+  60% { transform: rotate(5deg); }
+  70% { transform: rotate(-5deg); }
+  80% { transform: rotate(5deg); }
+  90% { transform: rotate(-5deg); }
+  100% { transform: rotate(0deg); }
+}
+
+.wiggle {
+  display: inline-block;
+  animation: wiggle 1s infinite;
+}
+
+.wiggle:hover {
+  animation: none;
+}

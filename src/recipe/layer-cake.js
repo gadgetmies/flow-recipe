@@ -319,7 +319,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <tool ref="microwave-safe-jug" reserved="true"/>
             </instructions>
             <outputs>
-                <output id="chocolate-coffee-oil-mixture" name="chocolate-cofee-oil -mixture"/>
+                <output id="chocolate-coffee-oil-mixture" name="chocolate-coffee-oil -mixture"/>
             </outputs>
         </task>
         <task operation="heat">
@@ -338,7 +338,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <input ref="chocolate-coffee-oil-mixture"/>
             </inputs>
             <outputs>
-                <output id="heated-chocolate-coffee-oil-mixture" name="heated chocolate-cofee-oil -mixture"/>
+                <output id="heated-chocolate-coffee-oil-mixture" name="heated chocolate-coffee-oil -mixture"/>
             </outputs>
         </task>
         <task operation="mix">
@@ -672,7 +672,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 Sprinkle
                 <input ref="chocolate-curls"/>
                 on top of the
-                <input ref="cake-on-plate"/>
+                <input ref="cake-on-plate">cake</input>
             </instructions>
             <outputs>
                 <output id="finished-cake" name="finished cake"/>
