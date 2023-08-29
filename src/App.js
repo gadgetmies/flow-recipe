@@ -109,10 +109,12 @@ const NameInput = ({ name, setName, setNameSet, updateName }) => (
       >
         <h2 style={{ marginTop: 0 }}>Set your name to begin</h2>
         <label>
-          You can call me <input name={'name'} onChange={(e) => setName(e.target.value)} value={name} />
+          You can call me{' '}
+          <input name={'name'} style={{ fontSize: 16 }} onChange={(e) => setName(e.target.value)} value={name} />
         </label>
         <br />
         <button
+          className="button button-push_button-primary button-push_button-large"
           disabled={name === ''}
           onClick={() => {
             setNameSet(true)
@@ -131,7 +133,7 @@ const NameInput = ({ name, setName, setNameSet, updateName }) => (
 
 function Settings({ title, setupDone, connections, setName, joinSessionLink, setShareLinkCopied, shareLinkCopied }) {
   return (
-    <div className={'container'}>
+    <div className={'container'} style={{ marginBottom: 100 }}>
       <>
         <h2>Recipe</h2>
         {title}
@@ -216,8 +218,12 @@ function Task(props) {
     inputsForTask,
     recipe,
     timeUntilFinished,
+    setTasksInProgress,
+    tasksInProgress,
     markCurrentTaskDone,
     startTimer,
+    currentTask,
+    setCurrentTask,
   } = props
   return (
     <>
@@ -265,15 +271,20 @@ function Task(props) {
               display: 'flex',
               justifyContent: 'center',
             }}
-            onClick={() => {
-              if (task.timer) {
-                startTimer(task)
-              }
-              // TODO: this should not be marked done yet, but only after the timer has completed. However, the user should be able to continue with other tasks
-              markCurrentTaskDone()
-            }}
           >
-            <button className={'button button-push_button-primary button-push_button-large'}>
+            <button
+              className={'button button-push_button-primary button-push_button-large'}
+              onClick={async () => {
+                if (task.timer) {
+                  startTimer(task)
+                  setTasksInProgress([...tasksInProgress, task.uuid])
+                  const nextTask = currentTask - 1
+                  setCurrentTask(nextTask)
+                } else {
+                  await markCurrentTaskDone()
+                }
+              }}
+            >
               {task.timer ? 'Start timer' : 'Done, next!'}
             </button>
           </div>
@@ -407,7 +418,7 @@ function Timers({ timers, scrollToTask, clearTimer }) {
               {timeLeft === 0 ? (
                 <>
                   <div>Time's up!</div>
-                  <button onClick={() => clearTimer(i)}>Clear</button>
+                  <button onClick={async () => await clearTimer(i)}>Clear</button>
                 </>
               ) : (
                 formatTime(timeLeft)
@@ -437,7 +448,7 @@ function App() {
   const [name, setName] = useState(globalSettings?.defaultName || settings?.name || '')
   const [nameSet, setNameSet] = useState(name !== '')
   const [shareLinkCopied, setShareLinkCopied] = useState(false)
-  const [currentState, setCurrentState] = useState(settings.tab || 'settings')
+  const [currentState, setCurrentState] = useState(settings.tab || 'cooking')
   const selectTab = (tab) => {
     setCurrentState(tab)
     const settings = JSON.parse(window.localStorage.getItem(sessionId)) || {}
@@ -451,9 +462,11 @@ function App() {
   const [setupDone, setSetupDone] = useState(isHost)
   const completedTasksRef = useRef(settings.completedTasks || [])
   const [completedTasks, _setCompletedTasks] = useState(completedTasksRef.current)
+  const [tasksInProgress, setTasksInProgress] = useState(settings.tasksInProgress || [])
   const [timers, setTimers] = useState([])
 
   const setTasksCompleted = (completed) => {
+    console.log({ completed })
     // TODO: use uuids
     const merged = Array.from(new Set([...(settings.completedTasks || []), ...completed]))
     window.localStorage.setItem(sessionId, JSON.stringify({ ...settings, completedTasks: merged }))
@@ -474,21 +487,26 @@ function App() {
     setTimers(newTimers)
   }
 
-  const clearTimer = (index) => {
+  const clearTimer = async (index) => {
     let newTimers = timers.slice()
-    newTimers.splice(index, 1)
+    const [cleared] = newTimers.splice(index, 1)
     setTimers(newTimers)
+    await markTaskCompleted(cleared.uuid)
+  }
+
+  async function markTaskCompleted(uuid) {
+    setTasksCompleted([...completedTasksRef.current, uuid])
+    setTasksInProgress(R.without([uuid], tasksInProgress))
+    if (isHost) {
+      await sendCompletedTasks()
+    } else {
+      await sendTaskCompleted(uuid)
+    }
   }
 
   const markCurrentTaskDone = async () => {
     const currentTaskItem = timelines[currentTimeline][currentTask]
-    const currentTaskUuid = currentTaskItem.uuid
-    setTasksCompleted([...completedTasksRef.current, currentTaskUuid])
-    if (isHost) {
-      await sendCompletedTasks()
-    } else {
-      await sendTaskCompleted(currentTaskUuid)
-    }
+    await markTaskCompleted(currentTaskItem.uuid)
     const nextTask = currentTask - 1
     setCurrentTask(nextTask)
     setSelectedTask({ task: nextTask, timeline: ownLane })
@@ -600,6 +618,17 @@ function App() {
   }
 
   useEffect(() => {
+    /*
+    try {
+      navigator.wakeLock.request('screen').catch((err) => {
+        console.error(`${err.name}, ${err.message}`)
+      })
+    } catch (err) {
+      console.error(`${err.name}, ${err.message}`)
+    }*/
+  }, [])
+
+  useEffect(() => {
     createPeer(
       sessionId,
       participantId,
@@ -681,19 +710,28 @@ function App() {
     const finalOutputId = findFinalOutputId(recipe)
     const lastTask = findTaskProducing(recipe, finalOutputId)
 
-    let xPathResult = recipe.evaluate(
-      '(//task|//ingredient|//tool)',
+    let xPathResult = recipe.evaluate('(//task)', recipe, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null)
+    for (let i = 0; i < xPathResult.snapshotLength; ++i) {
+      const node = xPathResult.snapshotItem(i)
+      expandNode(recipe, node)
+    }
+
+    xPathResult = recipe.evaluate(
+      '(//task|//ingredient|//tool|//ns:task)',
       recipe,
-      null,
+      function (prefix) {
+        if (prefix === 'ns') {
+          return 'http://www.w3.org/1999/xhtml'
+        } else {
+          return null
+        }
+      },
       XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
       null
     )
     for (let i = 0; i < xPathResult.snapshotLength; ++i) {
       const node = xPathResult.snapshotItem(i)
       node.setAttribute('uuid', i)
-      if (node.tagName === 'task') {
-        expandNode(recipe, node)
-      }
     }
 
     console.log('recipe', new XMLSerializer().serializeToString(recipe))
@@ -722,6 +760,8 @@ function App() {
       newTimelines,
       0
     )
+
+    window.timelines = newTimelines
     setTimelines(newTimelines)
     setRecipeDuration(newTimelines.reduce((acc, items) => Math.min(acc, items[items.length - 1]?.start), 0))
     if (isHost) {
@@ -736,7 +776,8 @@ function App() {
       if (ownLane !== -1) {
         setOwnLane(ownLane)
         setCurrentTimeline(ownLane)
-        const nextTask = newTimelines[ownLane].findLastIndex((task) => !completedTasks.includes(task.uuid))
+        debugger
+        const nextTask = R.findLastIndex((task) => !completedTasks.includes(task.uuid), newTimelines[ownLane])
         setCurrentTask(nextTask)
         setSelectedTask({ task: nextTask, timeline: ownLane })
       }
@@ -861,8 +902,12 @@ function App() {
                                 inputsForTask,
                                 recipe,
                                 timeUntilFinished,
+                                setTasksInProgress,
+                                tasksInProgress,
                                 markCurrentTaskDone,
                                 startTimer,
+                                currentTask,
+                                setCurrentTask,
                               }}
                             />
                             <hr />

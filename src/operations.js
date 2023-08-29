@@ -3,17 +3,17 @@ import {
   getDurationInSeconds,
   getFirstInputName,
   getFirstInputRef,
+  getFirstToolName,
   getInputRefNodes,
   getNameForInputAtIndex,
   getNameForToolAtIndex,
   getNodesProducingInputs,
   getNumericValueFromOption,
-  getOptions,
+  getNumericValueString,
   getOption,
+  getOptions,
   getOutputs,
   getUnitFromOption,
-  getNumericValueString,
-  getFirstToolName,
 } from './recipeTools'
 
 const xmlToElement = (xml) => {

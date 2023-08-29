@@ -28,7 +28,6 @@ export function expandNode(graph, node) {
   const operation = getOperationForNode(node)
   let expanded = node
   if (operation.expand && node.getAttribute('expanded') !== 'true') {
-    const originalUuid = node.getAttribute('uuid')
     log('Expanding node', node)
     const tasks = operation.expand(graph, node)
     node.remove()
@@ -36,7 +35,6 @@ export function expandNode(graph, node) {
     log('expanded', ...tasks)
     tasks.forEach((task) => tasksElement.append(task))
     const [last] = tasks.splice(-1, 1)
-    last.setAttribute('uuid', originalUuid)
     last.setAttribute('expanded', 'true')
     tasks.forEach((node) => expandNode(graph, node))
     expanded = last
@@ -75,12 +73,9 @@ function calculateDependencies(graph, task, timelines, previousDependencies) {
     previousItems.push(...[...dependenciesToSchedule, ...previousDependencies].filter(uuidMatch))
     itemsWithAmountLeft = previousItems.filter(({ amountLeft }) => amountLeft > 0)
 
-    // TODO: This should also consider all the dependencies added to dependenciesToSchedule
     if (itemsWithAmountLeft.length > 0) {
       for (let i = 0; i < itemsWithAmountLeft.length && amountNeeded > 0; ++i) {
         log('Reducing amount from previously scheduled timeline item')
-        // TODO: need to set these as inputs
-        // This can add an item to the inputs, but should not add an item to the dependencies (i.e. amountToSchedule), as the item has already been scheduled
         const itemWithAMountLeft = itemsWithAmountLeft[i]
         const amountToUse = Math.min(itemWithAMountLeft.amountLeft, amountNeeded)
         itemWithAMountLeft.amountLeft -= amountToUse
@@ -88,6 +83,7 @@ function calculateDependencies(graph, task, timelines, previousDependencies) {
         dependenciesToSchedule.push({
           scheduled: true,
           ...itemWithAMountLeft,
+          amountLeft: 0,
         })
       }
     }
