@@ -768,7 +768,7 @@ function App() {
       // TODO: remove duplication
       setOwnLane(undefined)
       setCurrentTimeline(0)
-      const nextTask = newTimelines[0].findLastIndex((task) => !completedTasks.includes(task.uuid))
+      const nextTask = R.findLastIndex((task) => !completedTasks.includes(task.uuid), newTimelines[0])
       setCurrentTask(nextTask)
       setSelectedTask({ task: nextTask, timeline: 0 })
     } else {
