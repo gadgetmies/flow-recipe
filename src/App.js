@@ -44,44 +44,6 @@ const formatTime = (seconds) => (seconds ? new Date(seconds * 1000).toISOString(
 const laneHeight = 80
 const zoom = 0.4
 
-function Navigation({ currentTimeline, setCurrentTimeline, setCurrentTask, timelines, currentTask }) {
-  return (
-    <>
-      <button
-        onClick={() => {
-          const nextTimelineIndex = currentTimeline - 1
-          setCurrentTimeline(nextTimelineIndex)
-          setCurrentTask(findMatchingTask(timelines, currentTimeline, nextTimelineIndex, currentTask))
-        }}
-        disabled={currentTimeline === 0}
-      >
-        Up
-      </button>
-      <br />
-      <button
-        onClick={() => setCurrentTask(currentTask + 1)}
-        disabled={currentTask + 1 === timelines[currentTimeline]?.length ?? 1}
-      >
-        Previous
-      </button>
-      <button onClick={() => setCurrentTask(currentTask - 1)} disabled={currentTask === 0}>
-        Next
-      </button>
-      <br />
-      <button
-        onClick={() => {
-          const nextTimelineIndex = currentTimeline + 1
-          setCurrentTimeline(nextTimelineIndex)
-          setCurrentTask(findMatchingTask(timelines, currentTimeline, nextTimelineIndex, currentTask))
-        }}
-        disabled={currentTimeline === timelines.length - 1}
-      >
-        Down
-      </button>
-    </>
-  )
-}
-
 const createPeer = (sessionId, participantId, callback = () => {}) => {
   let peer = new Peer(ownId)
   peer.on('open', (ID) => {
@@ -131,7 +93,17 @@ const NameInput = ({ name, setName, setNameSet, updateName }) => (
   </>
 )
 
-function Settings({ title, setupDone, connections, setName, joinSessionLink, setShareLinkCopied, shareLinkCopied }) {
+function Settings({
+  title,
+  setupDone,
+  connections,
+  setName,
+  joinSessionLink,
+  setShareLinkCopied,
+  shareLinkCopied,
+  restart,
+  isHost,
+}) {
   return (
     <div className={'container'} style={{ marginBottom: 100 }}>
       <>
@@ -155,23 +127,28 @@ function Settings({ title, setupDone, connections, setName, joinSessionLink, set
                 )}
               </li>
             ))}
-        <>
-          <h3>Invite participants:</h3>
-          <p>Use QR:</p>
-          <QRCodeSVG value={joinSessionLink} />
-          <p>or</p>
-          <p>Use a link:</p>
-          <button
-            className="button button-push_button-large button-push_button-primary"
-            onClick={() => {
-              navigator.clipboard.writeText(joinSessionLink)
-              setShareLinkCopied(true)
-              window.setTimeout(() => setShareLinkCopied(false), 2000)
-            }}
-          >
-            {shareLinkCopied ? 'Link copied!' : 'Copy link to clipboard'}
-          </button>
-        </>
+        <h3>Invite participants:</h3>
+        <p>Use QR:</p>
+        <QRCodeSVG value={joinSessionLink} />
+        <p>or</p>
+        <p>Use a link:</p>
+        <button
+          className="button button-push_button-large button-push_button-primary"
+          onClick={() => {
+            navigator.clipboard.writeText(joinSessionLink)
+            setShareLinkCopied(true)
+            window.setTimeout(() => setShareLinkCopied(false), 2000)
+          }}
+        >
+          {shareLinkCopied ? 'Link copied!' : 'Copy link to clipboard'}
+        </button>
+        <p>
+          {isHost && (
+            <button className="button button-push_button-large button-push_button-primary" onClick={() => restart()}>
+              Restart
+            </button>
+          )}
+        </p>
       </>
     </div>
   )
@@ -222,8 +199,7 @@ function Task(props) {
     tasksInProgress,
     markCurrentTaskDone,
     startTimer,
-    currentTask,
-    setCurrentTask,
+    jumpToNextTask,
   } = props
   return (
     <>
@@ -278,8 +254,7 @@ function Task(props) {
                 if (task.timer) {
                   startTimer(task)
                   setTasksInProgress([...tasksInProgress, task.uuid])
-                  const nextTask = currentTask - 1
-                  setCurrentTask(nextTask)
+                  jumpToNextTask()
                 } else {
                   await markCurrentTaskDone()
                 }
@@ -362,7 +337,7 @@ function Timeline(props) {
                         fill:
                           currentTimelineIsOwn && i === currentTask
                             ? 'rgb(200,200,255)'
-                            : timelineNumber === selectedTimeline && i === selectedTask.task
+                            : !isHost && timelineNumber === selectedTimeline && i === selectedTask.task
                             ? 'rgb(255,200,200)'
                             : completedTasks.includes(uuid)
                             ? 'rgb(240,255,240)'
@@ -384,23 +359,28 @@ function Timeline(props) {
   )
 }
 
-function Timers({ timers, scrollToTask, clearTimer }) {
+function Timers({ timers, scrollToTask, clearTimer, completedTasks, markTaskCompleted }) {
   const [currentTime, setCurrentTime] = useState(Date.now())
 
   useEffect(() => {
+    timers
+      .filter(({ end }) => end - currentTime < 0)
+      .map(({ taskUuid }) => !completedTasks.includes(taskUuid) && markTaskCompleted(taskUuid))
+
     const intervalId = setInterval(() => {
       setCurrentTime(Date.now())
     }, 1000)
 
     return () => clearInterval(intervalId)
-  }, [currentTime])
+  }, [currentTime, timers])
 
   return (
-    <div style={{ position: 'fixed', bottom: 110, right: 10 }}>
+    <div style={{ position: 'fixed', bottom: 110, right: 10, display: 'flex', flexDirection: 'column' }}>
       {timers.map(({ title, end, taskUuid }, i) => {
         const timeLeft = Math.max(0, (end - currentTime) / 1000)
         return (
           <div
+            key={`timer-${taskUuid}`}
             className={timeLeft === 0 ? 'wiggle' : ''}
             style={{
               width: '7em',
@@ -410,15 +390,23 @@ function Timers({ timers, scrollToTask, clearTimer }) {
               padding: '0.5em',
               boxShadow: '2px 2px 10px rgba(0, 0, 0, 0.2)',
               textAlign: 'center',
+              cursor: 'pointer',
             }}
-            onClick={() => scrollToTask(taskUuid)}
+            onClick={() => {
+              if (timeLeft === 0) {
+                clearTimer(i)
+                // TODO: Need to jump to a previous task, if the current is blocked and a previous is unlocked
+              } else {
+                scrollToTask(taskUuid)
+              }
+            }}
           >
             <div style={{ fontSize: '75%' }}>{title}</div>
             <div>
               {timeLeft === 0 ? (
                 <>
-                  <div>Time's up!</div>
-                  <button onClick={async () => await clearTimer(i)}>Clear</button>
+                  <div>Ready!</div>
+                  <div style={{ fontSize: '75%' }}>Click to clear</div>
                 </>
               ) : (
                 formatTime(timeLeft)
@@ -465,13 +453,17 @@ function App() {
   const [tasksInProgress, setTasksInProgress] = useState(settings.tasksInProgress || [])
   const [timers, setTimers] = useState([])
 
+  const concatCompletedTasks = (completed) => {
+    const merged = Array.from(new Set([...completedTasksRef.current, ...completed]))
+    setTasksCompleted(merged)
+  }
+
   const setTasksCompleted = (completed) => {
     console.log({ completed })
     // TODO: use uuids
-    const merged = Array.from(new Set([...(settings.completedTasks || []), ...completed]))
-    window.localStorage.setItem(sessionId, JSON.stringify({ ...settings, completedTasks: merged }))
-    completedTasksRef.current = merged
-    _setCompletedTasks(merged)
+    window.localStorage.setItem(sessionId, JSON.stringify({ ...settings, completedTasks: completed }))
+    completedTasksRef.current = completed
+    _setCompletedTasks(completed)
   }
 
   const scrollToTask = (uuid) =>
@@ -489,9 +481,8 @@ function App() {
 
   const clearTimer = async (index) => {
     let newTimers = timers.slice()
-    const [cleared] = newTimers.splice(index, 1)
+    newTimers.splice(index, 1)
     setTimers(newTimers)
-    await markTaskCompleted(cleared.uuid)
   }
 
   async function markTaskCompleted(uuid) {
@@ -507,10 +498,13 @@ function App() {
   const markCurrentTaskDone = async () => {
     const currentTaskItem = timelines[currentTimeline][currentTask]
     await markTaskCompleted(currentTaskItem.uuid)
-    const nextTask = currentTask - 1
+    // TODO: Need to jump to next task not completed
+    const startedTasks = [...completedTasksRef.current, ...tasksInProgress]
+    const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), timelines[currentTimeline])
+    console.log({ currentTask, nextTask })
     setCurrentTask(nextTask)
-    setSelectedTask({ task: nextTask, timeline: ownLane })
     scrollToIndex(nextTask)
+    setSelectedTask({ task: nextTask, timeline: ownLane })
   }
 
   const connectionRef = useRef()
@@ -579,6 +573,7 @@ function App() {
     connection.on(
       'data',
       (async (connectionId, data) => {
+        console.log({ data })
         const json = JSON.parse(data)
         if (json.type === 'init') {
           await sendConnections()
@@ -608,13 +603,20 @@ function App() {
     connectionRef.current.send(JSON.stringify({ type: 'init' }))
     sendName()
     connectionRef.current.on('data', (data) => {
+      console.log({ data }, 1)
       const json = JSON.parse(data)
       if (json.type === 'connections') {
         setConnections(json.data)
       } else if (json.type === 'completedTasks') {
+        // TODO: Need to jump to a previous task that was blocked if current task is blocked
         setTasksCompleted(json.data)
       }
     })
+  }
+
+  const restart = async () => {
+    setTasksCompleted([])
+    await sendCompletedTasks()
   }
 
   useEffect(() => {
@@ -749,7 +751,7 @@ function App() {
       ingredientsAndTools.push(node.getAttribute('uuid'))
       node = xPathResult.iterateNext()
     }
-    setTasksCompleted(ingredientsAndTools)
+    concatCompletedTasks([ingredientsAndTools])
 
     console.log(`Calculating graph starting from ${lastTask.getAttribute('operation')}`, newTimelines)
 
@@ -764,11 +766,12 @@ function App() {
     window.timelines = newTimelines
     setTimelines(newTimelines)
     setRecipeDuration(newTimelines.reduce((acc, items) => Math.min(acc, items[items.length - 1]?.start), 0))
+    const startedTasks = [...completedTasksRef.current, ...tasksInProgress]
     if (isHost) {
       // TODO: remove duplication
       setOwnLane(undefined)
       setCurrentTimeline(0)
-      const nextTask = R.findLastIndex((task) => !completedTasks.includes(task.uuid), newTimelines[0])
+      const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[0])
       setCurrentTask(nextTask)
       setSelectedTask({ task: nextTask, timeline: 0 })
     } else {
@@ -776,8 +779,7 @@ function App() {
       if (ownLane !== -1) {
         setOwnLane(ownLane)
         setCurrentTimeline(ownLane)
-        debugger
-        const nextTask = R.findLastIndex((task) => !completedTasks.includes(task.uuid), newTimelines[ownLane])
+        const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[ownLane])
         setCurrentTask(nextTask)
         setSelectedTask({ task: nextTask, timeline: ownLane })
       }
@@ -808,6 +810,7 @@ function App() {
 
   const height = laneHeight * timelines.length
   const task = timelines[selectedTimeline][selectedTask.task]
+  console.log({ task, selected: selectedTask })
 
   let timeline
   let tasks
@@ -873,7 +876,17 @@ function App() {
           <div style={{ marginBottom: '4em', width: '100%', position: 'absolute' }}>
             {currentState === 'settings' && (
               <Settings
-                {...{ title, setupDone, connections, setName, joinSessionLink, setShareLinkCopied, shareLinkCopied }}
+                {...{
+                  title,
+                  setupDone,
+                  connections,
+                  setName,
+                  joinSessionLink,
+                  setShareLinkCopied,
+                  shareLinkCopied,
+                  restart,
+                  isHost,
+                }}
               />
             )}
             {currentState === 'shopping' && <Shopping {...{ shoppingList }} />}
@@ -889,6 +902,7 @@ function App() {
                         {ownLaneSelected ? 'My tasks' : isHost ? 'Tasks' : `${selectedTimelineOwner}'s tasks`}
                       </h2>
                       {tasks.map((task, i) => {
+                        // TODO: why -1
                         const currentTaskIndex = timelines[selectedTimeline].length - currentTask - 1
                         return (
                           <>
@@ -904,10 +918,22 @@ function App() {
                                 timeUntilFinished,
                                 setTasksInProgress,
                                 tasksInProgress,
+                                completedTasks,
                                 markCurrentTaskDone,
                                 startTimer,
                                 currentTask,
                                 setCurrentTask,
+                                jumpToNextTask: () => {
+                                  const nextTask =
+                                    R.findLastIndex(
+                                      (task) => ![...completedTasksRef.current, ...tasksInProgress].includes(task.uuid),
+                                      timelines[ownLane]
+                                    ) - 1 // TODO: Why -1 tho?
+                                  // TODO: Scroll to current
+                                  setCurrentTask(nextTask)
+                                  setSelectedTask({ task: nextTask, timeline: ownLane })
+                                  scrollToIndex(nextTask)
+                                },
                               }}
                             />
                             <hr />
@@ -936,7 +962,7 @@ function App() {
               </>
             )}
           </div>
-          <Timers {...{ timers, scrollToTask, clearTimer }} />
+          <Timers {...{ timers, scrollToTask, clearTimer, markTaskCompleted, completedTasks }} />
         </>
       )}
       <div className={'nav'}>

@@ -445,7 +445,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <input ref="baked-cake"/>
                 for
                 <option name="duration">
-                    <numeric-value number="10" unit="minutes"/>
+                    <numeric-value number="10" unit="minutes"/><!-- TODO: was 10 minutes -->
                 </option>
                 in the <tool ref="silicone-cake-mould">mould</tool>.
             </instructions>
@@ -473,7 +473,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             </inputs>
             <options>
                 <option name="duration">
-                    <numeric-value number="2" unit="minutes"/> <!-- TODO: use temperature instead -->
+                    <numeric-value number="2" unit="minutes"/> <!-- TODO: was 2 minutes --><!-- TODO: use temperature instead -->
                 </option>
             </options>
             <outputs>
@@ -526,7 +526,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <input ref="fully-melted-chocolate-and-cream-mix"/>
                 until at
                 <option name="duration">
-                    <numeric-value number="5" unit="minutes"/> <!-- TODO: use temperature instead -->
+                    <numeric-value number="5" unit="minutes"/> <!-- TODO: was 5 minutes --><!-- TODO: use temperature instead -->
                 </option>
             </instructions>
             <outputs>
@@ -541,7 +541,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <tool ref="fridge"/>
                 and cool until it is
                 <option name="duration">
-                    <numeric-value number="5" unit="minutes"/>
+                    <numeric-value number="5" unit="minutes"/><!-- TODO: was 5 minutes -->
                 </option>
                 <!-- TODO
                 <option name="temperature">
@@ -616,7 +616,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <input ref="melted-chocolate-and-cream-mix-for-glaze"/>
                 to sit for
                 <option name="duration">
-                    <numeric-value number="10" unit="minutes"/>
+                    <numeric-value number="10" unit="minutes"/><!-- TODO: was 10 minutes -->
                 </option>
                 so that it thickens a bit. The consistency should be
                 <option name="temperature">
