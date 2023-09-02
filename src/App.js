@@ -890,7 +890,7 @@ function App() {
               />
             )}
             {currentState === 'shopping' && <Shopping {...{ shoppingList }} />}
-            {currentState === 'tools' && <Tools {...{ tools }} />}
+            {currentState === 'tools' && <></>}
             {currentState === 'cooking' && (
               <>
                 <div className="container" style={{ top: height + 40, marginBottom: 260 }}>
