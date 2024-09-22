@@ -1,33 +1,64 @@
 import './reset.css'
 import './App.css'
 //import xml_data from "./recipe/buns";
-import xml_data from './recipe/layer-cake'
+//import xml_data from './recipe/layer-cake'
 //import xml_data from './recipe/debug-cake'
+import xml_data from './recipe/bday-cake'
 import { useEffect, useRef, useState } from 'react'
 import { calculateToolList, findFinalOutputId, findTaskProducing, getInstructions } from './recipeTools'
 import { calculateShoppingList } from './shoppingListGenerator'
 import { expandNode, scheduleItemsInTimelines } from './timelineScheduler'
 import { v4 as uuidV4 } from 'uuid'
-import { QRCodeSVG } from 'qrcode.react'
 import Peer from 'peerjs'
-//import { ForceGraph2D } from 'react-force-graph'
+import { ForceGraph2D } from 'react-force-graph'
 import * as R from 'ramda'
+import QRCodeSVG from 'qrcode.react'
+import {
+  BottomNavigation,
+  BottomNavigationAction,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Container,
+  createTheme,
+  CssBaseline,
+  Grid2,
+  List,
+  ListItem,
+  Paper,
+  Stack,
+  TextField,
+  ThemeProvider,
+  Typography,
+} from '@mui/material'
+import SettingsIcon from '@mui/icons-material/Settings'
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
+import ChecklistIcon from '@mui/icons-material/Checklist'
+import { pink, purple } from '@mui/material/colors'
 
 const queryParams = new Proxy(new URLSearchParams(window.location.search), {
   get: (searchParams, prop) => searchParams.get(prop),
 })
 
-const baseUrl = window.location.href.split(/[?#]/)[0]
+const getSettings = (sessionId) => JSON.parse(window.localStorage.getItem(sessionId)) || {}
+const appendSessionSettings = (sessionId, settings) => {
+  window.localStorage.setItem(sessionId, JSON.stringify({ ...getSettings(sessionId), ...settings }))
+}
 
+const baseUrl = window.location.href.split(/[?#]/)[0]
 const sessionId = queryParams.session || uuidV4()
-const participantId = queryParams.session ? queryParams.participant || uuidV4() : '0'
+
+let storedParticipantId = getSettings(sessionId).participantId
+if (!storedParticipantId) {
+  storedParticipantId = queryParams.session ? uuidV4() : '0'
+  appendSessionSettings(sessionId, { participantId: storedParticipantId })
+}
+
+const participantId = storedParticipantId
 const isHost = participantId === '0'
 
-window.history.replaceState(
-  { sessionId, participantId },
-  'Buns!',
-  `${baseUrl}?session=${sessionId}&participant=${participantId}`
-)
+window.history.replaceState({ sessionId }, 'Flow Recipe', `${baseUrl}?session=${sessionId}`)
 
 const ownId = `recipes-${sessionId}-${participantId}`
 const hostId = `recipes-${sessionId}-0`
@@ -53,120 +84,133 @@ const createPeer = (sessionId, participantId, callback = () => {}) => {
   return peer
 }
 
-const NameInput = ({ name, setName, setNameSet, updateName }) => (
-  <>
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: 'auto',
-          width: '20em',
-          borderRadius: '1em',
-          backgroundColor: '#ccf',
-          padding: '1em',
-        }}
-      >
-        <h2 style={{ marginTop: 0 }}>Set your name to begin</h2>
-        <label>
-          You can call me{' '}
-          <input name={'name'} style={{ fontSize: 16 }} onChange={(e) => setName(e.target.value)} value={name} />
-        </label>
-        <br />
-        <button
-          className="button button-push_button-primary button-push_button-large"
-          disabled={name === ''}
-          onClick={() => {
-            setNameSet(true)
-            const settings = JSON.parse(window.localStorage.getItem(sessionId)) || {}
-            window.localStorage.setItem(sessionId, JSON.stringify({ ...settings, name: name }))
-            window.localStorage.setItem('global-settings', JSON.stringify({ defaultName: name }))
-            updateName(name)
-          }}
-        >
-          Let's begin!
-        </button>
-      </div>
-    </div>
-  </>
+const NameDialog = ({ name, setName, setNameSet, updateName }) => (
+  <Grid2 container padding={2} direction="column" alignItems="center" justify="center" style={{ minHeight: '100vh' }}>
+    <Grid2 item xs={3}>
+      <Card>
+        <CardContent>
+          <Stack spacing={2}>
+            <Typography gutterBottom variant="h5" component="div">
+              Set your name
+            </Typography>
+            <TextField name={'name'} label="name" onChange={(e) => setName(e.target.value)} value={name} />
+            <Button
+              variant="contained"
+              disabled={name === ''}
+              onClick={() => {
+                setNameSet(true)
+                appendSessionSettings(sessionId, { name })
+                window.localStorage.setItem('global-settings', JSON.stringify({ defaultName: name }))
+                updateName(name)
+              }}
+            >
+              Let's begin!
+            </Button>
+          </Stack>
+        </CardContent>
+      </Card>
+    </Grid2>
+  </Grid2>
 )
 
 function Settings({
   title,
   setupDone,
   connections,
+  name,
   setName,
+  updateName,
   joinSessionLink,
   setShareLinkCopied,
   shareLinkCopied,
   restart,
   isHost,
+  connectionId,
 }) {
   return (
-    <div className={'container'} style={{ marginBottom: 100 }}>
-      <>
-        <h2>Recipe</h2>
-        {title}
-        <h2>Participants:</h2>
-        {!setupDone
-          ? 'Connecting...'
-          : connections.map(({ name, id }) => (
-              <li key={id}>
-                {participantId === id ? (
-                  <input
-                    name="name"
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value)
-                    }}
-                  />
-                ) : (
-                  name
-                )}
-              </li>
-            ))}
-        <h3>Invite participants:</h3>
-        <p>Use QR:</p>
-        <QRCodeSVG value={joinSessionLink} />
-        <p>or</p>
-        <p>Use a link:</p>
-        <button
-          className="button button-push_button-large button-push_button-primary"
-          onClick={() => {
-            navigator.clipboard.writeText(joinSessionLink)
-            setShareLinkCopied(true)
-            window.setTimeout(() => setShareLinkCopied(false), 2000)
-          }}
+    <Box paddingBottom={9}>
+      <Stack spacing={2}>
+        <Typography variant="h6">Recipe: {title}</Typography>
+        <Card>
+          <CardContent>
+            <Typography variant="h6">Participants</Typography>
+            <List>
+              {!setupDone
+                ? 'Connecting...'
+                : connections.map(({ name: connectionName, id }) => (
+                    <ListItem key={id}>
+                      {connectionId === id ? (
+                        <TextField
+                          name="name"
+                          label="your name"
+                          value={name}
+                          onChange={(e) => {
+                            // TODO: should this use a ref, because the updates come from the peer?
+                            const newName = e.target.value
+                            console.log({ name: newName })
+                            setName(newName)
+                            updateName(newName)
+                          }}
+                        />
+                      ) : (
+                        connectionName + (id === '0' ? ' (Host)' : '')
+                      )}
+                    </ListItem>
+                  ))}
+            </List>
+          </CardContent>
+        </Card>
+        <Card
+          padding={2}
+          color="primary"
+          variant="solid"
+          sx={{ borderRadius: 2, width: 'fit-content', backgroundColor: 'primary.main' }}
         >
-          {shareLinkCopied ? 'Link copied!' : 'Copy link to clipboard'}
-        </button>
-        <p>
-          {isHost && (
-            <button className="button button-push_button-large button-push_button-primary" onClick={() => restart()}>
-              Restart
-            </button>
-          )}
-        </p>
-      </>
-    </div>
+          <CardContent>
+            <Stack justifyContent="center" alignItems="center" spacing={2}>
+              <Typography variant="h6" color="white">
+                Invite participants
+              </Typography>
+              <QRCodeSVG value={joinSessionLink} fgColor={'white'} bgColor={'transparent'} />
+              <Button
+                variant="outlined"
+                sx={{ color: 'white', borderColor: 'white' }}
+                onClick={() => {
+                  navigator.clipboard.writeText(joinSessionLink)
+                  setShareLinkCopied(true)
+                  window.setTimeout(() => setShareLinkCopied(false), 2000)
+                }}
+              >
+                {shareLinkCopied ? 'Link copied!' : 'Copy link'}
+              </Button>
+            </Stack>
+          </CardContent>
+        </Card>
+      </Stack>
+      <p>
+        {isHost && (
+          <Button variant="contained" onClick={() => restart()}>
+            Restart
+          </Button>
+        )}
+      </p>
+    </Box>
   )
 }
 
 function Shopping({ shoppingList }) {
   return (
-    <div className="container">
+    <Box>
       {shoppingList ? (
-        <ul>
+        <List>
           {Object.entries(shoppingList).map(([name, { amount, unit }], i) => (
-            <li key={`${name}-${i}`}>
+            <ListItem key={`${name}-${i}`}>
               {amount} {unit} {name}
-            </li>
+            </ListItem>
           ))}
-        </ul>
+        </List>
       ) : null}
-    </div>
+    </Box>
   )
 }
 
@@ -200,72 +244,73 @@ function Task(props) {
     markCurrentTaskDone,
     startTimer,
     jumpToNextTask,
+    isHost,
   } = props
+  const id = 'task' + task.uuid
   return (
-    <>
-      <h3 id={task.uuid} style={{ scrollMarginTop: 10 }}>
-        {task?.title} {isCurrent && '👈'}
-        {isDone && '✅'}
-      </h3>
-      <>
-        {isCurrent && !inputsReady && (
-          <>
-            Wait for: <br />
-            <ul>
-              {pendingInputs
-                .map(({ uuid: pi }) => inputsForTask.find((i) => i.uuid === pi))
-                .map(({ input, participant }) => (
-                  <li>
+    <Card sx={{ opacity: isCurrent || isHost ? 1 : 0.5 }} id={id} style={{ scrollMarginTop: 50 }} key={id}>
+      {/*TODO: Why does the scroll margin top not work?*/}
+      <CardContent>
+        <Typography variant="h4" gutterBottom>
+          {task?.title} {isCurrent && '👈'}
+          {isDone && '✅'}
+        </Typography>
+        <Stack spacing={2}>
+          {isCurrent && !inputsReady && (
+            <>
+              Wait for: <br />
+              <ul>
+                {pendingInputs
+                  .map(({ uuid: pi }) => inputsForTask.find((i) => i.uuid === pi))
+                  .map(({ input, participant }) => (
+                    <li key={input}>
+                      {input} {participant !== null && `from ${participant}`}
+                    </li>
+                  ))}
+              </ul>
+            </>
+          )}
+          {isCurrent && inputsForTask.length > 0 && (
+            <>
+              Get: <br />
+              <ul>
+                {inputsForTask.map(({ participant, input }) => (
+                  <li key={input}>
                     {input} {participant !== null && `from ${participant}`}
                   </li>
                 ))}
-            </ul>
-          </>
-        )}
-        {isCurrent && inputsForTask.length > 0 && (
-          <p>
-            Get: <br />
-            <ul>
-              {inputsForTask.map(({ participant, input }) => (
-                <li>
-                  {input} {participant !== null && `from ${participant}`}
-                </li>
-              ))}
-            </ul>
-          </p>
-        )}
-        <p>{getInstructions(recipe, task)}</p>
-        {!isDone && <p>Estimated task duration: {formatTime(task.duration)}</p>}
-        {isCurrent && (
-          <p>
-            <small>Time until finished: {timeUntilFinished}</small>
-          </p>
-        )}
-        {!isHost && !isDone && isCurrent && inputsReady && (
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-            }}
-          >
-            <button
-              className={'button button-push_button-primary button-push_button-large'}
-              onClick={async () => {
-                if (task.timer) {
-                  startTimer(task)
-                  setTasksInProgress([...tasksInProgress, task.uuid])
-                  jumpToNextTask()
-                } else {
-                  await markCurrentTaskDone()
-                }
+              </ul>
+            </>
+          )}
+          <p>{getInstructions(recipe, task)}</p>
+          {!isDone && <Typography variant="subtitle2">Estimated task duration: {formatTime(task.duration)}</Typography>}
+          {/* isCurrent && <Typography variant="subtitle2">Time until finished: {timeUntilFinished}</Typography> */}
+          {!isDone && (isHost || (isCurrent && inputsReady)) && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
               }}
             >
-              {task.timer ? 'Start timer' : 'Done, next!'}
-            </button>
-          </div>
-        )}
-      </>
-    </>
+              <Button
+                variant="contained"
+                onClick={async () => {
+                  if (task.timer) {
+                    startTimer(task)
+                    setTasksInProgress([...tasksInProgress, task.uuid])
+                    jumpToNextTask()
+                  } else {
+                    await markCurrentTaskDone()
+                  }
+                }}
+              >
+                {task.timer ? 'Start timer' : 'Done, next!'}
+              </Button>
+            </div>
+          )}
+        </Stack>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -286,18 +331,20 @@ function Timeline(props) {
     completedTasks,
   } = props
   return (
-    <div
-      style={{
-        bottom: 40,
-        width: '100%',
-        backgroundColor: '#eee',
-        margin: 0,
-        padding: 10,
-        boxSizing: 'border-box',
+    <Box
+      sx={{
         position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        pb: 7,
+        background: 'white',
+        borderTop: '1px solid #eee',
+        boxShadow: 3,
       }}
+      padding={2}
     >
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto' }} className={'hide-scrollbar'}>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox={`0 0 ${width} ${height}`}
@@ -305,57 +352,60 @@ function Timeline(props) {
             width: width * zoom,
             height: `100%`,
             border: '0px solid black',
-            marginBottom: 15,
+            marginBottom: 5,
           }}
         >
           {timelines.map((timeline, timelineNumber) => {
             const y = timelineNumber * laneHeight
 
-            return (
-              <>
-                <text x={0} y={y + laneHeight / 2} style={{ fontSize: Math.round(laneHeight / 2) }}>
-                  {connections[timelineNumber]?.name}
-                </text>
-                {timeline.map(({ start, end, title, uuid }, i) => {
-                  const currentTimelineIsOwn = timelineNumber === ownLane
-                  return (
-                    <rect
-                      key={uuid}
-                      width={end - start}
-                      height={laneHeight}
-                      x={width + start}
-                      y={y}
-                      onClick={() => {
-                        setCurrentTimeline(timelineNumber)
-                        setSelectedTask({
-                          task: i,
-                          timeline: timelineNumber,
-                        })
-                        scrollToIndex(i)
-                      }}
-                      style={{
-                        fill:
-                          currentTimelineIsOwn && i === currentTask
-                            ? 'rgb(200,200,255)'
-                            : !isHost && timelineNumber === selectedTimeline && i === selectedTask.task
-                            ? 'rgb(255,200,200)'
-                            : completedTasks.includes(uuid)
-                            ? 'rgb(240,255,240)'
-                            : 'rgb(240,240,255)',
-                        strokeWidth: 3,
-                        rx: 5,
-                        ry: 5,
-                        stroke: 'rgb(0,0,0)',
-                      }}
-                    />
-                  )
-                })}
-              </>
-            )
+            return [
+              <text
+                x={0}
+                y={y + laneHeight / 2 + 10}
+                style={{ fontSize: Math.round(laneHeight / 3) }}
+                key={timelineNumber + connections[timelineNumber]?.name}
+              >
+                {connections[timelineNumber]?.name}
+              </text>,
+              timeline.map(({ start, end, title, uuid }, i) => {
+                const currentTimelineIsOwn = timelineNumber === ownLane
+                return (
+                  <rect
+                    id={'timeline' + uuid}
+                    key={'timeline' + uuid}
+                    width={end - start - 10}
+                    height={laneHeight - 10}
+                    x={width + start}
+                    y={y}
+                    onClick={() => {
+                      setCurrentTimeline(timelineNumber)
+                      setSelectedTask({
+                        task: i,
+                        timeline: timelineNumber,
+                      })
+                      scrollToIndex(i)
+                    }}
+                    style={{
+                      fill: completedTasks.includes(uuid)
+                        ? '#1ee9a5'
+                        : currentTimelineIsOwn && i === currentTask
+                        ? '#e91e63'
+                        : currentTimelineIsOwn
+                        ? 'rgba(233, 30, 99, 0.5)'
+                        : !isHost && timelineNumber === selectedTimeline && i === selectedTask.task
+                        ? 'rgb(255,200,200)'
+                        : 'rgb(217,217,217)',
+                      rx: 10,
+                      ry: 10,
+                    }}
+                  />
+                )
+              }),
+            ]
           })}
         </svg>
       </div>
-    </div>
+    </Box>
   )
 }
 
@@ -419,8 +469,18 @@ function Timers({ timers, scrollToTask, clearTimer, completedTasks, markTaskComp
   )
 }
 
+const theme = createTheme({
+  palette: {
+    background: {
+      default: '#e7ecf8',
+    },
+    primary: pink,
+    secondary: purple,
+  },
+})
+
 function App() {
-  const settings = JSON.parse(window.localStorage.getItem(sessionId)) || {}
+  const settings = getSettings(sessionId)
 
   const [title, setTitle] = useState('')
   const [shoppingList, setShoppingList] = useState([])
@@ -433,15 +493,10 @@ function App() {
   const [recipe, setRecipe] = useState()
   const [recipeDuration, setRecipeDuration] = useState()
   let globalSettings = JSON.parse(window.localStorage.getItem('global-settings'))
-  const [name, setName] = useState(globalSettings?.defaultName || settings?.name || '')
+  const [name, setName] = useState(settings?.name || globalSettings?.defaultName || '')
   const [nameSet, setNameSet] = useState(name !== '')
   const [shareLinkCopied, setShareLinkCopied] = useState(false)
-  const [currentState, setCurrentState] = useState(settings.tab || 'cooking')
-  const selectTab = (tab) => {
-    setCurrentState(tab)
-    const settings = JSON.parse(window.localStorage.getItem(sessionId)) || {}
-    window.localStorage.setItem(sessionId, JSON.stringify({ ...settings, tab }))
-  }
+  const [currentState, setCurrentState] = useState(settings.tab || isHost ? 'settings' : 'cooking')
 
   const connectionsRef = useRef([{ id: hostId, name }])
   const [connections, _setConnections] = useState(connectionsRef.current)
@@ -453,6 +508,11 @@ function App() {
   const [tasksInProgress, setTasksInProgress] = useState(settings.tasksInProgress || [])
   const [timers, setTimers] = useState([])
 
+  const selectTab = (tab) => {
+    setCurrentState(tab)
+    appendSessionSettings(sessionId, { tab })
+  }
+
   const concatCompletedTasks = (completed) => {
     const merged = Array.from(new Set([...completedTasksRef.current, ...completed]))
     setTasksCompleted(merged)
@@ -461,16 +521,23 @@ function App() {
   const setTasksCompleted = (completed) => {
     console.log({ completed })
     // TODO: use uuids
-    window.localStorage.setItem(sessionId, JSON.stringify({ ...settings, completedTasks: completed }))
+    appendSessionSettings(sessionId, { completedTasks: completed })
     completedTasksRef.current = completed
     _setCompletedTasks(completed)
   }
 
-  const scrollToTask = (uuid) =>
-    document.getElementById(uuid).scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' })
+  const scrollToTask = (uuid) => {
+    console.log(
+      'scrolling to ' + uuid,
+      document.getElementById('task' + uuid),
+      document.getElementById('timeline' + uuid)
+    )
+    document.getElementById('task' + uuid)?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' })
+    document.getElementById('timeline' + uuid)?.scrollIntoView({ behavior: 'smooth', inline: 'center' })
+  }
 
   const scrollToIndex = (taskIndex) => {
-    const uuid = timelines[selectedTimeline][taskIndex].uuid
+    const uuid = window.timelines[selectedTimeline][taskIndex].uuid
     scrollToTask(uuid)
   }
 
@@ -542,6 +609,7 @@ function App() {
   }
 
   const sendConnections = async () => {
+    console.log('sending connections', connectionsRef.current)
     await sendMessageToAllConnections({
       type: 'connections',
       data: connectionsRef.current.map(({ connection, ...rest }) => ({
@@ -555,6 +623,7 @@ function App() {
   }
 
   const sendCompletedTasks = async () => {
+    console.log('sending completed tasks', completedTasksRef.current)
     await sendMessageToAllConnections({
       type: 'completedTasks',
       data: completedTasksRef.current,
@@ -577,6 +646,7 @@ function App() {
         const json = JSON.parse(data)
         if (json.type === 'init') {
           await sendConnections()
+          await sendCompletedTasks()
         } else if (json.type === 'name') {
           setConnections(
             mergeConnection(
@@ -591,6 +661,7 @@ function App() {
         } else if (json.type === 'taskCompleted') {
           const taskUuid = json.data
           setTasksCompleted([...completedTasksRef.current, taskUuid])
+          // TODO: make this select the last, not completed task
           setCurrentTask(tasks.findIndex(({ uuid }) => uuid === taskUuid))
           scrollToTask(taskUuid)
           await sendCompletedTasks()
@@ -603,19 +674,31 @@ function App() {
     connectionRef.current.send(JSON.stringify({ type: 'init' }))
     sendName()
     connectionRef.current.on('data', (data) => {
-      console.log({ data }, 1)
+      console.log('on data', { data })
       const json = JSON.parse(data)
       if (json.type === 'connections') {
         setConnections(json.data)
       } else if (json.type === 'completedTasks') {
         // TODO: Need to jump to a previous task that was blocked if current task is blocked
         setTasksCompleted(json.data)
+        if (json.data.length === 0) {
+          // reset
+          setTasksInProgress([])
+          setTimers([])
+          const ownTimeline = window.timelines[ownLane]
+          const firstTaskIndex = ownTimeline.length - 1
+          setCurrentTask(firstTaskIndex)
+          setSelectedTask({ task: firstTaskIndex, timeline: ownLane })
+          appendSessionSettings(sessionId, { completedTasks: [] })
+          scrollToIndex(firstTaskIndex)
+        }
       }
     })
   }
 
   const restart = async () => {
     setTasksCompleted([])
+    appendSessionSettings(sessionId, { completedTasks: [] })
     await sendCompletedTasks()
   }
 
@@ -653,6 +736,7 @@ function App() {
   }, [])
 
   const sendName = () => {
+    console.log(connectionRef.current)
     connectionRef.current.send(JSON.stringify({ type: 'name', data: name }))
   }
 
@@ -736,7 +820,7 @@ function App() {
       node.setAttribute('uuid', i)
     }
 
-    console.log('recipe', new XMLSerializer().serializeToString(recipe))
+    //console.log('recipe', new XMLSerializer().serializeToString(recipe))
 
     const ingredientsAndTools = []
     xPathResult = recipe.evaluate(
@@ -775,13 +859,13 @@ function App() {
       setCurrentTask(nextTask)
       setSelectedTask({ task: nextTask, timeline: 0 })
     } else {
-      const ownLane = connections.findIndex(({ id }) => id === ownId) - 1
-      if (ownLane !== -1) {
-        setOwnLane(ownLane)
-        setCurrentTimeline(ownLane)
-        const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[ownLane])
+      const newOwnLane = connections.findIndex(({ id }) => id === ownId) - 1
+      if (newOwnLane !== -1) {
+        setOwnLane(newOwnLane)
+        setCurrentTimeline(newOwnLane)
+        const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[newOwnLane])
         setCurrentTask(nextTask)
-        setSelectedTask({ task: nextTask, timeline: ownLane })
+        setSelectedTask({ task: nextTask, timeline: newOwnLane })
       }
     }
 
@@ -791,8 +875,8 @@ function App() {
   const dependencyGraph = timelines.reduce(
     (g, timeline) => {
       timeline.forEach(({ uuid, title, dependencies }) => {
-        g?.nodes.push({ uuid, title })
-        dependencies.forEach((iuuid) => g?.links.push({ source: iuuid, target: uuid }))
+        g?.nodes.push({ id: uuid, title })
+        dependencies.forEach(({ uuid: iuuid }) => g?.links.push({ source: iuuid, target: uuid }))
       })
       return g
     },
@@ -810,7 +894,7 @@ function App() {
 
   const height = laneHeight * timelines.length
   const task = timelines[selectedTimeline][selectedTask.task]
-  console.log({ task, selected: selectedTask })
+  //console.log({ task, selected: selectedTask })
 
   let timeline
   let tasks
@@ -839,73 +923,80 @@ function App() {
   const ownLaneSelected = selectedTimeline === ownLane
   const selectedTimelineOwner = connections[selectedTimeline + 1]?.name
   const inputsReady = pendingInputs?.length === 0
+  const debug = false
   return (
-    <div className="App" style={{ minHeight: '100vh', overflow: 'hidden' }}>
-      {/*
-      <ForceGraph2D
-        graphData={dependencyGraph}
-        nodeAutoColorBy="group"
-        nodeCanvasObject={(node, ctx, globalScale) => {
-          const label = node.title
-          const fontSize = 12 / globalScale
-          ctx.font = `${fontSize}px Sans-Serif`
-          const textWidth = ctx.measureText(label).width
-          const bckgDimensions = [textWidth, fontSize].map((n) => n + fontSize * 0.2) // some padding
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Container sx={{ minHeight: '100vh' }}>
+        {debug && (
+          <ForceGraph2D
+            graphData={dependencyGraph}
+            nodeAutoColorBy="group"
+            nodeCanvasObject={(node, ctx, globalScale) => {
+              const label = node.title
+              const fontSize = 12 / globalScale
+              ctx.font = `${fontSize}px Sans-Serif`
+              const textWidth = ctx.measureText(label).width
+              const bckgDimensions = [textWidth, fontSize].map((n) => n + fontSize * 0.2) // some padding
 
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
-          ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.8)'
+              ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
 
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillStyle = node.color
-          ctx.fillText(label, node.x, node.y)
+              ctx.textAlign = 'center'
+              ctx.textBaseline = 'middle'
+              ctx.fillStyle = node.color
+              ctx.fillText(label, node.x, node.y)
 
-          node.__bckgDimensions = bckgDimensions // to re-use in nodePointerAreaPaint
-        }}
-        nodePointerAreaPaint={(node, color, ctx) => {
-          ctx.fillStyle = color
-          const bckgDimensions = node.__bckgDimensions
-          bckgDimensions &&
-            ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
-        }}
-      />*/}
-      {!nameSet ? (
-        <NameInput {...{ setName, name, updateName, setNameSet }} />
-      ) : (
-        <>
-          <div style={{ marginBottom: '4em', width: '100%', position: 'absolute' }}>
-            {currentState === 'settings' && (
-              <Settings
-                {...{
-                  title,
-                  setupDone,
-                  connections,
-                  setName,
-                  joinSessionLink,
-                  setShareLinkCopied,
-                  shareLinkCopied,
-                  restart,
-                  isHost,
-                }}
-              />
-            )}
-            {currentState === 'shopping' && <Shopping {...{ shoppingList }} />}
-            {currentState === 'tools' && <></>}
-            {currentState === 'cooking' && (
-              <>
-                <div className="container" style={{ top: height + 40, marginBottom: 260 }}>
-                  {timelines[0]?.length === 0 ? (
-                    'Waiting for connections'
-                  ) : (
-                    <>
-                      <h2 className="title">
-                        {ownLaneSelected ? 'My tasks' : isHost ? 'Tasks' : `${selectedTimelineOwner}'s tasks`}
-                      </h2>
-                      {tasks.map((task, i) => {
-                        // TODO: why -1
-                        const currentTaskIndex = timelines[selectedTimeline].length - currentTask - 1
-                        return (
-                          <>
+              node.__bckgDimensions = bckgDimensions // to re-use in nodePointerAreaPaint
+            }}
+            nodePointerAreaPaint={(node, color, ctx) => {
+              ctx.fillStyle = color
+              const bckgDimensions = node.__bckgDimensions
+              bckgDimensions &&
+                ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
+            }}
+          />
+        )}
+        {!nameSet ? (
+          <NameDialog {...{ setName, name, updateName, setNameSet }} />
+        ) : (
+          <>
+            <div>
+              {currentState === 'settings' && (
+                <Settings
+                  {...{
+                    title,
+                    setupDone,
+                    connections,
+                    name,
+                    setName,
+                    updateName,
+                    joinSessionLink,
+                    setShareLinkCopied,
+                    shareLinkCopied,
+                    restart,
+                    isHost,
+                    connectionId: p.current?.id,
+                  }}
+                />
+              )}
+              {currentState === 'shopping' && <Shopping {...{ shoppingList }} />}
+              {currentState === 'tools' && <></>}
+              {currentState === 'cooking' && (
+                <Box sx={{ pb: 20 }}>
+                  <Box paddingY={2}>
+                    {timelines[0]?.length === 0 ? (
+                      'Waiting for connections'
+                    ) : (
+                      <Stack spacing={2}>
+                        {/*}
+                        <Typography variant="h1">
+                          {ownLaneSelected ? 'My tasks' : isHost ? 'Tasks' : `${selectedTimelineOwner}'s tasks`}
+                        </Typography>*/}
+                        {tasks.map((task, i) => {
+                          // TODO: why -1
+                          const currentTaskIndex = timelines[selectedTimeline].length - currentTask - 1
+                          return (
                             <Task
                               {...{
                                 task,
@@ -923,6 +1014,7 @@ function App() {
                                 startTimer,
                                 currentTask,
                                 setCurrentTask,
+                                isHost,
                                 jumpToNextTask: () => {
                                   const nextTask =
                                     R.findLastIndex(
@@ -936,35 +1028,56 @@ function App() {
                                 },
                               }}
                             />
-                            <hr />
-                          </>
-                        )
-                      })}
-                    </>
-                  )}
-                </div>
-                <Timeline
-                  {...{
-                    width,
-                    height,
-                    timelines,
-                    connections: connections.slice(1),
-                    ownLane,
-                    setCurrentTimeline,
-                    setSelectedTask,
-                    scrollToIndex,
-                    currentTask,
-                    selectedTimeline,
-                    selectedTask,
-                    completedTasks,
-                  }}
-                />
-              </>
-            )}
-          </div>
-          <Timers {...{ timers, scrollToTask, clearTimer, markTaskCompleted, completedTasks }} />
-        </>
-      )}
+                          )
+                        })}
+                      </Stack>
+                    )}
+                  </Box>
+                  <Timeline
+                    {...{
+                      width,
+                      height,
+                      timelines,
+                      connections: connections.slice(1),
+                      ownLane,
+                      setCurrentTimeline,
+                      setSelectedTask,
+                      scrollToIndex,
+                      currentTask,
+                      selectedTimeline,
+                      selectedTask,
+                      completedTasks,
+                    }}
+                  />
+                </Box>
+              )}
+            </div>
+            <Timers {...{ timers, scrollToTask, clearTimer, markTaskCompleted, completedTasks }} />
+            <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} elevation={3}>
+              <BottomNavigation
+                sx={{
+                  '& .Mui-selected': {
+                    '& .MuiSvgIcon-root, & .MuiBottomNavigationAction-label': {
+                      color: 'primary.main',
+                    },
+                  },
+                }}
+                showLabels
+                value={currentState}
+                onChange={(event, newValue) => {
+                  console.log({ newValue })
+                  selectTab(newValue)
+                }}
+              >
+                <BottomNavigationAction label="Settings" value="settings" icon={<SettingsIcon />} />
+                <BottomNavigationAction label="Shopping" value="shopping" icon={<ShoppingCartIcon />} />
+                {/*<BottomNavigationAction label="Tools" value="tools" icon={<HandymanIcon />} />*/}
+                <BottomNavigationAction label="Tasks" value="cooking" icon={<ChecklistIcon />} />
+              </BottomNavigation>
+            </Paper>
+          </>
+        )}
+        {/*
       <div className={'nav'}>
         <div
           className={`nav-item clickable ${currentState === 'settings' ? 'nav-item_current' : ''}`}
@@ -991,7 +1104,9 @@ function App() {
           Tasks
         </div>
       </div>
-    </div>
+      */}
+      </Container>
+    </ThemeProvider>
   )
 }
 

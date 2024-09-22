@@ -23,14 +23,19 @@ const xmlToElement = (xml) => {
   return template.content.firstChild
 }
 
-const getTextInstructions = (graph, node) => {
+export const getTextInstructions = (graph, node) => {
   const instructionNode = node.querySelector('instructions')
   if (!instructionNode) {
     return undefined
   }
+  const options = getOptions(node)
   return Array.from(instructionNode.childNodes)
+    .filter((node) => !(node instanceof Comment))
     .map((node) => {
-      if (node instanceof Text) {
+      if (node.tagName === 'option') {
+        // TODO: a bit silly to get the name from the node and then use that to search the node from the options
+        return getNumericValueString(node.getAttribute('name'), options)
+      } else if (node instanceof Text) {
         return node.wholeText
       } else {
         if (node.childNodes.length > 0) {
@@ -40,21 +45,25 @@ const getTextInstructions = (graph, node) => {
         }
       }
     })
-    .join(' ')
+    .join('')
 }
 export const operations = {
   measure: {
     timeline: (node) => ({ active: 60, passive: 0 }),
     title: (node) => 'Measure',
     instruction: (recipe, node) => {
-      const [{ name, amount }] = getAmounts(recipe, node)
-      const container = getNodesProducingInputs(recipe, node)[1]
-      return (
-        <div>
-          Measure {`${amount} ${name}`}
-          {container && ` into ${container.getAttribute('name')}`}
-        </div>
-      )
+      try {
+        const [{ name, amount }] = getAmounts(recipe, node)
+        const container = getNodesProducingInputs(recipe, node)[1]
+        return (
+          <div>
+            Measure {`${amount} ${name}`}
+            {container && ` into ${container.getAttribute('name')}`}
+          </div>
+        )
+      } catch (e) {
+        throw new Error(`Unable to parse instructions for node: ${node.innerHTML} (${e.toString()})`)
+      }
     },
   },
   heat: {
@@ -180,6 +189,7 @@ export const operations = {
   },
   pour: {
     instruction: (recipe, node) => {
+      // TODO: this does not work when pouring to a input rather than a tool (e.g. greased mould)
       return `Pour ${getFirstInputName(recipe, node)} into ${getFirstToolName(recipe, node)}` // TODO: this will make the order of the tools matter i.e. the bowl must come first, then e.g. spatula
     },
     timeline: (node) => ({ active: 180, passive: 0 }),
@@ -213,15 +223,59 @@ export const operations = {
     timeline: (node) => ({ active: 120, passive: 0 }),
     title: (node) => 'Stir',
   },
+  soften: {
+    instruction: (recipe, node) => {
+      return `Soften ${getFirstInputName(recipe, node)} with ${getFirstToolName(recipe, node)}`
+    },
+    timeline: (node) => ({ active: 120, passive: 0 }),
+    title: (node) => 'Soften',
+  },
+  ball: {
+    instruction: (recipe, node) => {
+      return `Carve out balls from ${getFirstInputName(recipe, node)} with ${getFirstToolName(recipe, node)}`
+    },
+    timeline: (node) => ({ active: 180, passive: 0 }),
+    title: (node) => 'Ball',
+  },
+  decorate: {
+    instruction: (recipe, node) => {
+      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
+      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      return `Decorate ${firstInputName} with ${secondInputName}`
+    },
+    timeline: (node) => ({ active: 180, passive: 0 }),
+    title: (node) => 'Decorate',
+  },
+  cream: {
+    instruction: (recipe, node) => {
+      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
+      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      return `Cream ${firstInputName} and ${secondInputName} with ${getFirstToolName(recipe, node)}`
+    },
+    timeline: (node) => ({ active: 120, passive: 0 }),
+    title: (node) => 'Cream',
+  },
+  stack: {
+    instruction: (recipe, node) => {
+      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
+      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      return `Stack ${firstInputName} on top of ${secondInputName}`
+    },
+    timeline: (node) => ({ active: 60, passive: 0 }),
+    title: (node) => 'Stack',
+  },
   'bake-in-microwave': {
     instruction: (recipe, node) => {
       const options = getOptions(node)
-      const temperatureOption = getOption(options, 'temperature')
+      const powerOption = getOption(options, 'power')
 
       const firstInputName = `${getFirstInputName(recipe, node)}`
 
-      return temperatureOption
-        ? `Heat ${firstInputName} to ${getNumericValueString('temperature', options)}`
+      return powerOption
+        ? `Bake ${firstInputName} with ${getNumericValueString(
+            'power',
+            options
+          )} in the microwave oven for ${getNumericValueString('duration', options)}`
         : `Bake ${firstInputName} for ${getNumericValueString('duration', options)} in the microwave oven`
     },
     timeline: (node) => {
@@ -519,7 +573,7 @@ ${node.querySelector('options').outerHTML}
     instruction: (recipe, node) => {
       const firstInputName = getNameForInputAtIndex(recipe, node, 0)
       const secondInputName = getNameForInputAtIndex(recipe, node, 1)
-      return `Soak ${firstInputName} in ${secondInputName}`
+      return `Soak ${firstInputName} with ${secondInputName}`
     },
     timeline: (node) => ({ active: 60, passive: 120 }),
     title: (node) => 'Soak',

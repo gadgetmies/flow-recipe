@@ -1,4 +1,4 @@
-import { operations } from './operations'
+import {getTextInstructions, operations} from './operations'
 
 export function getOption(options, optionName) {
   return Array.from(options).find((o) => o.getAttribute('name') === optionName)
@@ -58,18 +58,20 @@ export function getToolRefNodes(recipe, node) {
 }
 
 export function getAmounts(recipe, node) {
-  return getInputs(node)
-    .map((input) => recipe.getElementById(input.getAttribute('ref')))
-    .filter((i) => i.tagName === 'ingredient')
-    .map((ingredient) => {
-      const options = getOptions(node)
-      const amount = getNumericValueFromOption('amount', options)
-      const unit = getUnitFromOption('amount', options)
-      return {
-        name: ingredient.getAttribute('name'),
-        amount: `${amount} ${unit}`,
-      }
-    })
+  return (
+    getInputs(node)
+      .map((input) => recipe.getElementById(input.getAttribute('ref')))
+      // TODO: Why was this here? This is an issue when measuring something other than ingredients .filter((i) => i.tagName === 'ingredient')
+      .map((ingredient) => {
+        const options = getOptions(node)
+        const amount = getNumericValueFromOption('amount', options)
+        const unit = getUnitFromOption('amount', options)
+        return {
+          name: ingredient.getAttribute('name'),
+          amount: `${amount} ${unit}`,
+        }
+      })
+  )
 }
 
 export function getTools(recipe, node) {
@@ -102,7 +104,11 @@ export function getNameForInputAtIndex(recipe, node, i) {
 
 export function getNameForToolAtIndex(recipe, node, i) {
   const tools = getToolRefNodes(recipe, node)
-  return tools[i].getAttribute('name')
+  try {
+    return tools[i].getAttribute('name')
+  } catch (e) {
+    throw new Error(`Unable to get tool for index ${i}, ${node.innerHTML}: ${e.toString()}`)
+  }
 }
 
 export function getFirstToolName(recipe, node) {
@@ -168,6 +174,10 @@ export function findFinalOutputId(xml) {
 
 export function getInstructions(recipe, item) {
   const node = item.task
+  const textInstructions = getTextInstructions(recipe, node)
+  if (textInstructions) {
+    return textInstructions
+  }
   const operation = operations[node.getAttribute('operation')]
   return operation.instruction(recipe, node)
 }

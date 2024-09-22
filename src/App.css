@@ -6,12 +6,12 @@
 }
 
 .container {
-  margin: 1em;
+  /*margin: 1em;
   background: #fee;
   border-radius: 1em;
   padding: 1em;
   text-align: left;
-  transition: height 0.15s ease-in-out;
+  transition: height 0.15s ease-in-out;*/
 }
 
 .container .title {
@@ -98,4 +98,44 @@ th {
 
 .wiggle:hover {
   animation: none;
+}
+
+
+.participant-list li {
+  width: calc(100% - 1rem);
+  margin-left: 1rem;
+  position: relative;
+}
+
+.participant-list li::marker {
+  position: absolute;
+  left: 0;
+}
+
+.participant-list input:focus, .participant-list input:active, .participant-list input:focus-visible {
+  border: none;
+  outline: none;
+}
+
+.button {
+  border: 1px solid gray;
+  font-size: 150%;
+  border-radius: 5px;
+  padding: 0.5rem;
+}
+
+.button-primary {
+  background-color: white;
+}
+
+.button-primary:active {
+  background-color: lightgray;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* Internet Explorer 10+ */
+  scrollbar-width: none;  /* Firefox */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;  /* Safari and Chrome */
 }

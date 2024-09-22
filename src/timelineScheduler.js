@@ -52,10 +52,14 @@ function calculateDependencies(graph, task, timelines, previousDependencies) {
   for (const input of inputs) {
     // input = inputs of a task i.e. requesting
     let amountToSchedule = {}
-    let itemsWithAmountLeft = undefined // This only counts the inputs, not the scheduled output. Does that however mean that there are always the correct amount of outputs requested and thus counting there is not necessary?
+    let itemsWithAmountLeft = undefined // This only counts the inputs, not the scheduled output.
+    // Does that however mean that there are always the correct amount of outputs requested and thus counting there is not necessary?
     const inputId = input.getAttribute('ref')
     let amountNeeded = input.getAttribute('amount') || 1
     const producerOutput = graph.getElementById(inputId) // output = output of dependency = producer
+    if (!producerOutput) {
+      throw new Error(`Error in recipe: Producer for input with id ${inputId} not found`)
+    }
     if (producerOutput.tagName !== 'output') {
       continue
     }
@@ -199,7 +203,7 @@ export function scheduleItemsInTimelines(graph, tasksToSchedule, timelines, roun
           const lastItem = timeline[lastIndex]
           const start = Math.min(mustFinishBy - duration, lastItem ? lastItem.start - activeDuration : 0)
           if (Number.isNaN(start)) {
-            console.log('nan')
+            log('nan')
           }
           const end = start + activeDuration
           possibleSpots.push({
@@ -223,7 +227,7 @@ export function scheduleItemsInTimelines(graph, tasksToSchedule, timelines, roun
         : firstSpot
     }, possibleSpots[0])
 
-    console.log(firstAvailableSpot)
+    log(firstAvailableSpot)
     const { start, end, index, timelineNumber: spotTimelineNumber } = firstAvailableSpot
 
     const item = {
@@ -238,7 +242,7 @@ export function scheduleItemsInTimelines(graph, tasksToSchedule, timelines, roun
     }
 
     if (title === 'Split') {
-      console.log('split')
+      log('split')
     }
     log('Splicing', spotTimelineNumber, index, cloneToFreezeForDebug(timelines[spotTimelineNumber]))
 
