@@ -304,7 +304,7 @@ function Task(props) {
                   }
                 }}
               >
-                {task.timer ? 'Start timer' : 'Done, next!'}
+                {task.timer ? 'Start timer' : isHost ? 'Mark done' : 'Done, next!'}
               </Button>
             </div>
           )}
