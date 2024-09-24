@@ -54,11 +54,16 @@ export const operations = {
     instruction: (recipe, node) => {
       try {
         const [{ name, amount }] = getAmounts(recipe, node)
+        // TODO: make this nicer
+        let toolName
+        try {
+          toolName = getFirstToolName(recipe, node)
+        } catch (e) {}
         const container = getNodesProducingInputs(recipe, node)[1]
         return (
           <div>
             Measure {`${amount} ${name}`}
-            {container && ` into ${container.getAttribute('name')}`}
+            {container ? ` into ${container.getAttribute('name')}` : toolName ? ` into ${toolName}` : ''}
           </div>
         )
       } catch (e) {

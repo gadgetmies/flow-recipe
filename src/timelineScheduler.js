@@ -1,5 +1,5 @@
 import { operations } from './operations'
-import { findTaskProducing, getInputs, getNodesProducingInputs, getOutputsForInputs } from './recipeTools'
+import { findTaskProducing, getInputs, getNodesProducingInputs, getOutputs, getOutputsForInputs } from './recipeTools'
 import * as R from 'ramda'
 
 const log = (...args) => {
@@ -43,6 +43,7 @@ export function expandNode(graph, node) {
   return expanded
 }
 
+// TODO: why are all inputs processed twice?
 function calculateDependencies(graph, task, timelines, previousDependencies) {
   // Does this need to be called for each output? Should it not be called just for the task?
   // The amount in the current task does not affect the scheduling at this point (i.e. the output being processed when this function is called)
@@ -52,21 +53,42 @@ function calculateDependencies(graph, task, timelines, previousDependencies) {
   for (const input of inputs) {
     // input = inputs of a task i.e. requesting
     let amountToSchedule = {}
-    let itemsWithAmountLeft = undefined // This only counts the inputs, not the scheduled output.
+    let itemsWithAmountsLeft = undefined // This only counts the inputs, not the scheduled output.
     // Does that however mean that there are always the correct amount of outputs requested and thus counting there is not necessary?
     const inputId = input.getAttribute('ref')
     let amountNeeded = input.getAttribute('amount') || 1
     const producerOutput = graph.getElementById(inputId) // output = output of dependency = producer
+
+    /*
+    if (['grated-cucumber', 'cucumber-juice', 'measured-cucumber'].includes(inputId)) {
+      debugger
+    }
+     */
+
     if (!producerOutput) {
       throw new Error(`Error in recipe: Producer for input with id ${inputId} not found`)
     }
     if (producerOutput.tagName !== 'output') {
+      // TODO: This means ingredients right? Or is there another option?
       continue
     }
     // This will be a problem if the task produces multiple different outputs.
     const producerTask = producerOutput.parentNode.parentNode
     const outputTaskUuid = producerTask.getAttribute('uuid')
-    const amountOutputProduces = Number(producerOutput.getAttribute('amount') || 1)
+    const amountsOutputProduces = Object.fromEntries(
+      getOutputs(producerTask).map((output) => [output.getAttribute('id'), Number(output.getAttribute('amount') || 1)])
+    )
+
+    const timelineItemsWithAmountsLeft = timelines.flatMap((timeline) =>
+      timeline.flatMap((item) =>
+        item.dependencies.filter(({ amountsLeft }) => amountsLeft[inputId]).length > 0 ? item : []
+      )
+    )
+
+    if (timelineItemsWithAmountsLeft.length > 0) {
+      continue
+    }
+
     const previousItems = []
     const uuidMatch = ({ uuid }) => uuid.split('-')[0] === outputTaskUuid
     for (const timeline of timelines) {
@@ -75,31 +97,34 @@ function calculateDependencies(graph, task, timelines, previousDependencies) {
     }
 
     previousItems.push(...[...dependenciesToSchedule, ...previousDependencies].filter(uuidMatch))
-    itemsWithAmountLeft = previousItems.filter(({ amountLeft }) => amountLeft > 0)
+    itemsWithAmountsLeft = previousItems.filter(({ amountsLeft }) => amountsLeft[inputId] > 0)
 
-    if (itemsWithAmountLeft.length > 0) {
-      for (let i = 0; i < itemsWithAmountLeft.length && amountNeeded > 0; ++i) {
+    if (itemsWithAmountsLeft.length > 0) {
+      for (let i = 0; i < itemsWithAmountsLeft.length && amountNeeded > 0; ++i) {
         log('Reducing amount from previously scheduled timeline item')
-        const itemWithAMountLeft = itemsWithAmountLeft[i]
-        const amountToUse = Math.min(itemWithAMountLeft.amountLeft, amountNeeded)
-        itemWithAMountLeft.amountLeft -= amountToUse
+        const itemWithAmountsLeft = itemsWithAmountsLeft[i]
+        const amountToUse = Math.min(itemWithAmountsLeft.amountsLeft[inputId], amountNeeded)
+        itemsWithAmountsLeft[i].amountsLeft[inputId] -= amountToUse
         amountNeeded -= amountToUse
         dependenciesToSchedule.push({
           scheduled: true,
-          ...itemWithAMountLeft,
-          amountLeft: 0,
+          ...itemWithAmountsLeft,
+          amountsLeft: {
+            ...itemsWithAmountsLeft[i].amountsLeft,
+            [inputId]: 0,
+          },
         })
       }
     }
 
-    amountToSchedule = Math.max(0, Math.ceil(amountNeeded / amountOutputProduces))
+    amountToSchedule = Math.max(0, Math.ceil(amountNeeded / amountsOutputProduces[inputId]))
 
     const lastScheduledIndex = previousItems
       .map(({ uuid }) => Number(uuid.split('-')[1]))
       .reduce((acc, cur) => (cur > acc ? cur : acc), 0)
 
     for (let i = 0; i < amountToSchedule; ++i) {
-      amountNeeded -= amountOutputProduces
+      amountNeeded -= amountsOutputProduces[inputId]
       dependenciesToSchedule.push({
         uuid: `${outputTaskUuid}-${i + (previousItems.length > 0 ? lastScheduledIndex + 1 : 0)}`,
         task: producerTask,
@@ -107,7 +132,10 @@ function calculateDependencies(graph, task, timelines, previousDependencies) {
           id: inputId,
           name: producerOutput.getAttribute('name'),
         },
-        amountLeft: Math.max(-amountNeeded, 0),
+        amountsLeft: {
+          ...amountsOutputProduces,
+          [inputId]: Math.max(-amountNeeded, 0),
+        },
       })
     }
   }
@@ -129,7 +157,7 @@ export function scheduleItemsInTimelines(graph, tasksToSchedule, timelines, roun
   )
 
   let dependenciesToSchedule = []
-  for (const { uuid, task, amountLeft } of tasksToSchedule) {
+  for (const { uuid, task, amountsLeft } of tasksToSchedule) {
     log('Processing', task)
     const operation = getOperationForNode(task)
     const operationTimelineItem = operation.timeline(task)
@@ -140,6 +168,18 @@ export function scheduleItemsInTimelines(graph, tasksToSchedule, timelines, roun
     // TODO: Sort operations by longest passive time?
     const dependenciesForTask = calculateDependencies(graph, task, timelines, dependenciesToSchedule)
     dependenciesToSchedule.push(...dependenciesForTask.filter(({ scheduled }) => !scheduled))
+
+    /*
+    const inputs = getInputs(task)
+    if (
+      inputs.some((input) =>
+        ['grated-cucumber', 'cucumber-juice', 'measured-cucumber'].includes(input.getAttribute('ref'))
+      )
+    ) {
+      debugger
+    }
+
+     */
 
     //    for (const output of outputs) { Why was this done for each output?
     //      const outputId = output.getAttribute('id')
@@ -236,7 +276,7 @@ export function scheduleItemsInTimelines(graph, tasksToSchedule, timelines, roun
       start,
       end,
       title,
-      amountLeft,
+      amountsLeft,
       timer: operation.timer && operation.timer(graph, task),
       ...timelineItem,
     }

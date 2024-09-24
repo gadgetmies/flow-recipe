@@ -33,6 +33,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
         <tool id="microwave-safe-jug" name="microwave safe jug"/>
         <tool id="spatula" name="spatula"/>
         <tool id="bowl" name="bowl"/>
+        <tool id="cup" name="cup"/>
         <tool id="whisk" name="whisk"/>
         <tool id="frosting-spatula" name="frosting spatula"/>
         <tool id="cooling-rack" name="cooling rack"/>
@@ -53,6 +54,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -70,6 +72,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="bowl"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -86,6 +89,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -102,6 +106,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -118,6 +123,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -134,6 +140,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="precision-scale"/>
             </tools>
             <inputs>
@@ -150,6 +157,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="bowl"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -166,6 +174,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -182,6 +191,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="bowl"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -198,6 +208,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="bowl"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -214,6 +225,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -230,6 +242,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -247,6 +260,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -263,6 +277,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -279,6 +294,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -295,6 +311,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -311,6 +328,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="plate"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -541,6 +559,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -573,6 +592,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -590,6 +610,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <tools>
+                <tool ref="cup"/>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
@@ -698,6 +719,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 </option>
             </options>
             <inputs>
+                <tool ref="plate"/>
                 <input ref="cucumber"/>
             </inputs>
             <outputs>

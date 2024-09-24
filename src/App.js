@@ -1,3 +1,15 @@
+/*
+
+TODO:
+* Remove duplication from cucumber grating
+* Instructions (collaborate, measure into a bowl)
+* Tool for measure
+* Numbering for measurements -> number cups
+* Add "Ask for help" button
+* Multiple end results -> jokes (gt, sandwich) (perhaps a virtual last step?)
+
+*/
+
 import './reset.css'
 import './App.css'
 //import xml_data from "./recipe/buns";
@@ -23,6 +35,7 @@ import {
   Container,
   createTheme,
   CssBaseline,
+  Fab,
   Grid2,
   List,
   ListItem,
@@ -35,6 +48,7 @@ import {
 import SettingsIcon from '@mui/icons-material/Settings'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import ChecklistIcon from '@mui/icons-material/Checklist'
+import WavingHandIcon from '@mui/icons-material/WavingHand'
 import { pink, purple } from '@mui/material/colors'
 
 const queryParams = new Proxy(new URLSearchParams(window.location.search), {
@@ -171,7 +185,7 @@ function Settings({
               <Typography variant="h6" color="white">
                 Invite participants
               </Typography>
-              <QRCodeSVG value={joinSessionLink} fgColor={'white'} bgColor={'transparent'} />
+              <QRCodeSVG value={'https://t.me/+ImZCxUjYLpk0MWQ0'} fgColor={'white'} bgColor={'transparent'} />
               <Button
                 variant="outlined"
                 sx={{ color: 'white', borderColor: 'white' }}
@@ -232,6 +246,7 @@ function Task(props) {
   if (props === undefined) return ''
   const {
     task,
+    timelines,
     isDone,
     isCurrent,
     inputsReady,
@@ -241,6 +256,7 @@ function Task(props) {
     timeUntilFinished,
     setTasksInProgress,
     tasksInProgress,
+    markTaskDone,
     markCurrentTaskDone,
     startTimer,
     jumpToNextTask,
@@ -295,7 +311,13 @@ function Task(props) {
               <Button
                 variant="contained"
                 onClick={async () => {
-                  if (task.timer) {
+                  if (isHost) {
+                    const [timeline, taskIndex] = timelines.flatMap((timeline, i) => {
+                      const taskIndex = timeline.indexOf(task)
+                      return taskIndex !== -1 ? [i, taskIndex] : []
+                    })
+                    markTaskDone(timeline, taskIndex)
+                  } else if (task.timer) {
                     startTimer(task)
                     setTasksInProgress([...tasksInProgress, task.uuid])
                     jumpToNextTask()
@@ -304,7 +326,7 @@ function Task(props) {
                   }
                 }}
               >
-                {task.timer ? 'Start timer' : isHost ? 'Mark done' : 'Done, next!'}
+                {isHost ? 'Mark done' : task.timer ? 'Start timer' : 'Done, next!'}
               </Button>
             </div>
           )}
@@ -409,7 +431,17 @@ function Timeline(props) {
   )
 }
 
-function Timers({ timers, scrollToTask, clearTimer, completedTasks, markTaskCompleted }) {
+function Timers({
+  timers,
+  scrollToTask,
+  clearTimer,
+  completedTasks,
+  markTaskCompleted,
+  setHelpRequest,
+  helpRequested,
+  helpRequests,
+  ownName,
+}) {
   const [currentTime, setCurrentTime] = useState(Date.now())
 
   useEffect(() => {
@@ -465,6 +497,24 @@ function Timers({ timers, scrollToTask, clearTimer, completedTasks, markTaskComp
           </div>
         )
       })}
+      {Array.from(helpRequests)
+        .filter((name) => name !== ownName)
+        .map((name) => (
+          <Fab color="primary" aria-label="add" className={'wiggle'} variant="extended" sx={{ margin: 1 }}>
+            <WavingHandIcon sx={{ mr: 1 }} />
+            {name}
+          </Fab>
+        ))}
+      {!isHost && (
+        <Fab
+          color="primary"
+          aria-label="add"
+          onClick={() => setHelpRequest(!helpRequested)}
+          className={helpRequested ? 'wiggle' : ''}
+        >
+          <WavingHandIcon />
+        </Fab>
+      )}
     </div>
   )
 }
@@ -508,6 +558,10 @@ function App() {
   const [tasksInProgress, setTasksInProgress] = useState(settings.tasksInProgress || [])
   const [timers, setTimers] = useState([])
 
+  const helpRequestsRef = useRef(new Set())
+  const [helpRequests, _setHelpRequests] = useState(helpRequestsRef.current)
+  const [helpRequested, setHelpRequested] = useState(false)
+
   const selectTab = (tab) => {
     setCurrentState(tab)
     appendSessionSettings(sessionId, { tab })
@@ -532,8 +586,14 @@ function App() {
       document.getElementById('task' + uuid),
       document.getElementById('timeline' + uuid)
     )
-    document.getElementById('task' + uuid)?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' })
-    document.getElementById('timeline' + uuid)?.scrollIntoView({ behavior: 'smooth', inline: 'center' })
+
+    // TODO: how to enable smooth scrolling for both?
+    document.getElementById('timeline' + uuid).scrollIntoView({ inline: 'center' })
+    setTimeout(
+      () =>
+        document.getElementById('task' + uuid).scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' }),
+      100
+    )
   }
 
   const scrollToIndex = (taskIndex) => {
@@ -562,15 +622,25 @@ function App() {
     }
   }
 
-  const markCurrentTaskDone = async () => {
-    const currentTaskItem = timelines[currentTimeline][currentTask]
-    await markTaskCompleted(currentTaskItem.uuid)
-    // TODO: Need to jump to next task not completed
+  const findNextTask = (timeline) => {
     const startedTasks = [...completedTasksRef.current, ...tasksInProgress]
-    const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), timelines[currentTimeline])
-    console.log({ currentTask, nextTask })
-    setCurrentTask(nextTask)
+    const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), timelines[timeline])
+    console.log({ task, nextTask })
+    return nextTask
+  }
+
+  const markTaskDone = async (timeline, task) => {
+    const taskItem = timelines[timeline][task]
+    await markTaskCompleted(taskItem.uuid)
+    // TODO: Need to jump to next task not completed
+    const nextTask = findNextTask(timeline)
     scrollToIndex(nextTask)
+    return nextTask
+  }
+
+  const markCurrentTaskDone = async () => {
+    const nextTask = await markTaskDone(currentTimeline, currentTask)
+    setCurrentTask(nextTask)
     setSelectedTask({ task: nextTask, timeline: ownLane })
   }
 
@@ -618,6 +688,16 @@ function App() {
     })
   }
 
+  const setHelpRequest = async (requested) => {
+    setHelpRequested(requested)
+    connectionRef.current.send(JSON.stringify({ type: 'askForHelp', data: requested }))
+  }
+
+  const setHelpRequests = (newHelpRequests) => {
+    helpRequestsRef.current = newHelpRequests
+    _setHelpRequests(newHelpRequests)
+  }
+
   const sendTaskCompleted = (taskId) => {
     connectionRef.current.send(JSON.stringify({ type: 'taskCompleted', data: taskId }))
   }
@@ -627,6 +707,17 @@ function App() {
     await sendMessageToAllConnections({
       type: 'completedTasks',
       data: completedTasksRef.current,
+    })
+  }
+
+  const sendHelpRequests = async () => {
+    console.log('sending help requests', {
+      type: 'helpRequests',
+      data: Array.from(helpRequestsRef.current),
+    })
+    await sendMessageToAllConnections({
+      type: 'helpRequests',
+      data: Array.from(helpRequestsRef.current),
     })
   }
 
@@ -665,6 +756,16 @@ function App() {
           setCurrentTask(tasks.findIndex(({ uuid }) => uuid === taskUuid))
           scrollToTask(taskUuid)
           await sendCompletedTasks()
+        } else if (json.type === 'askForHelp') {
+          const requester = connectionsRef.current.find(({ id }) => id === connectionId).name
+          if (json.data) {
+            setHelpRequests(new Set([...helpRequestsRef.current, requester]))
+          } else {
+            const newHelpRequests = helpRequestsRef.current
+            newHelpRequests.delete(requester)
+            setHelpRequests(newHelpRequests)
+          }
+          await sendHelpRequests()
         }
       }).bind(null, connectionId)
     )
@@ -681,6 +782,12 @@ function App() {
       } else if (json.type === 'completedTasks') {
         // TODO: Need to jump to a previous task that was blocked if current task is blocked
         setTasksCompleted(json.data)
+        // TODO: Figure out how to find out the uuid of the current task
+        if (json.data.includes(currentTask)) {
+          const nextTask = findNextTask(ownLane)
+          setCurrentTask(nextTask)
+          setSelectedTask({ task: nextTask, timeline: ownLane })
+        }
         if (json.data.length === 0) {
           // reset
           setTasksInProgress([])
@@ -692,6 +799,8 @@ function App() {
           appendSessionSettings(sessionId, { completedTasks: [] })
           scrollToIndex(firstTaskIndex)
         }
+      } else if (json.type === 'helpRequests') {
+        setHelpRequests(json.data)
       }
     })
   }
@@ -842,10 +951,24 @@ function App() {
     // TODO: The pour operation is duplicated in the timeline!
     scheduleItemsInTimelines(
       recipe,
-      [{ uuid: finalOutputId, task: lastTask, amountLeft: 1 /*TODO: scale*/ }],
+      [{ uuid: finalOutputId, task: lastTask, amountsLeft: { [finalOutputId]: 1 } /*TODO: scale*/ }],
       newTimelines,
       0
     )
+
+    const duplicates = newTimelines
+      .reduce((acc, curr) => [...curr, ...acc], [])
+      .reduce(
+        ({ duplicates, rest }, curr) => {
+          if (rest.find(({ uuid }) => uuid === curr.uuid)) duplicates.push(curr)
+          else rest.push(curr)
+          return { duplicates, rest }
+        },
+        { duplicates: [], rest: [] }
+      )
+    if (duplicates.duplicates.length > 0) {
+      console.error('Duplicate tasks found!', duplicates)
+    }
 
     window.timelines = newTimelines
     setTimelines(newTimelines)
@@ -875,7 +998,7 @@ function App() {
   const dependencyGraph = timelines.reduce(
     (g, timeline) => {
       timeline.forEach(({ uuid, title, dependencies }) => {
-        g?.nodes.push({ id: uuid, title })
+        g?.nodes.push({ id: uuid, title: `${uuid}-${title}` })
         dependencies.forEach(({ uuid: iuuid }) => g?.links.push({ source: iuuid, target: uuid }))
       })
       return g
@@ -923,7 +1046,7 @@ function App() {
   const ownLaneSelected = selectedTimeline === ownLane
   const selectedTimelineOwner = connections[selectedTimeline + 1]?.name
   const inputsReady = pendingInputs?.length === 0
-  const debug = false
+  const debug = queryParams.query?.debug !== undefined
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -983,76 +1106,119 @@ function App() {
               {currentState === 'shopping' && <Shopping {...{ shoppingList }} />}
               {currentState === 'tools' && <></>}
               {currentState === 'cooking' && (
-                <Box sx={{ pb: 20 }}>
-                  <Box paddingY={2}>
-                    {timelines[0]?.length === 0 ? (
-                      'Waiting for connections'
-                    ) : (
-                      <Stack spacing={2}>
-                        {/*}
+                <>
+                  <Box sx={{ pb: 20 }}>
+                    <Box paddingY={2}>
+                      {timelines[0]?.length === 0 ? (
+                        'Waiting for connections'
+                      ) : (
+                        <Stack spacing={2}>
+                          <Card>
+                            <CardContent>
+                              <Typography variant="h4" gutterBottom>
+                                Instructions
+                              </Typography>
+                              <Stack spacing={2}>
+                                <p>
+                                  Your task is to create something wonderful with your friends by following the steps
+                                  below. Please note that this is not a test of speed or skills, but of collaboration.
+                                </p>
+                                <p>
+                                  The scheduling nor the recipe is very smart at the moment, so expect to have many cups
+                                  and bowls used during the process. Tools, such as whisks, spatulas, spoons etc. might
+                                  need to be reused, so please return those to the tool bowl when you have completed the
+                                  step that required the use of the tool.
+                                </p>
+                                <p>
+                                  In case you need assistance, you can raise your hand virtually by pressing the ✋
+                                  -button in the lower left corner.
+                                </p>
+                                <p>Happy baking, have fun! 😊🧑‍🍳</p>
+                              </Stack>
+                            </CardContent>
+                          </Card>
+                          {/*}
                         <Typography variant="h1">
                           {ownLaneSelected ? 'My tasks' : isHost ? 'Tasks' : `${selectedTimelineOwner}'s tasks`}
                         </Typography>*/}
-                        {tasks.map((task, i) => {
-                          // TODO: why -1
-                          const currentTaskIndex = timelines[selectedTimeline].length - currentTask - 1
-                          return (
-                            <Task
-                              {...{
-                                task,
-                                isDone: completedTasks.includes(task.uuid),
-                                isCurrent: !isHost && i === currentTaskIndex,
-                                inputsReady,
-                                pendingInputs,
-                                inputsForTask,
-                                recipe,
-                                timeUntilFinished,
-                                setTasksInProgress,
-                                tasksInProgress,
-                                completedTasks,
-                                markCurrentTaskDone,
-                                startTimer,
-                                currentTask,
-                                setCurrentTask,
-                                isHost,
-                                jumpToNextTask: () => {
-                                  const nextTask =
-                                    R.findLastIndex(
-                                      (task) => ![...completedTasksRef.current, ...tasksInProgress].includes(task.uuid),
-                                      timelines[ownLane]
-                                    ) - 1 // TODO: Why -1 tho?
-                                  // TODO: Scroll to current
-                                  setCurrentTask(nextTask)
-                                  setSelectedTask({ task: nextTask, timeline: ownLane })
-                                  scrollToIndex(nextTask)
-                                },
-                              }}
-                            />
-                          )
-                        })}
-                      </Stack>
-                    )}
-                  </Box>
-                  <Timeline
+                          {tasks.map((task, i) => {
+                            // TODO: why -1
+                            const currentTaskIndex = timelines[selectedTimeline].length - currentTask - 1
+                            return (
+                              <Task
+                                {...{
+                                  task,
+                                  timelines,
+                                  isDone: completedTasks.includes(task.uuid),
+                                  isCurrent: !isHost && i === currentTaskIndex,
+                                  inputsReady,
+                                  pendingInputs,
+                                  inputsForTask,
+                                  recipe,
+                                  timeUntilFinished,
+                                  setTasksInProgress,
+                                  tasksInProgress,
+                                  completedTasks,
+                                  markCurrentTaskDone,
+                                  markTaskDone,
+                                  startTimer,
+                                  currentTask,
+                                  setCurrentTask,
+                                  isHost,
+                                  jumpToNextTask: () => {
+                                    // TODO: is this the same as markCurrentTaskDone?
+                                    const nextTask =
+                                      R.findLastIndex(
+                                        (task) =>
+                                          ![...completedTasksRef.current, ...tasksInProgress].includes(task.uuid),
+                                        timelines[ownLane]
+                                      ) - 1 // TODO: Why -1 tho?
+                                    // TODO: Scroll to current
+                                    setCurrentTask(nextTask)
+                                    setSelectedTask({ task: nextTask, timeline: ownLane })
+                                    scrollToIndex(nextTask)
+                                  },
+                                }}
+                              />
+                            )
+                          })}
+                        </Stack>
+                      )}
+                    </Box>
+                    <Timeline
+                      {...{
+                        width,
+                        height,
+                        timelines,
+                        connections: connections.slice(1),
+                        ownLane,
+                        setCurrentTimeline,
+                        setSelectedTask,
+                        scrollToIndex,
+                        currentTask,
+                        selectedTimeline,
+                        selectedTask,
+                        completedTasks,
+                      }}
+                    />
+                  </Box>{' '}
+                  <Timers
                     {...{
-                      width,
-                      height,
-                      timelines,
-                      connections: connections.slice(1),
-                      ownLane,
-                      setCurrentTimeline,
-                      setSelectedTask,
-                      scrollToIndex,
-                      currentTask,
-                      selectedTimeline,
-                      selectedTask,
+                      timers,
+                      scrollToTask,
+                      clearTimer,
+                      markTaskCompleted,
                       completedTasks,
+                      setHelpRequest,
+                      helpRequested,
+                      helpRequests,
+                      ownName: name,
                     }}
                   />
-                </Box>
+                </>
               )}
             </div>
-            <Timers {...{ timers, scrollToTask, clearTimer, markTaskCompleted, completedTasks }} />
+
             <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} elevation={3}>
               <BottomNavigation
                 sx={{
