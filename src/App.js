@@ -1136,7 +1136,7 @@ function App() {
                                 </p>
                                 <p>
                                   In case you need assistance, you can raise your hand virtually by pressing the ✋
-                                  -button in the lower left corner.
+                                  -button in the bottom right corner.
                                 </p>
                                 <p>Happy baking, have fun! 😊🧑‍🍳</p>
                               </Stack>
