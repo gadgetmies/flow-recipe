@@ -460,7 +460,7 @@ function Timers({
     <div
       style={{
         position: 'fixed',
-        bottom: 110,
+        bottom: 70,
         right: 10,
         display: 'flex',
         flexDirection: 'column',
