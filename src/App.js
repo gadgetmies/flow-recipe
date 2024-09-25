@@ -457,7 +457,16 @@ function Timers({
   }, [currentTime, timers])
 
   return (
-    <div style={{ position: 'fixed', bottom: 110, right: 10, display: 'flex', flexDirection: 'column' }}>
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 110,
+        right: 10,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+      }}
+    >
       {timers.map(({ title, end, taskUuid }, i) => {
         const timeLeft = Math.max(0, (end - currentTime) / 1000)
         return (
