@@ -507,11 +507,11 @@ function Timers({
         ))}
       {!isHost && (
         <Fab
-          color="primary"
+          color={helpRequested ? 'primary' : 'white'}
           aria-label="add"
           onClick={(e) => {
             e.target.blur()
-            return setHelpRequest(!helpRequested);
+            return setHelpRequest(!helpRequested)
           }}
           className={helpRequested ? 'wiggle' : ''}
         >
