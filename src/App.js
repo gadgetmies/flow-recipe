@@ -185,7 +185,7 @@ function Settings({
               <Typography variant="h6" color="white">
                 Invite participants
               </Typography>
-              <QRCodeSVG value={'https://t.me/+ImZCxUjYLpk0MWQ0'} fgColor={'white'} bgColor={'transparent'} />
+              <QRCodeSVG value={joinSessionLink} fgColor={'white'} bgColor={'transparent'} />
               <Button
                 variant="outlined"
                 sx={{ color: 'white', borderColor: 'white' }}
@@ -573,7 +573,6 @@ function App() {
   }
 
   const setTasksCompleted = (completed) => {
-    console.log({ completed })
     // TODO: use uuids
     appendSessionSettings(sessionId, { completedTasks: completed })
     completedTasksRef.current = completed
@@ -588,10 +587,11 @@ function App() {
     )
 
     // TODO: how to enable smooth scrolling for both?
-    document.getElementById('timeline' + uuid).scrollIntoView({ inline: 'center' })
+    // TODO: why does this fail without .? on reset?
+    document.getElementById('timeline' + uuid)?.scrollIntoView({ inline: 'center' })
     setTimeout(
       () =>
-        document.getElementById('task' + uuid).scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' }),
+        document.getElementById('task' + uuid)?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' }),
       100
     )
   }
@@ -969,6 +969,8 @@ function App() {
     if (duplicates.duplicates.length > 0) {
       console.error('Duplicate tasks found!', duplicates)
     }
+
+    console.log({ newTimelines })
 
     window.timelines = newTimelines
     setTimelines(newTimelines)

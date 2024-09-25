@@ -86,6 +86,7 @@ function calculateDependencies(graph, task, timelines, previousDependencies) {
     )
 
     if (timelineItemsWithAmountsLeft.length > 0) {
+      // TODO: Ensure there is enough left and adjust the amounts!!!
       continue
     }
 

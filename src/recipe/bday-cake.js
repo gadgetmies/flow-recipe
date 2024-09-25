@@ -11,7 +11,6 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
         <ingredient id="caster-sugar" name="caster sugar"/>
         <ingredient id="vegan-cream" name="vegan cream"/>
         <ingredient id="vegan-yoghurt" name="vegan yoghurt"/>
-        <ingredient id="vegan-cream-cheese" name="vegan cream cheese"/>
         <ingredient id="margarine" name="margarine"/>
         <ingredient id="cucumber" name="cucumber"/>
         <ingredient id="cream-of-tartar" name="cream of tartar"/>
@@ -544,7 +543,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <input ref="measured-cucumber"/>
             into a
             <tool ref="sieve"/>
-            on top of a<tool ref="bowl"/>.
+            on top of a
+            <tool ref="bowl"/>.
             <outputs>
                 <!-- TODO: this creates two grate tasks -->
                 <output id="grated-cucumber" name="grated cucumber"/>
@@ -563,10 +563,10 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <tool ref="kitchen-scale"/>
             </tools>
             <inputs>
-                <input ref="vegan-cream-cheese"/>
+                <input ref="vegan-yoghurt"/>
             </inputs>
             <outputs>
-                <output id="measured-vegan-cream-cheese" name="cream cheese for filling"/>
+                <output id="measured-vegan-yoghurt" name="yoghurt for filling"/>
             </outputs>
         </task>
 
@@ -574,7 +574,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <instructions>
                 Mix the
                 <input ref="grated-cucumber"/>,
-                <input ref="measured-vegan-cream-cheese"/>
+                <input ref="measured-vegan-yoghurt"/>
                 and
                 <input ref="white-chocolate-spread-for-filling"/>
                 in a
@@ -636,7 +636,8 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <instructions>
                 Brush the
                 <input ref="cake-on-a-plate">cake</input>
-                lightly with the<input ref="cucumber-gin-mix"/>.
+                lightly with the
+                <input ref="cucumber-gin-mix"/>.
                 Spread the
                 <input ref="filling"/>
                 over the top and place the second
@@ -694,7 +695,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <tool ref="whisk" reserved="true"/>.
             </instructions>
             <outputs>
-                <output id="frosting"/>
+                <output id="frosting" name="frosting"/>
             </outputs>
         </task>
         <task operation="spread">
@@ -773,7 +774,15 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 <input ref="decorated-cake">cake</input>
             </instructions>
             <outputs>
-                <output id="finished-cake" name="finished cake"/>
+                <output id="finished-cake" name="birthday cake"/>
+            </outputs>
+        </task>
+        <task operation="enjoy">
+            <instructions>
+                Enjoy the <input ref="finished-cake"/> and celebrate!
+            </instructions>
+            <outputs>
+                <output id="great-fun" name="great fun"/>
             </outputs>
         </task>
     </tasks>

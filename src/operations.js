@@ -242,6 +242,13 @@ export const operations = {
     timeline: (node) => ({ active: 180, passive: 0 }),
     title: (node) => 'Ball',
   },
+  enjoy: {
+    instruction: (recipe, node) => {
+      return `Enjoy the ${getFirstInputName(recipe, node)}!`
+    },
+    timeline: (node) => ({ active: 180, passive: 0 }),
+    title: (node) => 'Enjoy',
+  },
   decorate: {
     instruction: (recipe, node) => {
       const firstInputName = getNameForInputAtIndex(recipe, node, 0)
