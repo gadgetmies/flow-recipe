@@ -509,7 +509,10 @@ function Timers({
         <Fab
           color="primary"
           aria-label="add"
-          onClick={() => setHelpRequest(!helpRequested)}
+          onClick={(e) => {
+            e.target.blur()
+            return setHelpRequest(!helpRequested);
+          }}
           className={helpRequested ? 'wiggle' : ''}
         >
           <WavingHandIcon />
