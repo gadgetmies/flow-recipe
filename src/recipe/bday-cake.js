@@ -545,6 +545,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <tool ref="sieve"/>
             on top of a
             <tool ref="bowl"/>.
+            Press the grated cucumber to push out the liquid.
             <outputs>
                 <!-- TODO: this creates two grate tasks -->
                 <output id="grated-cucumber" name="grated cucumber"/>
@@ -759,7 +760,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             </inputs>
             <tools>
                 <tool ref="grater"/>
-                <tool ref="bowl"/>
+                <tool ref="cup"/>
             </tools>
             <outputs>
                 <output id="lime-curls" name="lime curls"/>
