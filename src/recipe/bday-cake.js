@@ -118,23 +118,6 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
         <task operation="measure">
             <options>
                 <option name="amount">
-                    <numeric-value number="20" unit="g"/>
-                </option>
-            </options>
-            <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
-            </tools>
-            <inputs>
-                <input ref="vegan-yoghurt"/>
-            </inputs>
-            <outputs>
-                <output id="vegan-yoghurt-for-frosting" name="vegan yoghurt"/>
-            </outputs>
-        </task>
-        <task operation="measure">
-            <options>
-                <option name="amount">
                     <numeric-value number="8" unit="g"/>
                 </option>
             </options>
@@ -679,19 +662,17 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
             <instructions>
                 Add
                 <input ref="white-chocolate-spread-for-frosting"/>
-                and
-                <input ref="vegan-yoghurt-for-frosting"/>
                 to the
                 <input ref="softly-whisked-cream"/>.
             </instructions>
             <outputs>
-                <output id="white-chocolate-cream-yoghurt-mix" name="white chocolate, cream and yoghurt mix"/>
+                <output id="white-chocolate-cream-mix" name="white chocolate cream mix"/>
             </outputs>
         </task>
         <task operation="whip">
             <instructions>
                 Whip the
-                <input ref="white-chocolate-cream-yoghurt-mix"/>
+                <input ref="white-chocolate-cream-mix"/>
                 until hard peaks form using a
                 <tool ref="whisk" reserved="true"/>.
             </instructions>
