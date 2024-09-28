@@ -18,6 +18,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
         <ingredient id="raspberries" name="raspberries"/>
         <ingredient id="ground-coriander" name="ground coriander"/>
         <ingredient id="gin" name="gin"/>
+        <ingredient id="vanilla-sugar" name="vanilla-sugar"/>
         <ingredient id="xanthan" name="xanthan"/>
         <ingredient id="lime" name="lime"/>
     </ingredients>
@@ -306,6 +307,23 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
         <task operation="measure">
             <options>
                 <option name="amount">
+                    <numeric-value number="4" unit="g"/>
+                </option>
+            </options>
+            <tools>
+                <tool ref="cup"/>
+                <tool ref="kitchen-scale"/>
+            </tools>
+            <inputs>
+                <input ref="vanilla-sugar"/>
+            </inputs>
+            <outputs>
+                <output id="measured-vanilla-sugar" name="vanilla sugar"/>
+            </outputs>
+        </task>
+        <task operation="measure">
+            <options>
+                <option name="amount">
                     <numeric-value number="200" unit="g"/>
                 </option>
             </options>
@@ -389,6 +407,7 @@ const xml_data = `<?xml version="1.0" encoding="utf-8" ?>
                 Add the
                 <input ref="measured-flour"/>,
                 <input ref="measured-baking-powder"/>,
+                <input ref="measured-vanilla-sugar"/>,
                 <input ref="salt-for-batter"/>,
                 <input ref="measured-xanthan"/>
                 and
