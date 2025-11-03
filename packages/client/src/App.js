@@ -7,6 +7,7 @@ TODO:
 * Numbering for measurements -> number cups
 * Add "Ask for help" button
 * Multiple end results -> jokes (gt, sandwich) (perhaps a virtual last step?)
+* Shared final step
 
 */
 
@@ -21,8 +22,8 @@ import { calculateToolList, findFinalOutputId, findTaskProducing, getInstruction
 import { calculateShoppingList } from './shoppingListGenerator'
 import { expandNode, scheduleItemsInTimelines } from './timelineScheduler'
 import { v4 as uuidV4 } from 'uuid'
-import Peer from 'peerjs'
-import { ForceGraph2D } from 'react-force-graph'
+import { io } from 'socket.io-client'
+// import { ForceGraph2D } from 'react-force-graph'
 import * as R from 'ramda'
 import QRCodeSVG from 'qrcode.react'
 import {
@@ -44,6 +45,7 @@ import {
   TextField,
   ThemeProvider,
   Typography,
+  Link,
 } from '@mui/material'
 import SettingsIcon from '@mui/icons-material/Settings'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
@@ -91,14 +93,7 @@ const formatTime = (seconds) => (seconds ? new Date(seconds * 1000).toISOString(
 const laneHeight = 80
 const zoom = 0.4
 
-const createPeer = (sessionId, participantId, callback = () => {}) => {
-  let peer = new Peer(ownId)
-  peer.on('open', (ID) => {
-    console.log('My peer ID is: ' + ID)
-    callback(peer)
-  })
-  return peer
-}
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001'
 
 const NameDialog = ({ name, setName, setNameSet, updateName }) => (
   <Grid2 container padding={2} direction="column" alignItems="center" justify="center" style={{ minHeight: '100vh' }}>
@@ -205,9 +200,14 @@ function Settings({
       </Stack>
       <p>
         {isHost && (
+          <>
           <Button variant="contained" onClick={() => restart()}>
             Restart
-          </Button>
+          </Button><br/>
+          <Link variant="contained" href={`${baseUrl}`}>
+            New session
+          </Link>
+        </>
         )}
       </p>
     </Box>
@@ -564,8 +564,6 @@ function App() {
 
   const connectionsRef = useRef([{ id: hostId, name }])
   const [connections, _setConnections] = useState(connectionsRef.current)
-  const nextConnectionNumberRef = useRef(1)
-  const [nextConnectionNumber, _setNextConnectionNumber] = useState(nextConnectionNumberRef.current)
   const [setupDone, setSetupDone] = useState(isHost)
   const completedTasksRef = useRef(settings.completedTasks || [])
   const [completedTasks, _setCompletedTasks] = useState(completedTasksRef.current)
@@ -575,6 +573,11 @@ function App() {
   const helpRequestsRef = useRef(new Set())
   const [helpRequests, _setHelpRequests] = useState(helpRequestsRef.current)
   const [helpRequested, setHelpRequested] = useState(false)
+
+  const timelinesRef = useRef(timelines)
+  const ownLaneRef = useRef(ownLane)
+  const selectedTaskRef = useRef(selectedTask)
+  const tasksInProgressRef = useRef(settings.tasksInProgress || [])
 
   const selectTab = (tab) => {
     setCurrentState(tab)
@@ -610,9 +613,9 @@ function App() {
     )
   }
 
-  const scrollToIndex = (taskIndex) => {
-    if (!window.timelines?.[selectedTimeline]?.[taskIndex]) return;
-    const uuid = window.timelines[selectedTimeline][taskIndex].uuid
+  const scrollToIndex = (taskIndex, timeline = selectedTaskRef.current.timeline) => {
+    if (!timelinesRef.current?.[timeline]?.[taskIndex]) return;
+    const uuid = timelinesRef.current[timeline][taskIndex].uuid
     scrollToTask(uuid)
   }
 
@@ -630,28 +633,25 @@ function App() {
   async function markTaskCompleted(uuid) {
     setTasksCompleted([...completedTasksRef.current, uuid])
     setTasksInProgress(R.without([uuid], tasksInProgress))
-    if (isHost) {
-      await sendCompletedTasks()
-    } else {
-      await sendTaskCompleted(uuid)
-    }
+    sendTaskCompleted(uuid)
   }
 
   const findNextTask = (timeline) => {
-    if (!timelines?.[timeline]) return -1;
-    const startedTasks = [...completedTasksRef.current, ...tasksInProgress]
-    const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), timelines[timeline])
+    debugger
+    if (!timelinesRef.current?.[timeline]) return -1;
+    const startedTasks = [...completedTasksRef.current, ...tasksInProgressRef.current]
+    const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), timelinesRef.current[timeline])
     console.log({ task, nextTask })
     return nextTask
   }
 
   const markTaskDone = async (timeline, task) => {
-    if (!timelines?.[timeline]?.[task]) return -1;
-    const taskItem = timelines[timeline][task]
+    if (!timelinesRef.current?.[timeline]?.[task]) return -1;
+    const taskItem = timelinesRef.current[timeline][task]
     await markTaskCompleted(taskItem.uuid)
     // TODO: Need to jump to next task not completed
     const nextTask = findNextTask(timeline)
-    scrollToIndex(nextTask)
+    scrollToIndex(nextTask, timeline)
     return nextTask
   }
 
@@ -661,172 +661,63 @@ function App() {
     setSelectedTask({ task: nextTask, timeline: ownLane })
   }
 
-  const connectionRef = useRef()
+  const socketRef = useRef(null)
 
   const setConnections = (newConnections) => {
     connectionsRef.current = newConnections
     _setConnections(newConnections)
   }
 
-  const setNextConnectionNumber = (nextConnectionNumber) => {
-    nextConnectionNumberRef.current = nextConnectionNumber
-    _setNextConnectionNumber(nextConnectionNumber)
-  }
-
-  const p = useRef(null)
-
-  const mergeConnection = (connection, connections) => {
-    let newConnections = connections.slice()
-    const index = newConnections.findIndex(({ id }) => id === connection.id)
-    newConnections.splice(index !== -1 ? index : newConnections.length, 1, {
-      ...newConnections[index],
-      ...connection,
-    })
-    return newConnections
-  }
-
-  const sendMessageToAllConnections = async (message) => {
-    for (const connection of connectionsRef.current.slice(1)) {
-      try {
-        connection.connection.send(JSON.stringify(message))
-      } catch (e) {
-        console.error(e, connection)
-      }
-    }
-  }
-
-  const sendConnections = async () => {
-    console.log('sending connections', connectionsRef.current)
-    await sendMessageToAllConnections({
-      type: 'connections',
-      data: connectionsRef.current.map(({ connection, ...rest }) => ({
-        ...rest,
-      })),
-    })
+  const setHelpRequests = (newHelpRequests) => {
+    const helpSet = Array.isArray(newHelpRequests) ? new Set(newHelpRequests) : newHelpRequests
+    helpRequestsRef.current = helpSet
+    _setHelpRequests(helpSet)
   }
 
   const setHelpRequest = async (requested) => {
     setHelpRequested(requested)
-    connectionRef.current.send(JSON.stringify({ type: 'askForHelp', data: requested }))
-  }
-
-  const setHelpRequests = (newHelpRequests) => {
-    helpRequestsRef.current = newHelpRequests
-    _setHelpRequests(newHelpRequests)
+    if (socketRef.current) {
+      socketRef.current.emit('askForHelp', {
+        sessionId,
+        participantId,
+        requested,
+      })
+    }
   }
 
   const sendTaskCompleted = (taskId) => {
-    connectionRef.current.send(JSON.stringify({ type: 'taskCompleted', data: taskId }))
-  }
-
-  const sendCompletedTasks = async () => {
-    console.log('sending completed tasks', completedTasksRef.current)
-    await sendMessageToAllConnections({
-      type: 'completedTasks',
-      data: completedTasksRef.current,
-    })
-  }
-
-  const sendHelpRequests = async () => {
-    console.log('sending help requests', {
-      type: 'helpRequests',
-      data: Array.from(helpRequestsRef.current),
-    })
-    await sendMessageToAllConnections({
-      type: 'helpRequests',
-      data: Array.from(helpRequestsRef.current),
-    })
-  }
-
-  const handleConnection = (connection) => {
-    const connectionId = connection.peer
-    const newConnections = mergeConnection(
-      { id: connectionId, connection, name: '' },
-      connectionsRef.current // does this need to be ref current?
-    )
-    setConnections(newConnections)
-    setNextConnectionNumber(nextConnectionNumberRef.current + 1)
-
-    connection.on(
-      'data',
-      (async (connectionId, data) => {
-        console.log({ data })
-        const json = JSON.parse(data)
-        if (json.type === 'init') {
-          await sendConnections()
-          await sendCompletedTasks()
-        } else if (json.type === 'name') {
-          setConnections(
-            mergeConnection(
-              {
-                id: connectionId,
-                name: json.data,
-              },
-              connectionsRef.current
-            )
-          )
-          await sendConnections()
-        } else if (json.type === 'taskCompleted') {
-          const taskUuid = json.data
-          setTasksCompleted([...completedTasksRef.current, taskUuid])
-          // TODO: make this select the last, not completed task
-          setCurrentTask(tasks.findIndex(({ uuid }) => uuid === taskUuid))
-          scrollToTask(taskUuid)
-          await sendCompletedTasks()
-        } else if (json.type === 'askForHelp') {
-          const requester = connectionsRef.current.find(({ id }) => id === connectionId).name
-          if (json.data) {
-            setHelpRequests(new Set([...helpRequestsRef.current, requester]))
-          } else {
-            const newHelpRequests = helpRequestsRef.current
-            newHelpRequests.delete(requester)
-            setHelpRequests(newHelpRequests)
-          }
-          await sendHelpRequests()
-        }
-      }).bind(null, connectionId)
-    )
-  }
-
-  const handleOpen = () => {
-    connectionRef.current.send(JSON.stringify({ type: 'init' }))
-    sendName()
-    connectionRef.current.on('data', (data) => {
-      console.log('on data', { data })
-      const json = JSON.parse(data)
-      if (json.type === 'connections') {
-        setConnections(json.data)
-      } else if (json.type === 'completedTasks') {
-        // TODO: Need to jump to a previous task that was blocked if current task is blocked
-        setTasksCompleted(json.data)
-        // TODO: Figure out how to find out the uuid of the current task
-        if (json.data.includes(currentTask)) {
-          const nextTask = findNextTask(ownLane)
-          setCurrentTask(nextTask)
-          setSelectedTask({ task: nextTask, timeline: ownLane })
-        }
-        if (json.data.length === 0) {
-          // reset
-          setTasksInProgress([])
-          setTimers([])
-          const ownTimeline = window.timelines[ownLane]
-          const firstTaskIndex = ownTimeline.length - 1
-          setCurrentTask(firstTaskIndex)
-          setSelectedTask({ task: firstTaskIndex, timeline: ownLane })
-          appendSessionSettings(sessionId, { completedTasks: [] })
-          scrollToIndex(firstTaskIndex)
-        }
-      } else if (json.type === 'helpRequests') {
-        setHelpRequests(json.data)
-      }
-    })
+    if (socketRef.current) {
+      socketRef.current.emit('taskCompleted', {
+        sessionId,
+        participantId,
+        taskUuid: taskId,
+      })
+    }
   }
 
   const restart = async () => {
     setTasksCompleted([])
     appendSessionSettings(sessionId, { completedTasks: [] })
-    await sendCompletedTasks()
+    if (socketRef.current) {
+      socketRef.current.emit('restart', { sessionId })
+    }
   }
+
+  useEffect(() => {
+    timelinesRef.current = timelines
+  }, [timelines])
+
+  useEffect(() => {
+    ownLaneRef.current = ownLane
+  }, [ownLane])
+
+  useEffect(() => {
+    selectedTaskRef.current = selectedTask
+  }, [selectedTask])
+
+  useEffect(() => {
+    tasksInProgressRef.current = tasksInProgress
+  }, [tasksInProgress])
 
   useEffect(() => {
     /*
@@ -840,45 +731,70 @@ function App() {
   }, [])
 
   useEffect(() => {
-    createPeer(
-      sessionId,
-      participantId,
-      (peer) => {
-        p.current = peer
-        if (isHost) {
-          peer.on('connection', handleConnection)
-        } else {
-          const connection = peer.connect(hostId)
-          connectionRef.current = connection
-          connection.on('open', handleOpen)
+    const socket = io(SERVER_URL)
+    socketRef.current = socket
+
+    socket.on('connect', () => {
+      console.log('Connected to server')
+      socket.emit('joinSession', {
+        sessionId,
+        participantId,
+        name: name || '',
+      })
+    })
+
+    socket.on('connections', (participants) => {
+      console.log('Received connections:', participants)
+      const connectionsList = participants.map((p) => ({
+        id: p.id === '0' ? hostId : `recipes-${sessionId}-${p.id}`,
+        name: p.name,
+      }))
+      setConnections(connectionsList)
+      setSetupDone(true)
+    })
+
+    socket.on('completedTasks', (completedTaskUuids) => {
+      console.log('Received completed tasks:', completedTaskUuids)
+      setTasksCompleted(completedTaskUuids)
+      if (completedTaskUuids.length === 0) {
+        setTasksInProgress([])
+        setTimers([])
+        const currentOwnLane = ownLaneRef.current
+        if (timelinesRef.current?.[currentOwnLane]) {
+          const firstTaskIndex = findNextTask(currentOwnLane)
+          setCurrentTask(firstTaskIndex)
+          setSelectedTask({ task: firstTaskIndex, timeline: currentOwnLane })
+          appendSessionSettings(sessionId, { completedTasks: [] })
+          scrollToIndex(firstTaskIndex, currentOwnLane)
         }
-      },
-      []
-    )
+      }
+    })
+
+    socket.on('helpRequests', (requests) => {
+      console.log('Received help requests:', requests)
+      setHelpRequests(new Set(requests))
+    })
+
+    socket.on('error', (error) => {
+      console.error('Socket error:', error)
+    })
+
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server')
+    })
 
     return () => {
-      // p.current?.close();
+      socket.disconnect()
     }
   }, [])
 
-  const sendName = () => {
-    console.log(connectionRef.current)
-    connectionRef.current.send(JSON.stringify({ type: 'name', data: name }))
-  }
-
-  const updateName = (name) => {
-    if (isHost) {
-      const newConnections = mergeConnection(
-        {
-          id: hostId,
-          name,
-        },
-        connectionsRef.current // does this need to be ref current?
-      )
-      setConnections(newConnections)
-      sendConnections()
-    } else {
-      sendName()
+  const updateName = (newName) => {
+    if (socketRef.current) {
+      socketRef.current.emit('updateName', {
+        sessionId,
+        participantId,
+        name: newName,
+      })
     }
   }
 
@@ -989,7 +905,6 @@ function App() {
 
     console.log({ newTimelines })
 
-    window.timelines = newTimelines
     setTimelines(newTimelines)
     setRecipeDuration(newTimelines.reduce((acc, items) => Math.min(acc, items[items.length - 1]?.start), 0))
     const startedTasks = [...completedTasksRef.current, ...tasksInProgress]
@@ -1001,20 +916,21 @@ function App() {
       setCurrentTask(nextTask)
       setSelectedTask({ task: nextTask, timeline: 0 })
     } else {
-      const newOwnLane = connections.findIndex(({ id }) => id === ownId) - 1
-      if (newOwnLane !== -1) {
-        setOwnLane(newOwnLane)
-        setCurrentTimeline(newOwnLane)
-        // Only try to find next task if the timeline exists and has tasks
-        if (newTimelines[newOwnLane] && newTimelines[newOwnLane].length > 0) {
-          const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[newOwnLane])
-          setCurrentTask(nextTask)
-          setSelectedTask({ task: nextTask, timeline: newOwnLane })
-        } else {
-          // If no timeline exists yet, set to first task
-          setCurrentTask(0)
-          setSelectedTask({ task: 0, timeline: newOwnLane })
-        }
+      const newOwnLane = connections.findIndex(({ id }) => id === ownId) -1
+      if (newOwnLane < 0) {
+        throw new Error('Own id not found in connections')
+      }
+      setOwnLane(newOwnLane)
+      setCurrentTimeline(newOwnLane)
+      // Only try to find next task if the timeline exists and has tasks
+      if (newTimelines[newOwnLane] && newTimelines[newOwnLane].length > 0) {
+        const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[newOwnLane])
+        setCurrentTask(nextTask)
+        setSelectedTask({ task: nextTask, timeline: newOwnLane })
+      } else {
+        // If no timeline exists yet, set to first task
+        setCurrentTask(0)
+        setSelectedTask({ task: 0, timeline: newOwnLane })
       }
     }
 
@@ -1073,12 +989,14 @@ function App() {
   const ownLaneSelected = selectedTimeline === ownLane
   const selectedTimelineOwner = connections[selectedTimeline + 1]?.name
   const inputsReady = pendingInputs?.length === 0
-  const debug = queryParams.query?.debug !== undefined
+
+  console.log({ timelines, selectedTimeline, selectedTask, currentTask, ownLane })
+  // const debug = queryParams.query?.debug !== undefined
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Container sx={{ minHeight: '100vh' }}>
-        {debug && (
+        {/*debug && (
           <ForceGraph2D
             graphData={dependencyGraph}
             nodeAutoColorBy="group"
@@ -1106,7 +1024,7 @@ function App() {
                 ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
             }}
           />
-        )}
+        )*/}
         {!nameSet ? (
           <NameDialog {...{ setName, name, updateName, setNameSet }} />
         ) : (
@@ -1126,7 +1044,7 @@ function App() {
                     shareLinkCopied,
                     restart,
                     isHost,
-                    connectionId: p.current?.id,
+                    connectionId: ownId,
                   }}
                 />
               )}
