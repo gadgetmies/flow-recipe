@@ -93,7 +93,8 @@ const formatTime = (seconds) => (seconds ? new Date(seconds * 1000).toISOString(
 const laneHeight = 80
 const zoom = 0.4
 
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 'http://localhost:3001'
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || 
+  (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001')
 
 const NameDialog = ({ name, setName, setNameSet, updateName }) => (
   <Grid2 container padding={2} direction="column" alignItems="center" justify="center" style={{ minHeight: '100vh' }}>

@@ -5,7 +5,9 @@
   "scripts": {
     "server:watch": "yarn workspace server watch",
     "client:start": "yarn workspace client start",
-    "dev": "concurrently \"yarn server:watch\" \"yarn client:start\""
+    "dev": "concurrently \"yarn server:watch\" \"yarn client:start\"",
+    "build": "yarn install && yarn workspace client build",
+    "start": "yarn workspace server start"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

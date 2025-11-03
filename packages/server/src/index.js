@@ -2,19 +2,46 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const path = require('path');
 const { initDatabase, getDatabase } = require('./database');
 
 const app = express();
 const server = http.createServer(app);
+
+const clientUrl = process.env.CLIENT_URL || 
+  (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null) ||
+  'http://localhost:3000';
+
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+  ? [clientUrl, ...(process.env.RAILWAY_PUBLIC_DOMAIN ? [`https://${process.env.RAILWAY_PUBLIC_DOMAIN}`] : [])]
+  : [clientUrl, 'http://localhost:3000'];
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 
-app.use(cors());
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
 app.use(express.json());
+
+const clientBuildPath = path.join(__dirname, '../../client/build');
+const fs = require('fs');
+
+if (fs.existsSync(clientBuildPath)) {
+  app.use(express.static(clientBuildPath));
+  
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
+  });
+} else if (process.env.NODE_ENV === 'production') {
+  console.warn('Warning: Client build directory not found. Make sure to build the client before deploying.');
+}
 
 initDatabase();
 const db = getDatabase();
