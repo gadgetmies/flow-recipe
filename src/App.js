@@ -78,8 +78,10 @@ const ownId = `recipes-${sessionId}-${participantId}`
 const hostId = `recipes-${sessionId}-0`
 
 const findMatchingTask = (timelines, currentTimelineIndex, nextTimelineIndex, currentTask) => {
+  if (!timelines?.[currentTimelineIndex]?.[currentTask]) return -1;
   const currentStart = timelines[currentTimelineIndex][currentTask].start
   const nextTimeline = timelines[nextTimelineIndex]
+  if (!nextTimeline) return -1;
   const index = nextTimeline.findIndex(({ start }) => start <= currentStart)
   return index === -1 ? nextTimeline.length - 1 : index
 }
@@ -609,6 +611,7 @@ function App() {
   }
 
   const scrollToIndex = (taskIndex) => {
+    if (!window.timelines?.[selectedTimeline]?.[taskIndex]) return;
     const uuid = window.timelines[selectedTimeline][taskIndex].uuid
     scrollToTask(uuid)
   }
@@ -635,6 +638,7 @@ function App() {
   }
 
   const findNextTask = (timeline) => {
+    if (!timelines?.[timeline]) return -1;
     const startedTasks = [...completedTasksRef.current, ...tasksInProgress]
     const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), timelines[timeline])
     console.log({ task, nextTask })
@@ -642,6 +646,7 @@ function App() {
   }
 
   const markTaskDone = async (timeline, task) => {
+    if (!timelines?.[timeline]?.[task]) return -1;
     const taskItem = timelines[timeline][task]
     await markTaskCompleted(taskItem.uuid)
     // TODO: Need to jump to next task not completed
@@ -1000,9 +1005,16 @@ function App() {
       if (newOwnLane !== -1) {
         setOwnLane(newOwnLane)
         setCurrentTimeline(newOwnLane)
-        const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[newOwnLane])
-        setCurrentTask(nextTask)
-        setSelectedTask({ task: nextTask, timeline: newOwnLane })
+        // Only try to find next task if the timeline exists and has tasks
+        if (newTimelines[newOwnLane] && newTimelines[newOwnLane].length > 0) {
+          const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[newOwnLane])
+          setCurrentTask(nextTask)
+          setSelectedTask({ task: nextTask, timeline: newOwnLane })
+        } else {
+          // If no timeline exists yet, set to first task
+          setCurrentTask(0)
+          setSelectedTask({ task: 0, timeline: newOwnLane })
+        }
       }
     }
 
@@ -1023,27 +1035,28 @@ function App() {
   console.log({ dependencyGraph })
 
   const nameLabelWidth = 200
-  const width = Math.max(...timelines.map((timeline) => -(timeline[timeline.length - 1]?.start ?? 0))) + nameLabelWidth
+  const width = Math.max(...(timelines?.map((timeline) => -(timeline?.[timeline?.length - 1]?.start ?? 0)) ?? [0])) + nameLabelWidth
 
   const selectedTimeline = selectedTask.timeline
-  const position = formatTime(-(recipeDuration - timelines[selectedTimeline][selectedTask.task]?.start))
-  const timeUntilFinished = formatTime(-timelines[selectedTimeline][selectedTask.task]?.start)
+  const selectedTaskData = timelines?.[selectedTimeline]?.[selectedTask.task]
+  const position = formatTime(-(recipeDuration - (selectedTaskData?.start ?? 0)))
+  const timeUntilFinished = formatTime(-(selectedTaskData?.start ?? 0))
 
-  const height = laneHeight * timelines.length
-  const task = timelines[selectedTimeline][selectedTask.task]
+  const height = laneHeight * (timelines?.length ?? 0)
+  const task = selectedTaskData
   //console.log({ task, selected: selectedTask })
 
   let timeline
   let tasks
 
   if (isHost) {
-    timeline = timelines.flat()
+    timeline = timelines?.flat() ?? []
     tasks = timeline.sort(({ start: a }, { start: b }) => a - b)
   } else {
-    timeline = timelines[selectedTimeline]
+    timeline = timelines?.[selectedTimeline] ?? []
     tasks = R.reverse(timeline)
   }
-  const pendingInputs = task?.dependencies?.filter(({ uuid }) => !completedTasks.includes(uuid))
+  const pendingInputs = task?.dependencies?.filter(({ uuid }) => !completedTasks.includes(uuid)) ?? []
   // TODO: get participants and outputs for inputs
   const inputsForTask = task?.dependencies?.map(({ uuid, input: { name } }) => {
     let uuidMatches = (s) => s.uuid === uuid
@@ -1156,18 +1169,19 @@ function App() {
                           {ownLaneSelected ? 'My tasks' : isHost ? 'Tasks' : `${selectedTimelineOwner}'s tasks`}
                         </Typography>*/}
                           {tasks.map((task, i) => {
-                            // TODO: why -1
-                            const currentTaskIndex = timelines[selectedTimeline].length - currentTask - 1
+                            const currentTaskIndex = isHost ? i : (timelines[selectedTimeline]?.length ?? 0) - currentTask - 1
+                            const isCurrentTask = !isHost && i === currentTaskIndex
                             return (
                               <Task
+                                key={task.uuid}
                                 {...{
                                   task,
                                   timelines,
                                   isDone: completedTasks.includes(task.uuid),
-                                  isCurrent: !isHost && i === currentTaskIndex,
-                                  inputsReady,
-                                  pendingInputs,
-                                  inputsForTask,
+                                  isCurrent: isCurrentTask,
+                                  inputsReady: isCurrentTask ? inputsReady : false,
+                                  pendingInputs: isCurrentTask ? pendingInputs : [],
+                                  inputsForTask: isCurrentTask ? inputsForTask : [],
                                   recipe,
                                   timeUntilFinished,
                                   setTasksInProgress,
@@ -1180,14 +1194,10 @@ function App() {
                                   setCurrentTask,
                                   isHost,
                                   jumpToNextTask: () => {
-                                    // TODO: is this the same as markCurrentTaskDone?
-                                    const nextTask =
-                                      R.findLastIndex(
-                                        (task) =>
-                                          ![...completedTasksRef.current, ...tasksInProgress].includes(task.uuid),
-                                        timelines[ownLane]
-                                      ) - 1 // TODO: Why -1 tho?
-                                    // TODO: Scroll to current
+                                    const nextTask = R.findLastIndex(
+                                      (task) => ![...completedTasksRef.current, ...tasksInProgress].includes(task.uuid),
+                                      timelines[ownLane] ?? []
+                                    )
                                     setCurrentTask(nextTask)
                                     setSelectedTask({ task: nextTask, timeline: ownLane })
                                     scrollToIndex(nextTask)
