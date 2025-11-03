@@ -1,6 +1,5 @@
 import { operations } from './operations'
-import { findTaskProducing, getInputs, getNodesProducingInputs, getOutputs, getOutputsForInputs } from './recipeTools'
-import * as R from 'ramda'
+import { getInputs, getOutputs } from './recipeTools'
 
 const log = (...args) => {
   return

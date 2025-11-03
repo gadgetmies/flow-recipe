@@ -17,8 +17,8 @@ import './App.css'
 //import xml_data from './recipe/layer-cake'
 //import xml_data from './recipe/debug-cake'
 import xml_data from './recipe/bday-cake'
-import { useEffect, useRef, useState } from 'react'
-import { calculateToolList, findFinalOutputId, findTaskProducing, getInstructions } from './recipeTools'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { findFinalOutputId, findTaskProducing, getInstructions } from './recipeTools'
 import { calculateShoppingList } from './shoppingListGenerator'
 import { expandNode, scheduleItemsInTimelines } from './timelineScheduler'
 import { v4 as uuidV4 } from 'uuid'
@@ -78,15 +78,6 @@ window.history.replaceState({ sessionId }, 'Flow Recipe', `${baseUrl}?session=${
 
 const ownId = `recipes-${sessionId}-${participantId}`
 const hostId = `recipes-${sessionId}-0`
-
-const findMatchingTask = (timelines, currentTimelineIndex, nextTimelineIndex, currentTask) => {
-  if (!timelines?.[currentTimelineIndex]?.[currentTask]) return -1;
-  const currentStart = timelines[currentTimelineIndex][currentTask].start
-  const nextTimeline = timelines[nextTimelineIndex]
-  if (!nextTimeline) return -1;
-  const index = nextTimeline.findIndex(({ start }) => start <= currentStart)
-  return index === -1 ? nextTimeline.length - 1 : index
-}
 
 const formatTime = (seconds) => (seconds ? new Date(seconds * 1000).toISOString().substr(11, 8) : 0)
 
@@ -231,20 +222,6 @@ function Shopping({ shoppingList }) {
   )
 }
 
-function Tools(tools) {
-  return (
-    <div className="container">
-      {tools ? (
-        <ul>
-          {tools.map(({ name }) => (
-            <li key={`${name}`}>{name}</li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  )
-}
-
 function Task(props) {
   if (props === undefined) return ''
   const {
@@ -256,7 +233,6 @@ function Task(props) {
     pendingInputs,
     inputsForTask,
     recipe,
-    timeUntilFinished,
     setTasksInProgress,
     tasksInProgress,
     markTaskDone,
@@ -457,7 +433,7 @@ function Timers({
     }, 1000)
 
     return () => clearInterval(intervalId)
-  }, [currentTime, timers])
+  }, [currentTime, timers, completedTasks, markTaskCompleted])
 
   return (
     <div
@@ -549,14 +525,12 @@ function App() {
 
   const [title, setTitle] = useState('')
   const [shoppingList, setShoppingList] = useState([])
-  const [tools, setTools] = useState([])
   const [timelines, setTimelines] = useState([[]])
   const [currentTask, setCurrentTask] = useState(0)
   const [selectedTask, setSelectedTask] = useState({ timeline: 0, task: 0 })
   const [ownLane, setOwnLane] = useState(0)
   const [currentTimeline, setCurrentTimeline] = useState(0)
   const [recipe, setRecipe] = useState()
-  const [recipeDuration, setRecipeDuration] = useState()
   let globalSettings = JSON.parse(window.localStorage.getItem('global-settings'))
   const [name, setName] = useState(settings?.name || globalSettings?.defaultName || '')
   const [nameSet, setNameSet] = useState(name !== '')
@@ -585,10 +559,10 @@ function App() {
     appendSessionSettings(sessionId, { tab })
   }
 
-  const concatCompletedTasks = (completed) => {
+  const concatCompletedTasks = useCallback((completed) => {
     const merged = Array.from(new Set([...completedTasksRef.current, ...completed]))
     setTasksCompleted(merged)
-  }
+  }, [])
 
   const setTasksCompleted = (completed) => {
     // TODO: use uuids
@@ -597,7 +571,7 @@ function App() {
     _setCompletedTasks(completed)
   }
 
-  const scrollToTask = (uuid) => {
+  const scrollToTask = useCallback((uuid) => {
     console.log(
       'scrolling to ' + uuid,
       document.getElementById('task' + uuid),
@@ -612,13 +586,13 @@ function App() {
         document.getElementById('task' + uuid)?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' }),
       100
     )
-  }
+  }, [])
 
-  const scrollToIndex = (taskIndex, timeline = selectedTaskRef.current.timeline) => {
+  const scrollToIndex = useCallback((taskIndex, timeline = selectedTaskRef.current.timeline) => {
     if (!timelinesRef.current?.[timeline]?.[taskIndex]) return;
     const uuid = timelinesRef.current[timeline][taskIndex].uuid
     scrollToTask(uuid)
-  }
+  }, [scrollToTask])
 
   const startTimer = ({ timer: { duration, title }, uuid }) => {
     const newTimers = [{ end: Date.now() + duration * 1000, taskUuid: uuid, title }, ...timers]
@@ -631,20 +605,20 @@ function App() {
     setTimers(newTimers)
   }
 
-  async function markTaskCompleted(uuid) {
+  const markTaskCompleted = useCallback(async (uuid) => {
     setTasksCompleted([...completedTasksRef.current, uuid])
     setTasksInProgress(R.without([uuid], tasksInProgress))
     sendTaskCompleted(uuid)
-  }
+  }, [tasksInProgress])
 
-  const findNextTask = (timeline) => {
+  const findNextTask = useCallback((timeline) => {
     debugger
     if (!timelinesRef.current?.[timeline]) return -1;
     const startedTasks = [...completedTasksRef.current, ...tasksInProgressRef.current]
-    const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), timelinesRef.current[timeline])
-    console.log({ task, nextTask })
+    const nextTask = R.findLastIndex((taskItem) => !startedTasks.includes(taskItem.uuid), timelinesRef.current[timeline])
+    console.log({ nextTask })
     return nextTask
-  }
+  }, [])
 
   const markTaskDone = async (timeline, task) => {
     if (!timelinesRef.current?.[timeline]?.[task]) return -1;
@@ -787,7 +761,7 @@ function App() {
     return () => {
       socket.disconnect()
     }
-  }, [])
+  }, [name, findNextTask, scrollToIndex])
 
   const updateName = (newName) => {
     if (socketRef.current) {
@@ -907,7 +881,6 @@ function App() {
     console.log({ newTimelines })
 
     setTimelines(newTimelines)
-    setRecipeDuration(newTimelines.reduce((acc, items) => Math.min(acc, items[items.length - 1]?.start), 0))
     const startedTasks = [...completedTasksRef.current, ...tasksInProgress]
     if (isHost) {
       // TODO: remove duplication
@@ -936,7 +909,7 @@ function App() {
     }
 
     setSetupDone(true)
-  }, [recipe, connections])
+  }, [recipe, connections, concatCompletedTasks, tasksInProgress])
 
   const dependencyGraph = timelines.reduce(
     (g, timeline) => {
@@ -956,8 +929,6 @@ function App() {
 
   const selectedTimeline = selectedTask.timeline
   const selectedTaskData = timelines?.[selectedTimeline]?.[selectedTask.task]
-  const position = formatTime(-(recipeDuration - (selectedTaskData?.start ?? 0)))
-  const timeUntilFinished = formatTime(-(selectedTaskData?.start ?? 0))
 
   const height = laneHeight * (timelines?.length ?? 0)
   const task = selectedTaskData
@@ -987,8 +958,6 @@ function App() {
     }
   })
   const joinSessionLink = `${baseUrl}?session=${sessionId}`
-  const ownLaneSelected = selectedTimeline === ownLane
-  const selectedTimelineOwner = connections[selectedTimeline + 1]?.name
   const inputsReady = pendingInputs?.length === 0
 
   console.log({ timelines, selectedTimeline, selectedTask, currentTask, ownLane })
@@ -1102,7 +1071,6 @@ function App() {
                                   pendingInputs: isCurrentTask ? pendingInputs : [],
                                   inputsForTask: isCurrentTask ? inputsForTask : [],
                                   recipe,
-                                  timeUntilFinished,
                                   setTasksInProgress,
                                   tasksInProgress,
                                   completedTasks,
