@@ -739,7 +739,7 @@ function App() {
     }
 
     createSessionIfNeeded()
-  }, [])
+  }, [recipeName])
 
   useEffect(() => {
     const socket = io(SERVER_URL)
@@ -835,7 +835,7 @@ function App() {
       }
     }
     loadRecipe()
-  }, [recipeName, isHost])
+  }, [recipeName])
 
   useEffect(() => {
     if (!recipe) {
