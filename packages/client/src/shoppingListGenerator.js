@@ -6,6 +6,18 @@ import {
   getUnitFromOption
 } from "./recipeTools";
 
+function getElementName(element) {
+  if (!element) return null
+  
+  const textContent = Array.from(element.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent)
+    .join('')
+    .trim()
+  
+  return textContent || null
+}
+
 export function calculateShoppingList(recipe) {
   return getChildren(recipe, "task[operation='measure'] inputs input")
     .map((input) => {
@@ -15,7 +27,7 @@ export function calculateShoppingList(recipe) {
       );
       const options = getOptions(input.parentNode.parentNode);
       if (ingredient) {
-        const name = ingredient.getAttribute("name");
+        const name = getElementName(ingredient);
         const unit = getUnitFromOption("amount", options);
         const amount = getNumericValueFromOption("amount", options);
         return {

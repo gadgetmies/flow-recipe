@@ -13,10 +13,6 @@ TODO:
 
 import './reset.css'
 import './App.css'
-//import xml_data from "./recipe/buns";
-//import xml_data from './recipe/layer-cake'
-//import xml_data from './recipe/debug-cake'
-import xml_data from './recipe/bday-cake'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { findFinalOutputId, findTaskProducing, getInstructions } from './recipeTools'
 import { calculateShoppingList } from './shoppingListGenerator'
@@ -27,6 +23,7 @@ import { io } from 'socket.io-client'
 import * as R from 'ramda'
 import QRCodeSVG from 'qrcode.react'
 import {
+  Alert,
   BottomNavigation,
   BottomNavigationAction,
   Box,
@@ -129,6 +126,7 @@ function Settings({
   restart,
   isHost,
   connectionId,
+  recipeName,
 }) {
   return (
     <Box paddingBottom={9}>
@@ -196,8 +194,8 @@ function Settings({
           <Button variant="contained" onClick={() => restart()}>
             Restart
           </Button><br/>
-          <Link variant="contained" href={`${baseUrl}`}>
-            New session
+          <Link variant="contained" href={`${baseUrl}?recipe=${recipeName}`}>
+            New session with recipe: {recipeName}
           </Link>
         </>
         )}
@@ -531,11 +529,13 @@ function App() {
   const [ownLane, setOwnLane] = useState(0)
   const [currentTimeline, setCurrentTimeline] = useState(0)
   const [recipe, setRecipe] = useState()
+  const [recipeName, setRecipeName] = useState(isHost ? queryParams.recipe || 'bday-cake' : null)
   let globalSettings = JSON.parse(window.localStorage.getItem('global-settings'))
   const [name, setName] = useState(settings?.name || globalSettings?.defaultName || '')
   const [nameSet, setNameSet] = useState(name !== '')
   const [shareLinkCopied, setShareLinkCopied] = useState(false)
   const [currentState, setCurrentState] = useState(settings.tab || isHost ? 'settings' : 'cooking')
+  const [errorMessage, setErrorMessage] = useState(null)
 
   const connectionsRef = useRef([{ id: hostId, name }])
   const [connections, _setConnections] = useState(connectionsRef.current)
@@ -706,6 +706,42 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const createSessionIfNeeded = async () => {
+      if (isHost && !queryParams.session) {
+        try {
+          const response = await fetch(`${SERVER_URL}/api/sessions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sessionId,
+              recipeName,
+            }),
+          })
+
+          if (!response.ok) {
+            if (response.status === 409) {
+              console.log('Session already exists, continuing...')
+              return
+            }
+            const errorData = await response.json()
+            throw new Error(errorData.error || 'Failed to create session')
+          }
+
+          const data = await response.json()
+          console.log('Session created:', data)
+        } catch (error) {
+          console.error('Error creating session:', error)
+          setErrorMessage(error.message || 'Failed to create session')
+        }
+      }
+    }
+
+    createSessionIfNeeded()
+  }, [])
+
+  useEffect(() => {
     const socket = io(SERVER_URL)
     socketRef.current = socket
 
@@ -716,6 +752,11 @@ function App() {
         participantId,
         name: name || '',
       })
+    })
+
+    socket.on('recipeName', (recipeName) => {
+      console.log('Received recipe name from server:', recipeName)
+      setRecipeName(recipeName)
     })
 
     socket.on('connections', (participants) => {
@@ -752,6 +793,7 @@ function App() {
 
     socket.on('error', (error) => {
       console.error('Socket error:', error)
+      setErrorMessage(error.message || 'An error occurred')
     })
 
     socket.on('disconnect', () => {
@@ -774,10 +816,26 @@ function App() {
   }
 
   useEffect(() => {
-    const parser = new DOMParser()
-    const recipe = parser.parseFromString(xml_data, 'text/xml')
-    setRecipe(recipe)
-  }, [])
+    if (!recipeName) {
+      return
+    }
+
+    const loadRecipe = async () => {
+      try {
+        const response = await fetch(`${SERVER_URL}/api/recipes/${recipeName}`)
+        if (!response.ok) {
+          throw new Error(`Failed to load recipe: ${response.statusText}`)
+        }
+        const xmlText = await response.text()
+        const parser = new DOMParser()
+        const recipe = parser.parseFromString(xmlText, 'text/xml')
+        setRecipe(recipe)
+      } catch (error) {
+        console.error('Failed to load recipe:', error)
+      }
+    }
+    loadRecipe()
+  }, [recipeName, isHost])
 
   useEffect(() => {
     if (!recipe) {
@@ -792,13 +850,6 @@ function App() {
       return
     }
     setShoppingList(calculateShoppingList(recipe))
-  }, [recipe])
-
-  useEffect(() => {
-    if (!recipe) {
-      return
-    }
-    setTools(calculateToolList(recipe))
   }, [recipe])
 
   useEffect(() => {
@@ -966,6 +1017,13 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Container sx={{ minHeight: '100vh' }}>
+        {errorMessage && (
+          <Box sx={{ mt: 2, mb: 2 }}>
+            <Alert severity="error" onClose={() => setErrorMessage(null)}>
+              {errorMessage}
+            </Alert>
+          </Box>
+        )}
         {/*debug && (
           <ForceGraph2D
             graphData={dependencyGraph}
@@ -1015,6 +1073,7 @@ function App() {
                     restart,
                     isHost,
                     connectionId: ownId,
+                    recipeName,
                   }}
                 />
               )}

@@ -1,9 +1,20 @@
 import { operations } from './operations'
 import { getInputs, getOutputs } from './recipeTools'
 
+function getElementName(element) {
+  if (!element) return null
+  
+  const textContent = Array.from(element.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent)
+    .join('')
+    .trim()
+  
+  return textContent || null
+}
+
 const log = (...args) => {
-  return
-  console.log(...args)
+  // Disabled logging
 }
 
 function cloneToFreezeForDebug(value) {
@@ -130,7 +141,7 @@ function calculateDependencies(graph, task, timelines, previousDependencies) {
         task: producerTask,
         input: {
           id: inputId,
-          name: producerOutput.getAttribute('name'),
+          name: getElementName(producerOutput),
         },
         amountsLeft: {
           ...amountsOutputProduces,

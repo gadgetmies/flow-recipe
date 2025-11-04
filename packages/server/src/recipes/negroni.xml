@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd" ref="https://www.tentoonerum.com/cocktails/negroni/">
+    <title>Rum Negroni</title>
+    <ingredients>
+        <ingredient id="rum">white or dark rum</ingredient>
+        <ingredient id="campari">Campari</ingredient>
+        <ingredient id="sweet-vermouth">sweet Vermouth</ingredient>
+        <ingredient id="orange-bitters">orange bitters</ingredient>
+        <ingredient id="ice">ice</ingredient>
+        <ingredient id="orange-peel">orange peel</ingredient>
+        <ingredient id="large-ice-cube">large ice cube</ingredient>
+    </ingredients>
+    <tools>
+        <tool id="mixing-glass">mixing glass</tool>
+        <tool id="bar-spoon">bar spoon</tool>
+        <tool id="strainer">strainer</tool>
+        <tool id="rocks-glass">rocks glass</tool>
+    </tools>
+    <tasks>
+        <task operation="measure">
+            <options>
+                <option name="amount">
+                    <numeric-value number="1" unit="oz"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="rum"/>
+            </inputs>
+            <outputs>
+                <output id="measured-rum">rum</output>
+            </outputs>
+        </task>
+        <task operation="measure">
+            <options>
+                <option name="amount">
+                    <numeric-value number="1" unit="oz"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="campari"/>
+            </inputs>
+            <outputs>
+                <output id="measured-campari">Campari</output>
+            </outputs>
+        </task>
+        <task operation="measure">
+            <options>
+                <option name="amount">
+                    <numeric-value number="1" unit="oz"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="sweet-vermouth"/>
+            </inputs>
+            <outputs>
+                <output id="measured-vermouth">sweet vermouth</output>
+            </outputs>
+        </task>
+        <task operation="measure">
+            <options>
+                <option name="amount">
+                    <numeric-value number="2" unit="dashes"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="orange-bitters"/>
+            </inputs>
+            <outputs>
+                <output id="measured-bitters">orange bitters</output>
+            </outputs>
+        </task>
+        <task operation="mix">
+            <instructions>
+                Combine
+                <input ref="measured-rum"/>,
+                <input ref="measured-campari"/>,
+                <input ref="measured-vermouth"/>,
+                and
+                <input ref="measured-bitters"/>
+                in a
+                <tool ref="mixing-glass"/>
+                with
+                <input ref="ice"/>
+            </instructions>
+            <outputs>
+                <output id="combined-negroni">negroni mixture</output>
+            </outputs>
+        </task>
+        <task operation="stir">
+            <tools>
+                <tool ref="bar-spoon" reserved="true"/>
+            </tools>
+            <inputs>
+                <input ref="combined-negroni"/>
+            </inputs>
+            <outputs>
+                <output id="stirred-negroni">stirred negroni</output>
+            </outputs>
+        </task>
+        <task operation="strain">
+            <instructions>
+                Strain
+                <input ref="stirred-negroni"/>
+                into
+                <tool ref="rocks-glass"/>
+                over
+                <input ref="large-ice-cube"/>
+                using a
+                <tool ref="strainer"/>
+            </instructions>
+            <outputs>
+                <output id="strained-negroni">negroni in glass</output>
+            </outputs>
+        </task>
+        <task operation="express">
+            <instructions>
+                Express oils from
+                <input ref="orange-peel"/>
+                over
+                <input ref="strained-negroni"/>
+            </instructions>
+            <outputs>
+                <output id="expressed-negroni">negroni with expressed oils</output>
+            </outputs>
+        </task>
+        <task operation="decorate">
+            <instructions>
+                Garnish
+                <input ref="expressed-negroni"/>
+                with
+                <input ref="orange-peel"/>
+            </instructions>
+            <outputs>
+                <output id="final-negroni">Rum Negroni</output>
+            </outputs>
+        </task>
+    </tasks>
+</recipe>

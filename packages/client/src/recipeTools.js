@@ -42,6 +42,18 @@ export function getChildren(node, selector) {
   return Array.from(node.querySelectorAll(selector))
 }
 
+function getElementName(element) {
+  if (!element) return null
+  
+  const textContent = Array.from(element.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent)
+    .join('')
+    .trim()
+  
+  return textContent || null
+}
+
 // TODO: rename ingredient -> input as it is not always an ingredient
 export function getInputRefNodes(recipe, node) {
   return getInputs(node).map((input) => {
@@ -67,7 +79,7 @@ export function getAmounts(recipe, node) {
         const amount = getNumericValueFromOption('amount', options)
         const unit = getUnitFromOption('amount', options)
         return {
-          name: ingredient.getAttribute('name'),
+          name: getElementName(ingredient),
           amount: `${amount} ${unit}`,
         }
       })
@@ -99,13 +111,13 @@ export function getOutputsForInputs(recipe, node) {
 
 export function getNameForInputAtIndex(recipe, node, i) {
   const ingredients = getInputRefNodes(recipe, node)
-  return ingredients[i].getAttribute('name')
+  return getElementName(ingredients[i])
 }
 
 export function getNameForToolAtIndex(recipe, node, i) {
   const tools = getToolRefNodes(recipe, node)
   try {
-    return tools[i].getAttribute('name')
+    return getElementName(tools[i])
   } catch (e) {
     throw new Error(`Unable to get tool for index ${i}, ${node.innerHTML}: ${e.toString()}`)
   }
@@ -184,6 +196,6 @@ export function getInstructions(recipe, item) {
 
 export function calculateToolList(recipe) {
   return getChildren(recipe, 'tool').map((tool) => ({
-    name: tool.getAttribute('name'),
+    name: getElementName(tool),
   }))
 }

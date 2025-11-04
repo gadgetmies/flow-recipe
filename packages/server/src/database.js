@@ -11,7 +11,8 @@ function initDatabase() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      recipe_name TEXT
     );
 
     CREATE TABLE IF NOT EXISTS participants (

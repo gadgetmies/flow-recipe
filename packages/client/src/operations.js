@@ -16,6 +16,18 @@ import {
   getUnitFromOption,
 } from './recipeTools'
 
+function getElementName(element) {
+  if (!element) return null
+  
+  const textContent = Array.from(element.childNodes)
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent)
+    .join('')
+    .trim()
+  
+  return textContent || null
+}
+
 const xmlToElement = (xml) => {
   let template = document.createElement('template')
   xml = xml.trim() // Never return a text node of whitespace as the result
@@ -41,7 +53,8 @@ export const getTextInstructions = (graph, node) => {
         if (node.childNodes.length > 0) {
           return node.childNodes[0].wholeText
         } else {
-          return graph.getElementById(node.getAttribute('ref')).getAttribute('name')
+          const refElement = graph.getElementById(node.getAttribute('ref'))
+          return getElementName(refElement)
         }
       }
     })
@@ -63,7 +76,7 @@ export const operations = {
         return (
           <div>
             Measure {`${amount} ${name}`}
-            {container ? ` into ${container.getAttribute('name')}` : toolName ? ` into ${toolName}` : ''}
+            {container ? ` into ${getElementName(container)}` : toolName ? ` into ${toolName}` : ''}
           </div>
         )
       } catch (e) {
@@ -119,7 +132,7 @@ export const operations = {
   },
   mix: {
     instruction: (recipe, node) => {
-      const inputs = getInputRefNodes(recipe, node).map((i) => i.getAttribute('name'))
+      const inputs = getInputRefNodes(recipe, node).map((i) => getElementName(i))
 
       const last = inputs.splice(-1, 1)
 
@@ -130,7 +143,7 @@ export const operations = {
   },
   incorporate: {
     instruction: (recipe, node) => {
-      const inputs = getInputRefNodes(recipe, node).map((i) => i.getAttribute('name'))
+      const inputs = getInputRefNodes(recipe, node).map((i) => getElementName(i))
 
       const [first, ...rest] = inputs
       const last = rest.splice(-1, 1)
@@ -199,6 +212,21 @@ export const operations = {
     },
     timeline: (node) => ({ active: 180, passive: 0 }),
     title: (node) => 'Pour',
+  },
+  strain: {
+    instruction: (recipe, node) => {
+      const secondToolName = getNameForToolAtIndex(recipe, node, 1)
+      return `Strain ${getFirstInputName(recipe, node)} into ${secondToolName || getFirstToolName(recipe, node)}`
+    },
+    timeline: (node) => ({ active: 60, passive: 0 }),
+    title: (node) => 'Strain',
+  },
+  express: {
+    instruction: (recipe, node) => {
+      return `Express oils from ${getFirstInputName(recipe, node)} over ${getNameForInputAtIndex(recipe, node, 1) || getFirstToolName(recipe, node)}`
+    },
+    timeline: (node) => ({ active: 10, passive: 0 }),
+    title: (node) => 'Express',
   },
   spherify: {
     instruction: (recipe, node) => {
@@ -324,6 +352,7 @@ export const operations = {
       const options = getOptions(node)
       const parts = getNumericValueFromOption('parts', options)
       const output = getOutputs(node)[0]
+      const outputName = getElementName(output) || output.getAttribute('id')
       return [
         `<task operation="split">
 ${node.querySelector('options').outerHTML}
@@ -333,7 +362,7 @@ ${node.querySelector('options').outerHTML}
       .join('\n')}
 </inputs>
 <outputs>
-  <output id="${output.getAttribute('id')}" amount="${parts}" name="${output.getAttribute('name')}"/>
+  <output id="${output.getAttribute('id')}" amount="${parts}">${outputName}</output>
 </outputs>
 </task>`,
       ].map(xmlToElement)
@@ -359,7 +388,7 @@ ${node.querySelector('options').outerHTML}
       const bakedId = `baked-${inputRef}`
       const output = getOutputs(node)[0]
       const outputId = output.getAttribute('id')
-      const outputName = output.getAttribute('name') || `Baked ${inputName}`
+      const outputName = getElementName(output) || `Baked ${inputName}`
 
       return [
         `<task operation="preheat-oven">
@@ -383,7 +412,7 @@ ${node.querySelector('options').outerHTML}
           <input ref="${preheatTaskId}"/>
         </inputs>
         <outputs>
-          <output id="${bakedId}" name="baking ${inputName}" />
+          <output id="${bakedId}">baking ${inputName}</output>
         </outputs>
       </task>`,
         `<task operation="take-out-of-oven">
@@ -391,7 +420,7 @@ ${node.querySelector('options').outerHTML}
           <input ref="${bakedId}"/>
         </inputs>
         <outputs>
-          <output id="${outputId}" name="${outputName}"/>
+          <output id="${outputId}">${outputName}</output>
         </outputs>
       </task>`,
       ].map(xmlToElement)

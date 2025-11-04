@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+    
+    <!-- Root element: operations -->
+    <xs:element name="operations">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="operation" maxOccurs="unbounded">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="title" type="xs:string"/>
+                            <xs:element name="options" minOccurs="0">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="option" maxOccurs="unbounded">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="description" type="xs:string" minOccurs="0"/>
+                                                </xs:sequence>
+                                                <xs:attribute name="name" type="xs:string" use="required"/>
+                                                <xs:attribute name="required" type="xs:boolean" default="false"/>
+                                                <xs:attribute name="type" type="option-type" default="numeric"/>
+                                                <xs:attribute name="unit" type="xs:string"/>
+                                                <xs:attribute name="default-unit" type="xs:string"/>
+                                                <xs:attribute name="min-inputs" type="xs:nonNegativeInteger" default="0"/>
+                                                <xs:attribute name="max-inputs" type="xs:nonNegativeInteger"/>
+                                                <xs:attribute name="min-outputs" type="xs:nonNegativeInteger" default="1"/>
+                                                <xs:attribute name="max-outputs" type="xs:nonNegativeInteger"/>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                </xs:complexType>
+                            </xs:element>
+                            <xs:element name="timeline" minOccurs="0">
+                                <xs:complexType>
+                                    <xs:attribute name="active" type="xs:nonNegativeInteger" use="required"/>
+                                    <xs:attribute name="passive" type="xs:nonNegativeInteger" default="0"/>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                        <xs:attribute name="name" type="xs:string" use="required"/>
+                        <xs:attribute name="min-inputs" type="xs:nonNegativeInteger" default="0"/>
+                        <xs:attribute name="max-inputs" type="xs:nonNegativeInteger"/>
+                        <xs:attribute name="min-outputs" type="xs:nonNegativeInteger" default="1"/>
+                        <xs:attribute name="max-outputs" type="xs:nonNegativeInteger"/>
+                        <xs:attribute name="requires-tools" type="xs:boolean" default="false"/>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+    
+    <!-- Option type enumeration -->
+    <xs:simpleType name="option-type">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="numeric"/>
+            <xs:enumeration value="text"/>
+            <xs:enumeration value="boolean"/>
+        </xs:restriction>
+    </xs:simpleType>
+    
+</xs:schema>

@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+    
+    <!-- Root element: recipe -->
+    <xs:element name="recipe">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="title" type="xs:string"/>
+                <xs:element name="ingredients">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="ingredient" maxOccurs="unbounded">
+                                <xs:complexType mixed="true">
+                                    <xs:sequence>
+                                        <xs:element name="properties" minOccurs="0">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="property" maxOccurs="unbounded">
+                                                        <xs:complexType>
+                                                            <xs:choice>
+                                                                <xs:element name="numeric-value" type="numeric-value-type"/>
+                                                                <xs:element name="text-content" type="xs:string" minOccurs="0"/>
+                                                            </xs:choice>
+                                                            <xs:attribute name="name" type="xs:string" use="required"/>
+                                                            <xs:attribute name="value" type="xs:string"/>
+                                                        </xs:complexType>
+                                                    </xs:element>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                    <xs:attribute name="id" type="xs:string" use="required"/>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+                <xs:element name="tools">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="tool" maxOccurs="unbounded" minOccurs="0">
+                                <xs:complexType mixed="true">
+                                    <xs:sequence>
+                                        <xs:element name="properties" minOccurs="0">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="property" maxOccurs="unbounded">
+                                                        <xs:complexType>
+                                                            <xs:choice>
+                                                                <xs:element name="numeric-value" type="numeric-value-type"/>
+                                                                <xs:element name="text-content" type="xs:string" minOccurs="0"/>
+                                                            </xs:choice>
+                                                            <xs:attribute name="name" type="xs:string" use="required"/>
+                                                            <xs:attribute name="value" type="xs:string"/>
+                                                        </xs:complexType>
+                                                    </xs:element>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:sequence>
+                                    <xs:attribute name="id" type="xs:string" use="required"/>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+                <xs:element name="tasks">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="task" maxOccurs="unbounded">
+                                <xs:complexType mixed="true">
+                                    <xs:choice maxOccurs="unbounded">
+                                        <xs:element name="input">
+                                            <xs:complexType mixed="true">
+                                                <xs:attribute name="ref" type="xs:string" use="required"/>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="tool">
+                                            <xs:complexType mixed="true">
+                                                <xs:attribute name="ref" type="xs:string" use="required"/>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="output">
+                                            <xs:complexType mixed="true">
+                                                <xs:attribute name="id" type="xs:string" use="required"/>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="options">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="option" maxOccurs="unbounded">
+                                                        <xs:complexType>
+                                                            <xs:choice>
+                                                                <xs:element name="numeric-value" type="numeric-value-type"/>
+                                                                <xs:element name="text-content" type="xs:string" minOccurs="0"/>
+                                                            </xs:choice>
+                                                            <xs:attribute name="name" type="xs:string" use="required"/>
+                                                        </xs:complexType>
+                                                    </xs:element>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="tools">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="tool" maxOccurs="unbounded">
+                                                        <xs:complexType>
+                                                            <xs:attribute name="ref" type="xs:string" use="required"/>
+                                                            <xs:attribute name="reserved" type="xs:boolean"/>
+                                                            <xs:attribute name="name" type="xs:string"/>
+                                                            <xs:attribute name="reusable" type="xs:boolean"/>
+                                                        </xs:complexType>
+                                                    </xs:element>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="inputs">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:element name="input" maxOccurs="unbounded">
+                                                        <xs:complexType mixed="true">
+                                                            <xs:attribute name="ref" type="xs:string" use="required"/>
+                                                        </xs:complexType>
+                                                    </xs:element>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="outputs">
+                                            <xs:complexType>
+                                                <xs:sequence>
+                                                    <xs:choice maxOccurs="unbounded">
+                                                        <xs:element name="output">
+                                                            <xs:complexType>
+                                                                <xs:simpleContent>
+                                                                    <xs:extension base="xs:string">
+                                                                        <xs:attribute name="id" type="xs:string" use="required"/>
+                                                                    </xs:extension>
+                                                                </xs:simpleContent>
+                                                            </xs:complexType>
+                                                        </xs:element>
+                                                        <xs:element name="tool">
+                                                            <xs:complexType>
+                                                                <xs:attribute name="ref" type="xs:string" use="required"/>
+                                                                <xs:attribute name="name" type="xs:string"/>
+                                                                <xs:attribute name="reusable" type="xs:boolean"/>
+                                                            </xs:complexType>
+                                                        </xs:element>
+                                                    </xs:choice>
+                                                </xs:sequence>
+                                            </xs:complexType>
+                                        </xs:element>
+                                        <xs:element name="instructions">
+                                            <xs:complexType mixed="true">
+                                                <xs:choice maxOccurs="unbounded">
+                                                    <xs:element name="input">
+                                                        <xs:complexType mixed="true">
+                                                            <xs:attribute name="ref" type="xs:string" use="required"/>
+                                                        </xs:complexType>
+                                                    </xs:element>
+                                                    <xs:element name="tool">
+                                                        <xs:complexType mixed="true">
+                                                            <xs:attribute name="ref" type="xs:string" use="required"/>
+                                                        </xs:complexType>
+                                                    </xs:element>
+                                                    <xs:element name="output">
+                                                        <xs:complexType mixed="true">
+                                                            <xs:attribute name="id" type="xs:string" use="required"/>
+                                                        </xs:complexType>
+                                                    </xs:element>
+                                                    <xs:element name="option">
+                                                        <xs:complexType>
+                                                            <xs:choice>
+                                                                <xs:element name="numeric-value" type="numeric-value-type"/>
+                                                                <xs:element name="text-content" type="xs:string" minOccurs="0"/>
+                                                            </xs:choice>
+                                                            <xs:attribute name="name" type="xs:string" use="required"/>
+                                                        </xs:complexType>
+                                                    </xs:element>
+                                                </xs:choice>
+                                            </xs:complexType>
+                                        </xs:element>
+                                    </xs:choice>
+                                    <xs:attribute name="operation" type="xs:string" use="required"/>
+                                </xs:complexType>
+                            </xs:element>
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+            <xs:attribute name="ref" type="xs:string"/>
+        </xs:complexType>
+    </xs:element>
+    
+    <!-- Numeric value type -->
+    <xs:complexType name="numeric-value-type">
+        <xs:simpleContent>
+            <xs:extension base="xs:string">
+                <xs:attribute name="number" type="xs:decimal" use="required"/>
+                <xs:attribute name="unit" type="xs:string"/>
+            </xs:extension>
+        </xs:simpleContent>
+    </xs:complexType>
+    
+</xs:schema>

@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<operations xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="operations.xsd">
+    
+    <operation name="measure" min-inputs="1" max-inputs="1" min-outputs="1" max-outputs="1">
+        <title>Measure</title>
+        <options>
+            <option name="amount" type="numeric" required="true"/>
+        </options>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="heat" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Heat</title>
+        <options>
+            <option name="temperature" type="numeric" required="false"/>
+            <option name="duration" type="numeric" required="false" default-unit="seconds"/>
+        </options>
+        <timeline active="30" passive="0"/>
+    </operation>
+    
+    <operation name="preheat-oven" min-inputs="0" max-inputs="0" min-outputs="1" max-outputs="1">
+        <title>Preheat the oven</title>
+        <options>
+            <option name="temperature" type="numeric" required="true"/>
+        </options>
+        <timeline active="30" passive="0"/>
+    </operation>
+    
+    <operation name="mix" min-inputs="1" min-outputs="1">
+        <title>Mix</title>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="incorporate" min-inputs="2" min-outputs="1">
+        <title>Mix</title>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="wait" min-inputs="0" max-inputs="0" min-outputs="0" max-outputs="0">
+        <title>Wait</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="seconds"/>
+        </options>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="raise" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Raise</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="seconds"/>
+        </options>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="bake-in-oven" min-inputs="1" max-inputs="1" min-outputs="1" max-outputs="1">
+        <title>Bake</title>
+        <options>
+            <option name="temperature" type="numeric" required="true"/>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline active="30" passive="0"/>
+    </operation>
+    
+    <operation name="bake-in-microwave" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Bake</title>
+        <options>
+            <option name="power" type="numeric" required="false"/>
+            <option name="duration" type="numeric" required="true" default-unit="seconds"/>
+        </options>
+        <timeline active="30" passive="0"/>
+    </operation>
+    
+    <operation name="split" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Split</title>
+        <options>
+            <option name="parts" type="numeric" required="true"/>
+        </options>
+        <timeline active="30" passive="0"/>
+    </operation>
+    
+    <operation name="chill" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Chill</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="hours"/>
+        </options>
+        <timeline active="30" passive="0"/>
+    </operation>
+    
+    <operation name="stir" min-inputs="1" max-inputs="1" min-outputs="1" requires-tools="true">
+        <title>Stir</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="pour" min-inputs="1" max-inputs="1" min-outputs="1" requires-tools="true">
+        <title>Pour</title>
+        <timeline active="180" passive="0"/>
+    </operation>
+    
+    <operation name="strain" min-inputs="1" max-inputs="1" min-outputs="1" requires-tools="true">
+        <title>Strain</title>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="express" min-inputs="1" min-outputs="1">
+        <title>Express</title>
+        <timeline active="10" passive="0"/>
+    </operation>
+    
+    <operation name="decorate" min-inputs="2" min-outputs="1">
+        <title>Decorate</title>
+        <timeline active="180" passive="0"/>
+    </operation>
+    
+    <operation name="grease" min-inputs="1" max-inputs="1" min-outputs="1" requires-tools="true">
+        <title>Grease</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="crumble" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Crumble</title>
+        <timeline active="30" passive="0"/>
+    </operation>
+    
+    <operation name="batch" min-inputs="1" min-outputs="1">
+        <title>Process in batches</title>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="fill" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Fill</title>
+        <timeline active="240" passive="0"/>
+    </operation>
+    
+    <operation name="separate" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Separate</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="soften" min-inputs="1" max-inputs="1" min-outputs="1" requires-tools="true">
+        <title>Soften</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="ball" min-inputs="1" max-inputs="1" min-outputs="1" requires-tools="true">
+        <title>Ball</title>
+        <timeline active="180" passive="0"/>
+    </operation>
+    
+    <operation name="enjoy" min-inputs="1" max-inputs="1" min-outputs="0" max-outputs="0">
+        <title>Enjoy</title>
+        <timeline active="180" passive="0"/>
+    </operation>
+    
+    <operation name="cream" min-inputs="2" min-outputs="1" requires-tools="true">
+        <title>Cream</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="stack" min-inputs="2" min-outputs="1">
+        <title>Stack</title>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="put-into-oven" min-inputs="1" min-outputs="1">
+        <title>Put into oven</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline active="30" passive="0"/>
+    </operation>
+    
+    <operation name="take-out-of-oven" min-inputs="1" min-outputs="1">
+        <title>Take out of oven</title>
+        <timeline active="30" passive="0"/>
+    </operation>
+    
+    <operation name="brush" min-inputs="2" min-outputs="1">
+        <title>Brush</title>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="sprinkle" min-inputs="1" min-outputs="1">
+        <title>Sprinkle</title>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="grate" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Grate</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="spread" min-inputs="2" min-outputs="1">
+        <title>Spread</title>
+        <timeline active="360" passive="0"/>
+    </operation>
+    
+    <operation name="transfer" min-inputs="1" min-outputs="1" requires-tools="true">
+        <title>Transfer</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="beat" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Beat</title>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="place-on-sheet" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Place on sheet</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="spoon" min-inputs="2" min-outputs="1">
+        <title>Spoon</title>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="cover" min-inputs="2" min-outputs="1">
+        <title>Cover</title>
+        <timeline active="60" passive="0"/>
+    </operation>
+    
+    <operation name="level" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Level</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="add-on-top" min-inputs="2" min-outputs="1">
+        <title>Add on top</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="press" min-inputs="2" min-outputs="1">
+        <title>Press</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="line" min-inputs="2" min-outputs="1">
+        <title>Line</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="melt" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Melt</title>
+        <timeline active="30" passive="60"/>
+    </operation>
+    
+    <operation name="fold" min-inputs="2" min-outputs="1">
+        <title>Fold</title>
+        <timeline active="120" passive="0"/>
+    </operation>
+    
+    <operation name="boil" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Boil</title>
+        <timeline active="30" passive="200"/>
+    </operation>
+    
+    <operation name="soak" min-inputs="2" min-outputs="1">
+        <title>Soak</title>
+        <timeline active="60" passive="120"/>
+    </operation>
+    
+    <operation name="whip" min-inputs="1" max-inputs="1" min-outputs="1">
+        <title>Whip</title>
+        <timeline active="300" passive="0"/>
+    </operation>
+    
+    <operation name="mix-in-steps" min-inputs="2" min-outputs="1">
+        <title>Mix in steps</title>
+        <timeline active="10" passive="0"/>
+    </operation>
+    
+</operations>

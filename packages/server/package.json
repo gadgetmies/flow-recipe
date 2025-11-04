@@ -4,6 +4,7 @@
     "private": true,
     "homepage": ".",
     "dependencies": {
+      "@xmldom/xmldom": "^0.8.10",
       "better-sqlite3": "^11.0.0",
       "cors": "^2.8.5",
       "express": "^4.18.2",

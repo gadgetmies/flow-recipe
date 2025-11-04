@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const { initDatabase, getDatabase } = require('./database');
 
 const app = express();
@@ -30,13 +31,57 @@ app.use(cors({
 }));
 app.use(express.json());
 
+app.get('/api/recipes/:recipeName', (req, res) => {
+  const recipeName = req.params.recipeName;
+  const recipePath = path.join(__dirname, 'recipes', `${recipeName}.xml`);
+  
+  if (fs.existsSync(recipePath)) {
+    res.setHeader('Content-Type', 'application/xml');
+    res.sendFile(recipePath);
+  } else {
+    res.status(404).json({ error: 'Recipe not found' });
+  }
+});
+
+app.post('/api/sessions', (req, res) => {
+  try {
+    const { sessionId, recipeName } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID is required' });
+    }
+
+    const recipeToStore = recipeName || 'bday-cake';
+    const existingSession = db.prepare(`SELECT id FROM sessions WHERE id = ?`).get(sessionId);
+    
+    if (existingSession) {
+      return res.status(409).json({ error: 'Session already exists' });
+    }
+
+    db.prepare(
+      `INSERT INTO sessions (id, created_at, recipe_name) VALUES (?, ?, ?)`
+    ).run(sessionId, new Date().toISOString(), recipeToStore);
+
+    res.status(201).json({ 
+      sessionId, 
+      recipeName: recipeToStore,
+      message: 'Session created successfully' 
+    });
+  } catch (error) {
+    console.error('Error creating session:', error);
+    res.status(500).json({ error: 'Failed to create session' });
+  }
+});
+
 const clientBuildPath = path.join(__dirname, '../../client/build');
-const fs = require('fs');
 
 if (fs.existsSync(clientBuildPath)) {
   app.use(express.static(clientBuildPath));
   
   app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
     res.sendFile(path.join(clientBuildPath, 'index.html'));
   });
 } else if (process.env.NODE_ENV === 'production') {
@@ -52,11 +97,19 @@ io.on('connection', (socket) => {
   socket.on('joinSession', async ({ sessionId, participantId, name }) => {
     console.log('joinSession', { sessionId, participantId, name })
     try {
-      socket.join(sessionId);
+      const existingSession = db.prepare(`SELECT id, recipe_name FROM sessions WHERE id = ?`).get(sessionId);
+      
+      if (!existingSession) {
+        socket.emit('error', { message: 'Session not found' });
+        return;
+      }
 
-      db.prepare(
-        `INSERT OR IGNORE INTO sessions (id, created_at) VALUES (?, ?)`
-      ).run(sessionId, new Date().toISOString());
+      socket.join(sessionId);
+      
+      const sessionData = db.prepare(`SELECT recipe_name FROM sessions WHERE id = ?`).get(sessionId);
+      if (sessionData && sessionData.recipe_name) {
+        socket.emit('recipeName', sessionData.recipe_name);
+      }
 
       const participant = {
         id: participantId,
@@ -102,7 +155,7 @@ io.on('connection', (socket) => {
         .all(sessionId)
         .map((row) => row.name);
 
-      io.to(sessionId).emit('helpRequests', helpRequests);
+      socket.emit('helpRequests', helpRequests);
 
       console.log(`Participant ${participantId} joined session ${sessionId}`);
     } catch (error) {
