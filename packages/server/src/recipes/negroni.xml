@@ -6,7 +6,7 @@
         <ingredient id="campari">Campari</ingredient>
         <ingredient id="sweet-vermouth">sweet Vermouth</ingredient>
         <ingredient id="orange-bitters">orange bitters</ingredient>
-        <ingredient id="ice">ice</ingredient>
+        <ingredient id="ice-cubes">ice cubes</ingredient>
         <ingredient id="orange-peel">orange peel</ingredient>
         <ingredient id="large-ice-cube">large ice cube</ingredient>
     </ingredients>
@@ -17,6 +17,17 @@
         <tool id="rocks-glass">rocks glass</tool>
     </tools>
     <tasks>
+        <task operation="fill">
+            <instructions>
+                Fill the
+                <tool ref="mixing-glass"/>
+                with
+                <input ref="ice-cubes"/>
+            </instructions>
+            <outputs>
+                <output id="filled-mixing-glass">mixing glass with ice</output>
+            </outputs>
+        </task>
         <task operation="measure">
             <options>
                 <option name="amount">
@@ -25,9 +36,10 @@
             </options>
             <inputs>
                 <input ref="rum"/>
+                <input ref="filled-mixing-glass"/>
             </inputs>
             <outputs>
-                <output id="measured-rum">rum</output>
+                <output id="measured-rum">rum in mixing glass</output>
             </outputs>
         </task>
         <task operation="measure">
@@ -38,9 +50,10 @@
             </options>
             <inputs>
                 <input ref="campari"/>
+                <input ref="measured-rum"/>
             </inputs>
             <outputs>
-                <output id="measured-campari">Campari</output>
+                <output id="measured-campari">ingredients in mixing glass</output>
             </outputs>
         </task>
         <task operation="measure">
@@ -51,9 +64,10 @@
             </options>
             <inputs>
                 <input ref="sweet-vermouth"/>
+                <input ref="measured-campari"/>
             </inputs>
             <outputs>
-                <output id="measured-vermouth">sweet vermouth</output>
+                <output id="measured-vermouth">ingredients in mixing glass</output>
             </outputs>
         </task>
         <task operation="measure">
@@ -64,26 +78,10 @@
             </options>
             <inputs>
                 <input ref="orange-bitters"/>
+                <input ref="measured-vermouth"/>
             </inputs>
             <outputs>
-                <output id="measured-bitters">orange bitters</output>
-            </outputs>
-        </task>
-        <task operation="mix">
-            <instructions>
-                Combine
-                <input ref="measured-rum"/>,
-                <input ref="measured-campari"/>,
-                <input ref="measured-vermouth"/>,
-                and
-                <input ref="measured-bitters"/>
-                in a
-                <tool ref="mixing-glass"/>
-                with
-                <input ref="ice"/>
-            </instructions>
-            <outputs>
-                <output id="combined-negroni">negroni mixture</output>
+                <output id="ingredients-in-mixing-glass">ingredients in mixing glass</output>
             </outputs>
         </task>
         <task operation="stir">
@@ -91,7 +89,7 @@
                 <tool ref="bar-spoon" reserved="true"/>
             </tools>
             <inputs>
-                <input ref="combined-negroni"/>
+                <input ref="ingredients-in-mixing-glass"/>
             </inputs>
             <outputs>
                 <output id="stirred-negroni">stirred negroni</output>
