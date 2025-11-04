@@ -48,6 +48,7 @@ import SettingsIcon from '@mui/icons-material/Settings'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import ChecklistIcon from '@mui/icons-material/Checklist'
 import WavingHandIcon from '@mui/icons-material/WavingHand'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import { pink, purple } from '@mui/material/colors'
 
 const queryParams = new Proxy(new URLSearchParams(window.location.search), {
@@ -127,6 +128,8 @@ function Settings({
   isHost,
   connectionId,
   recipeName,
+  scale,
+  onScaleChange,
 }) {
   return (
     <Box paddingBottom={9}>
@@ -159,6 +162,39 @@ function Settings({
                     </ListItem>
                   ))}
             </List>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent>
+            <Typography variant="h6">Options</Typography>
+            {isHost ? (
+              <TextField
+                name="scale"
+                label="Scale"
+                type="number"
+                inputProps={{
+                  min: 1,
+                  step: 1,
+                  onInput: (e) => {
+                    console.log('onScaleChange', e.target.value)
+                    const newScale = parseInt(e.target.value)
+                    if (!isNaN(newScale) && newScale > 0) {
+                      onScaleChange(newScale)
+                    }
+                  },
+                }}
+                value={scale}
+                onChange={(e) => {
+                  console.log('onScaleChange', e.target.value)
+                  const newScale = parseInt(e.target.value)
+                  if (!isNaN(newScale) && newScale > 0) {
+                    onScaleChange(newScale)
+                  }
+                }}
+              />
+            ) : (
+              <Typography>Scale: {scale}</Typography>
+            )}
           </CardContent>
         </Card>
         <Card
@@ -246,7 +282,7 @@ function Task(props) {
       <CardContent>
         <Typography variant="h4" gutterBottom>
           {task?.title} {isCurrent && '👈'}
-          {isDone && '✅'}
+          {isDone && <CheckCircleIcon sx={{ verticalAlign: 'middle', ml: 1, color: 'success.main' }} />}
         </Typography>
         <Stack spacing={2}>
           {isCurrent && !inputsReady && (
@@ -544,6 +580,7 @@ function App() {
   const [completedTasks, _setCompletedTasks] = useState(completedTasksRef.current)
   const [tasksInProgress, setTasksInProgress] = useState(settings.tasksInProgress || [])
   const [timers, setTimers] = useState([])
+  const [scale, setScale] = useState(1)
 
   const helpRequestsRef = useRef(new Set())
   const [helpRequests, _setHelpRequests] = useState(helpRequestsRef.current)
@@ -791,6 +828,11 @@ function App() {
       setHelpRequests(new Set(requests))
     })
 
+    socket.on('scale', (scaleValue) => {
+      console.log('Received scale from server:', scaleValue)
+      setScale(scaleValue || 1)
+    })
+
     socket.on('error', (error) => {
       console.error('Socket error:', error)
       setErrorMessage(error.message || 'An error occurred')
@@ -804,6 +846,17 @@ function App() {
       socket.disconnect()
     }
   }, [name, findNextTask, scrollToIndex])
+
+  const handleScaleChange = (newScale) => {
+    console.log('handleScaleChange', newScale)
+    if (socketRef.current && isHost) {
+      socketRef.current.emit('updateScale', {
+        sessionId,
+        participantId,
+        scale: newScale,
+      })
+    }
+  }
 
   const updateName = (newName) => {
     if (socketRef.current) {
@@ -846,11 +899,11 @@ function App() {
   }, [recipe])
 
   useEffect(() => {
-    if (!recipe) {
+    if (timelines.length === 0 || timelines.every(t => t.length === 0)) {
       return
     }
-    setShoppingList(calculateShoppingList(recipe))
-  }, [recipe])
+    setShoppingList(calculateShoppingList(timelines))
+  }, [timelines])
 
   useEffect(() => {
     if (!recipe || connections.length < 2) {
@@ -867,7 +920,7 @@ function App() {
     let xPathResult = recipe.evaluate('(//task)', recipe, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null)
     for (let i = 0; i < xPathResult.snapshotLength; ++i) {
       const node = xPathResult.snapshotItem(i)
-      expandNode(recipe, node)
+      expandNode(recipe, node, scale)
     }
 
     xPathResult = recipe.evaluate(
@@ -910,7 +963,7 @@ function App() {
     // TODO: The pour operation is duplicated in the timeline!
     scheduleItemsInTimelines(
       recipe,
-      [{ uuid: finalOutputId, task: lastTask, amountsLeft: { [finalOutputId]: 1 } /*TODO: scale*/ }],
+      [{ uuid: finalOutputId, task: lastTask, amountsLeft: { [finalOutputId]: scale } }],
       newTimelines,
       0
     )
@@ -932,6 +985,7 @@ function App() {
     console.log({ newTimelines })
 
     setTimelines(newTimelines)
+    setShoppingList(calculateShoppingList(newTimelines))
     const startedTasks = [...completedTasksRef.current, ...tasksInProgress]
     if (isHost) {
       // TODO: remove duplication
@@ -960,7 +1014,7 @@ function App() {
     }
 
     setSetupDone(true)
-  }, [recipe, connections, concatCompletedTasks, tasksInProgress])
+  }, [recipe, connections, concatCompletedTasks, tasksInProgress, scale])
 
   const dependencyGraph = timelines.reduce(
     (g, timeline) => {
@@ -1074,6 +1128,8 @@ function App() {
                     isHost,
                     connectionId: ownId,
                     recipeName,
+                    scale,
+                    onScaleChange: handleScaleChange,
                   }}
                 />
               )}

@@ -109,6 +109,7 @@
                                                             <xs:attribute name="reserved" type="xs:boolean"/>
                                                             <xs:attribute name="name" type="xs:string"/>
                                                             <xs:attribute name="reusable" type="xs:boolean"/>
+                                                            <xs:attribute name="amount" type="xs:decimal" default="1"/>
                                                         </xs:complexType>
                                                     </xs:element>
                                                 </xs:sequence>
@@ -143,6 +144,7 @@
                                                                 <xs:attribute name="ref" type="xs:string" use="required"/>
                                                                 <xs:attribute name="name" type="xs:string"/>
                                                                 <xs:attribute name="reusable" type="xs:boolean"/>
+                                                                <xs:attribute name="amount" type="xs:decimal" default="1"/>
                                                             </xs:complexType>
                                                         </xs:element>
                                                     </xs:choice>

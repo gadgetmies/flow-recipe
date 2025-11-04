@@ -34,19 +34,19 @@ function getOperationForNode(node) {
   return operation
 }
 
-export function expandNode(graph, node) {
+export function expandNode(graph, node, scale) {
   const operation = getOperationForNode(node)
   let expanded = node
   if (operation.expand && node.getAttribute('expanded') !== 'true') {
     log('Expanding node', node)
-    const tasks = operation.expand(graph, node)
+    const tasks = operation.expand(graph, node, scale)
     node.remove()
     const tasksElement = graph.getElementsByTagName('tasks')[0]
     log('expanded', ...tasks)
     tasks.forEach((task) => tasksElement.append(task))
     const [last] = tasks.splice(-1, 1)
     last.setAttribute('expanded', 'true')
-    tasks.forEach((node) => expandNode(graph, node))
+    tasks.forEach((node) => expandNode(graph, node, scale))
     expanded = last
   }
 
@@ -54,7 +54,7 @@ export function expandNode(graph, node) {
 }
 
 // TODO: why are all inputs processed twice?
-function calculateDependencies(graph, task, timelines, previousDependencies) {
+function calculateDependencies(graph, task, timelines, previousDependencies, scale = 1) {
   // Does this need to be called for each output? Should it not be called just for the task?
   // The amount in the current task does not affect the scheduling at this point (i.e. the output being processed when this function is called)
 
@@ -66,7 +66,7 @@ function calculateDependencies(graph, task, timelines, previousDependencies) {
     let itemsWithAmountsLeft = undefined // This only counts the inputs, not the scheduled output.
     // Does that however mean that there are always the correct amount of outputs requested and thus counting there is not necessary?
     const inputId = input.getAttribute('ref')
-    let amountNeeded = input.getAttribute('amount') || 1
+    let amountNeeded = (input.getAttribute('amount') || 1) * scale
     const producerOutput = graph.getElementById(inputId) // output = output of dependency = producer
 
     /*
@@ -171,13 +171,21 @@ export function scheduleItemsInTimelines(graph, tasksToSchedule, timelines, roun
   for (const { uuid, task, amountsLeft } of tasksToSchedule) {
     log('Processing', task)
     const operation = getOperationForNode(task)
-    const operationTimelineItem = operation.timeline(task)
+    
+    const outputs = getOutputs(task)
+    const totalOutputAmount = outputs.reduce((sum, output) => {
+      const outputId = output.getAttribute('id')
+      return sum + (amountsLeft[outputId] || 0)
+    }, 0)
+    const scale = Math.max(1, totalOutputAmount)
+    
+    const operationTimelineItem = operation.timeline(task, scale)
     const title = operation.title(task)
 
     log('Calculating timeline')
 
     // TODO: Sort operations by longest passive time?
-    const dependenciesForTask = calculateDependencies(graph, task, timelines, dependenciesToSchedule)
+    const dependenciesForTask = calculateDependencies(graph, task, timelines, dependenciesToSchedule, scale)
     dependenciesToSchedule.push(...dependenciesForTask.filter(({ scheduled }) => !scheduled))
 
     /*

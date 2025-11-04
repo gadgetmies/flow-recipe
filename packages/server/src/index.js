@@ -59,7 +59,7 @@ app.post('/api/sessions', (req, res) => {
     }
 
     db.prepare(
-      `INSERT INTO sessions (id, created_at, recipe_name) VALUES (?, ?, ?)`
+      `INSERT INTO sessions (id, created_at, recipe_name, scale) VALUES (?, ?, ?, 1)`
     ).run(sessionId, new Date().toISOString(), recipeToStore);
 
     res.status(201).json({ 
@@ -106,9 +106,12 @@ io.on('connection', (socket) => {
 
       socket.join(sessionId);
       
-      const sessionData = db.prepare(`SELECT recipe_name FROM sessions WHERE id = ?`).get(sessionId);
-      if (sessionData && sessionData.recipe_name) {
-        socket.emit('recipeName', sessionData.recipe_name);
+      const sessionData = db.prepare(`SELECT recipe_name, scale FROM sessions WHERE id = ?`).get(sessionId);
+      if (sessionData) {
+        if (sessionData.recipe_name) {
+          socket.emit('recipeName', sessionData.recipe_name);
+        }
+        socket.emit('scale', sessionData.scale || 1);
       }
 
       const participant = {
@@ -234,6 +237,27 @@ io.on('connection', (socket) => {
       io.to(sessionId).emit('helpRequests', helpRequests);
     } catch (error) {
       console.error('Error handling help request:', error);
+    }
+  });
+
+  socket.on('updateScale', ({ sessionId, participantId, scale }) => {
+    try {
+      if (participantId !== '0') {
+        socket.emit('error', { message: 'Only the host can update the scale' });
+        return;
+      }
+
+      const scaleValue = parseFloat(scale);
+      if (isNaN(scaleValue) || scaleValue <= 0) {
+        socket.emit('error', { message: 'Invalid scale value' });
+        return;
+      }
+
+      db.prepare(`UPDATE sessions SET scale = ? WHERE id = ?`).run(scaleValue, sessionId);
+      io.to(sessionId).emit('scale', scaleValue);
+    } catch (error) {
+      console.error('Error updating scale:', error);
+      socket.emit('error', { message: 'Failed to update scale' });
     }
   });
 

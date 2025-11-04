@@ -1,6 +1,6 @@
 import {
   findIngredientWithId,
-  getChildren,
+  getInputs,
   getNumericValueFromOption,
   getOptions,
   getUnitFromOption
@@ -18,36 +18,49 @@ function getElementName(element) {
   return textContent || null
 }
 
-export function calculateShoppingList(recipe) {
-  return getChildren(recipe, "task[operation='measure'] inputs input")
-    .map((input) => {
-      const ingredient = findIngredientWithId(
-        recipe,
-        input.getAttribute("ref")
-      );
-      const options = getOptions(input.parentNode.parentNode);
-      if (ingredient) {
-        const name = getElementName(ingredient);
-        const unit = getUnitFromOption("amount", options);
-        const amount = getNumericValueFromOption("amount", options);
-        return {
-          name,
-          amount,
-          unit,
-        };
-      } else {
-        return null;
+export function calculateShoppingList(timelines) {
+  const ingredientAmounts = {}
+  
+  timelines.forEach((timeline) => {
+    timeline.forEach((item) => {
+      if (item.task && item.task.getAttribute('operation') === 'measure') {
+        const inputs = getInputs(item.task)
+        const options = getOptions(item.task)
+        
+        inputs.forEach((input) => {
+          const ingredientId = input.getAttribute('ref')
+          const ingredient = findIngredientWithId(item.task.ownerDocument, ingredientId)
+          
+          if (ingredient) {
+            const name = getElementName(ingredient)
+            const unit = getUnitFromOption('amount', options)
+            const amount = getNumericValueFromOption('amount', options)
+            
+            if (name && amount !== null && unit) {
+              const key = `${name}-${unit}`
+              if (!ingredientAmounts[key]) {
+                ingredientAmounts[key] = {
+                  name,
+                  amount: 0,
+                  unit,
+                }
+              }
+              ingredientAmounts[key].amount += amount
+            }
+          }
+        })
       }
     })
-    .filter((i) => i)
-    .reduce((acc, {amount, name, unit}) => {
-      // TODO: calculate multiplier for unit
-      return {
-        ...acc,
-        [name]: {
-          amount: amount + (acc[name]?.amount ?? 0),
-          unit,
-        },
-      };
-    }, {});
+  })
+  
+  return Object.values(ingredientAmounts).reduce((acc, {amount, name, unit}) => {
+    if (!acc[name]) {
+      acc[name] = {
+        amount: 0,
+        unit,
+      }
+    }
+    acc[name].amount += amount
+    return acc
+  }, {})
 }

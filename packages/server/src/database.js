@@ -12,7 +12,8 @@ function initDatabase() {
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       created_at TEXT NOT NULL,
-      recipe_name TEXT
+      recipe_name TEXT,
+      scale REAL DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS participants (

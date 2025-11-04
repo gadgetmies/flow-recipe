@@ -383,7 +383,8 @@
             <instructions>
                 Grease the sides of the
                 <tool ref="silicone-cake-mould"
-                      reserved="true"/> <!-- this does not scale -> when increasing the output, the steps need to be multiplied -->
+                      reserved="true"
+                      amount="1"/>
                 with
                 <input ref="margarine"/> <!-- TODO: specify amount? -->
                 and line the base with <!-- TODO: this should be another task? -->
@@ -646,7 +647,7 @@
             <instructions>
                 Transfer the
                 <input ref="frosted-cake"/>
-                onto a<tool ref="plate"/>.
+                onto a<tool ref="plate" amount="1"/>.
             </instructions>
             <outputs>
                 <output id="cake-on-plate">cake on a plate</output>

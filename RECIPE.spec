@@ -232,6 +232,11 @@ If there are amounts for ingredients that are not liquids, but are measured by v
    - Add `reserved="true"` (boolean) if the tool is used for the entire duration (e.g., bowl during mixing)
    - Add `reusable="true"` (boolean) if the tool can be reused after this task
    - Add optional `name` attribute for tool identification
+   - Add `amount` attribute (decimal, defaults to 1) for tools that scale with output:
+     - **Use `amount="1"`** (or omit, as it's default) for tools consumed per output: serving glasses, plates, cake molds, baking pans, individual containers
+     - **Omit `amount` and use `reusable="true"`** for reusable tools: mixing bowls, measuring tools, utensils, equipment
+     - Tools in `<outputs>` section typically have `amount="1"` (per output)
+     - Tools in `<tools>` section with `reusable="true"` don't need/use `amount` for scaling
    - Include all tools mentioned or implied in the step
    - Tools can also appear in `<outputs>` section (see outputs below)
    - **Important**: If a tool is referenced in the `<instructions>` element (using `<tool ref="..."/>`), do NOT also list it in the `<tools>` container

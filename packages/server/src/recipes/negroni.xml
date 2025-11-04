@@ -7,7 +7,7 @@
         <ingredient id="sweet-vermouth">sweet Vermouth</ingredient>
         <ingredient id="orange-bitters">orange bitters</ingredient>
         <ingredient id="ice-cubes">ice cubes</ingredient>
-        <ingredient id="orange-peel">orange peel</ingredient>
+        <ingredient id="orange">orange</ingredient>
         <ingredient id="large-ice-cube">large ice cube</ingredient>
     </ingredients>
     <tools>
@@ -15,6 +15,7 @@
         <tool id="bar-spoon">bar spoon</tool>
         <tool id="strainer">strainer</tool>
         <tool id="rocks-glass">rocks glass</tool>
+        <tool id="peeler">peeler</tool>
     </tools>
     <tasks>
         <task operation="fill">
@@ -26,6 +27,17 @@
             </instructions>
             <outputs>
                 <output id="filled-mixing-glass">mixing glass with ice</output>
+            </outputs>
+        </task>
+        <task operation="peel">
+            <inputs>
+                <input ref="orange"/>
+            </inputs>
+            <tools>
+                <tool ref="peeler"/>
+            </tools>
+            <outputs>
+                <output id="orange-peel" amount="6">orange peel</output>
             </outputs>
         </task>
         <task operation="measure">
@@ -100,7 +112,7 @@
                 Strain
                 <input ref="stirred-negroni"/>
                 into
-                <tool ref="rocks-glass"/>
+                <tool ref="rocks-glass" amount="1"/>
                 over
                 <input ref="large-ice-cube"/>
                 using a
