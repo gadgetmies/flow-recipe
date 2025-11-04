@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd">
+    <title>Simple Butter Sandwich</title>
+    <ingredients>
+        <ingredient id="bread">bread</ingredient>
+        <ingredient id="butter">butter</ingredient>
+        <ingredient id="cucumber">cucumber</ingredient>
+        <ingredient id="tomato">tomato</ingredient>
+    </ingredients>
+    <tools>
+        <tool id="knife">knife</tool>
+        <tool id="plate">plate</tool>
+    </tools>
+    <tasks>
+        <task operation="split">
+            <options>
+                <option name="parts">
+                    <numeric-value number="2"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="bread"/>
+            </inputs>
+            <tools>
+                <tool ref="knife" reusable="true"/>
+            </tools>
+            <outputs>
+                <output id="bread-slice">bread slices</output>
+            </outputs>
+        </task>
+        <task operation="spread">
+            <inputs>
+                <input ref="butter"/>
+                <input ref="bread-slice"/>
+            </inputs>
+            <tools>
+                <tool ref="knife" reusable="true"/>
+            </tools>
+            <outputs>
+                <output id="buttered-slice">buttered bread slice</output>
+            </outputs>
+        </task>
+        <task operation="slice">
+            <options>
+                <option name="parts">
+                    <numeric-value number="6"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="cucumber"/>
+            </inputs>
+            <tools>
+                <tool ref="knife" reusable="true"/>
+            </tools>
+            <outputs>
+                <output id="cucumber-slices">cucumber slices</output>
+            </outputs>
+        </task>
+        <task operation="slice">
+            <options>
+                <option name="parts">
+                    <numeric-value number="10"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="tomato"/>
+            </inputs>
+            <tools>
+                <tool ref="knife" reusable="true"/>
+            </tools>
+            <outputs>
+                <output id="tomato-slices">tomato slices</output>
+            </outputs>
+        </task>
+        <task operation="place">
+            <instructions>
+                Place the
+                <input ref="buttered-slice"/>
+                on the
+                <tool ref="plate"/>
+            </instructions>
+            <outputs>
+                <output id="sandwich-base">sandwich base</output>
+            </outputs>
+        </task>
+        <task operation="add-on-top">
+            <inputs>
+                <input ref="sandwich-base"/>
+                <input ref="cucumber-slices"/>
+            </inputs>
+            <outputs>
+                <output id="sandwich-with-cucumber">sandwich with cucumber</output>
+            </outputs>
+        </task>
+        <task operation="add-on-top">
+            <inputs>
+                <input ref="sandwich-with-cucumber"/>
+                <input ref="tomato-slices"/>
+            </inputs>
+            <outputs>
+                <output id="sandwich-with-tomato">butter sandwich with cucumber and tomato</output>
+            </outputs>
+        </task>
+        <task operation="stack">
+            <inputs>
+                <input ref="sandwich-with-tomato"/>
+                <input ref="bread-slice"/>
+            </inputs>
+            <outputs>
+                <output id="sandwich">sandwich with cucumber and tomato</output>
+            </outputs>
+        </task>
+    </tasks>
+</recipe>

@@ -288,7 +288,7 @@ export const operations = {
     instruction: (recipe, node) => {
       return `Enjoy the ${getFirstInputName(recipe, node)}!`
     },
-    timeline: (node, scale = 1) => ({ active: 180, passive: 0 }),
+    timeline: (node) => ({ active: 180, passive: 0 }),
     title: (node) => 'Enjoy',
   },
   decorate: {
@@ -346,6 +346,16 @@ export const operations = {
       }
     },
     title: (node) => 'Bake',
+  },
+  place: {
+    timeline: (node, scale = 1) => ({ active: 120 * scale, passive: 0 }),
+    title: (node) => 'Place',
+    instruction: (recipe, node) => {
+      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
+      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstToolName = getNameForToolAtIndex(recipe, node, 0)
+      return `Place ${firstInputName} on ${firstToolName || secondInputName}`
+    },
   },
   split: {
     timeline: (node, scale = 1) => {
@@ -484,6 +494,16 @@ ${node.querySelector('options').outerHTML}
     },
     timeline: (node, scale = 1) => ({ active: 60 * Math.sqrt(scale), passive: 0 }),
     title: (node) => 'Sprinkle',
+  },
+  slice: {
+    timeline: (node, scale = 1) => ({ active: 60 * Math.sqrt(scale), passive: 0 }),
+    title: (node) => 'Slice',
+    instruction: (recipe, node) => {
+      const options = getOptions(node)
+      const parts = `${getNumericValueFromOption('parts', options)}`
+      const toolName = getNameForToolAtIndex(recipe, node, 0)
+      return `Slice ${getFirstInputName(recipe, node)} into ${parts} parts with ${toolName}`
+    },
   },
   grate: {
     instruction: (recipe, node) => {

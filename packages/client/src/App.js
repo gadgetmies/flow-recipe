@@ -19,7 +19,7 @@ import { calculateShoppingList } from './shoppingListGenerator'
 import { expandNode, scheduleItemsInTimelines } from './timelineScheduler'
 import { v4 as uuidV4 } from 'uuid'
 import { io } from 'socket.io-client'
-// import { ForceGraph2D } from 'react-force-graph'
+import ForceGraph2D from 'react-force-graph-2d'
 import * as R from 'ramda'
 import QRCodeSVG from 'qrcode.react'
 import {
@@ -49,6 +49,7 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import ChecklistIcon from '@mui/icons-material/Checklist'
 import WavingHandIcon from '@mui/icons-material/WavingHand'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import { pink, purple } from '@mui/material/colors'
 
 const queryParams = new Proxy(new URLSearchParams(window.location.search), {
@@ -252,6 +253,67 @@ function Shopping({ shoppingList }) {
           ))}
         </List>
       ) : null}
+    </Box>
+  )
+}
+
+function GraphView({ dependencyGraph, completedTasks }) {
+  const graphRef = useRef()
+  
+  if (!dependencyGraph || dependencyGraph.nodes.length === 0) {
+    return (
+      <Box padding={2}>
+        <Typography>No graph data available</Typography>
+      </Box>
+    )
+  }
+
+  return (
+    <Box sx={{ height: 'calc(100vh - 120px)', width: '100%' }}>
+      <ForceGraph2D
+        ref={graphRef}
+        graphData={dependencyGraph}
+        nodeLabel={(node) => node.title || node.id}
+        nodeColor={(node) => completedTasks.includes(node.id) ? '#1ee9a5' : '#e91e63'}
+        linkColor={() => 'rgba(0,0,0,0.2)'}
+        linkDirectionalArrowLength={6}
+        linkDirectionalArrowRelPos={1}
+        linkDirectionalArrowColor={() => 'rgba(0,0,0,0.3)'}
+        nodeVal={(node) => {
+          const incomingLinks = dependencyGraph.links.filter(l => l.target === node.id).length
+          return Math.max(3, Math.sqrt(incomingLinks + 1) * 3)
+        }}
+        cooldownTicks={100}
+        onNodeClick={(node) => {
+          const nodeElement = document.getElementById('task' + node.id)
+          if (nodeElement) {
+            nodeElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }}
+        nodeCanvasObject={(node, ctx, globalScale) => {
+          const label = node.title || node.id
+          const fontSize = 12 / globalScale
+          ctx.font = `${fontSize}px Sans-Serif`
+          const textWidth = ctx.measureText(label).width
+          const bckgDimensions = [textWidth, fontSize].map((n) => n + fontSize * 0.2)
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+          ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
+
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'middle'
+          ctx.fillStyle = '#333'
+          ctx.fillText(label, node.x, node.y)
+
+          node.__bckgDimensions = bckgDimensions
+        }}
+        nodePointerAreaPaint={(node, color, ctx) => {
+          ctx.fillStyle = color
+          const bckgDimensions = node.__bckgDimensions
+          bckgDimensions &&
+            ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
+        }}
+      />
     </Box>
   )
 }
@@ -649,7 +711,6 @@ function App() {
   }, [tasksInProgress])
 
   const findNextTask = useCallback((timeline) => {
-    debugger
     if (!timelinesRef.current?.[timeline]) return -1;
     const startedTasks = [...completedTasksRef.current, ...tasksInProgressRef.current]
     const nextTask = R.findLastIndex((taskItem) => !startedTasks.includes(taskItem.uuid), timelinesRef.current[timeline])
@@ -1135,6 +1196,7 @@ function App() {
               )}
               {currentState === 'shopping' && <Shopping {...{ shoppingList }} />}
               {currentState === 'tools' && <></>}
+              {currentState === 'graph' && <GraphView {...{ dependencyGraph, completedTasks }} />}
               {currentState === 'cooking' && (
                 <>
                   <Box sx={{ pb: 20 }}>
@@ -1265,6 +1327,7 @@ function App() {
                 <BottomNavigationAction label="Shopping" value="shopping" icon={<ShoppingCartIcon />} />
                 {/*<BottomNavigationAction label="Tools" value="tools" icon={<HandymanIcon />} />*/}
                 <BottomNavigationAction label="Tasks" value="cooking" icon={<ChecklistIcon />} />
+                <BottomNavigationAction label="Graph" value="graph" icon={<AccountTreeIcon />} />
               </BottomNavigation>
             </Paper>
           </>

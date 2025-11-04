@@ -151,7 +151,7 @@ The goal is to create a file containing an XML recipe definition that follows th
 #### Step 4.2: Recognize Operations
 
 1. **Review available operations** in `operations.js`:
-   - Available operations include: measure, heat, preheat-oven, crumble, mix, incorporate, mix-in-steps, wait, raise, batch, fill, pour, spherify, separate, grease, stir, soften, ball, enjoy, decorate, cream, stack, bake-in-microwave, bake-in-oven, split, put-into-oven, take-out-of-oven, brush, sprinkle, grate, spread, transfer, beat, place-on-sheet, chill, spoon, cover, level, add-on-top, press, line, melt, fold, boil, soak, whip
+   - Available operations include: measure, heat, preheat-oven, crumble, mix, incorporate, mix-in-steps, wait, raise, batch, fill, pour, spherify, separate, grease, stir, soften, ball, decorate, cream, stack, bake-in-microwave, bake-in-oven, split, put-into-oven, take-out-of-oven, brush, sprinkle, grate, spread, transfer, beat, place-on-sheet, chill, spoon, cover, level, add-on-top, press, line, melt, fold, boil, soak, whip
 
 2. **Match each step to an operation**:
    - Analyze the verb/action in the step (e.g., "mix", "bake", "heat", "pour")
@@ -253,7 +253,7 @@ If there are amounts for ingredients that are not liquids, but are measured by v
    - Create unique output IDs (e.g., "measured-flour", "mixed-batter", "baked-cake")
    - Output elements contain text content (the output name/description) and have required `id` attribute
    - Use kebab-case for IDs
-   - Each task should produce at least one output (except for final consumption tasks like "enjoy")
+   - Each task should produce at least one output
    - The `<outputs>` container can contain both `<output>` elements AND `<tool>` elements
    - Tools in outputs can have `ref`, `name`, and `reusable` attributes (for tools that are produced/modified by the task)
 

@@ -151,7 +151,38 @@ function calculateDependencies(graph, task, timelines, previousDependencies, sca
     }
   }
 
-  return dependenciesToSchedule
+  const scheduled = []
+  const unscheduledByBaseUuid = new Map()
+  
+  for (const entry of dependenciesToSchedule) {
+    if (entry.scheduled) {
+      scheduled.push(entry)
+      continue
+    }
+    
+    const baseUuid = entry.uuid.split('-')[0]
+    const existing = unscheduledByBaseUuid.get(baseUuid)
+    
+    if (!existing) {
+      unscheduledByBaseUuid.set(baseUuid, {
+        ...entry,
+        uuid: baseUuid,
+      })
+    } else {
+      const mergedAmountsLeft = { ...existing.amountsLeft }
+      for (const [outputId, amount] of Object.entries(entry.amountsLeft)) {
+        mergedAmountsLeft[outputId] = (mergedAmountsLeft[outputId] || 0) + (amount || 0)
+      }
+      
+      unscheduledByBaseUuid.set(baseUuid, {
+        ...existing,
+        amountsLeft: mergedAmountsLeft,
+        uuid: baseUuid,
+      })
+    }
+  }
+  
+  return [...scheduled, ...Array.from(unscheduledByBaseUuid.values())]
 }
 
 export function scheduleItemsInTimelines(graph, tasksToSchedule, timelines, round = 0) {
