@@ -356,7 +356,7 @@ function GraphView({ dependencyGraph, completedTasks }) {
           const textWidth = ctx.measureText(label).width
           const bckgDimensions = [textWidth, fontSize].map((n) => n + fontSize * 0.2)
 
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+          ctx.fillStyle = completedTasks.includes(node.id) ? 'rgba(30, 233, 165, 0.9)' : 'rgba(255, 255, 255, 0.9)'
           ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
 
           ctx.textAlign = 'center'
