@@ -802,7 +802,16 @@ function CelebrationPopup({ open, onClose, onRestartAnimation }) {
       }}
     >
       <DialogTitle>
-        <Typography variant="h3" component="div" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+        <Typography 
+          component="div" 
+          sx={{ 
+            fontWeight: 'bold', 
+            color: 'primary.main',
+            fontSize: { xs: '1.1rem', sm: '2rem', md: '2.5rem' },
+            whiteSpace: 'nowrap',
+            px: { xs: 0.5, sm: 2 }
+          }}
+        >
           🎉 Congratulations! 🎉
         </Typography>
       </DialogTitle>
