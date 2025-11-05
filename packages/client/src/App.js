@@ -65,6 +65,7 @@ import ChecklistIcon from '@mui/icons-material/Checklist'
 import WavingHandIcon from '@mui/icons-material/WavingHand'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
+import ShareIcon from '@mui/icons-material/Share'
 import { pink, purple } from '@mui/material/colors'
 
 const getSettings = (sessionId) => JSON.parse(window.localStorage.getItem(sessionId)) || {}
@@ -109,7 +110,7 @@ const InitDialog = ({ name, setName, isSpectator: defaultIsSpectator, handlePart
                 handleParticipationStatusChange(isSpectator)
               }}
             >
-              Let's begin!
+              Join
             </Button>
           </Stack>
         </CardContent>
@@ -126,9 +127,6 @@ function Settings({
   name,
   setName,
   updateName,
-  joinSessionLink,
-  setShareLinkCopied,
-  shareLinkCopied,
   restart,
   isHost,
   connectionId,
@@ -140,7 +138,9 @@ function Settings({
   hostId,
   baseUrl,
   miseEnPlace,
-  onMiseEnPlaceChange
+  onMiseEnPlaceChange,
+  sessionStarted,
+  onStartSession
 }) {
   return (
     <Box paddingBottom={9}>
@@ -251,32 +251,20 @@ function Settings({
                 {isSpectator ? 'Join Session' : 'Leave Session'}
               </Button>
             </Stack>
-          </CardContent>
-        </Card>
-        <Card
-          padding={2}
-          color="primary"
-          variant="solid"
-          sx={{ borderRadius: 2, width: 'fit-content', backgroundColor: 'primary.main' }}
-        >
-          <CardContent>
-            <Stack justifyContent="center" alignItems="center" spacing={2}>
-              <Typography variant="h6" color="white">
-                Invite participants
-              </Typography>
-              <QRCodeSVG value={joinSessionLink} fgColor={'white'} bgColor={'transparent'} />
-              <Button
-                variant="outlined"
-                sx={{ color: 'white', borderColor: 'white' }}
-                onClick={() => {
-                  navigator.clipboard.writeText(joinSessionLink)
-                  setShareLinkCopied(true)
-                  window.setTimeout(() => setShareLinkCopied(false), 2000)
-                }}
-              >
-                {shareLinkCopied ? 'Link copied!' : 'Copy link'}
-              </Button>
-            </Stack>
+            {isHost && (
+              <Stack spacing={2} sx={{ mt: 2 }}>
+                <Typography variant="subtitle1">Session Control</Typography>
+                <Typography>Status: {sessionStarted ? 'Started' : 'Not Started'}</Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  disabled={sessionStarted || connections.filter(c => !c.isSpectator).length < 1}
+                  onClick={onStartSession}
+                >
+                  {sessionStarted ? 'Session Started' : 'Start Session'}
+                </Button>
+              </Stack>
+            )}
           </CardContent>
         </Card>
       </Stack>
@@ -308,6 +296,39 @@ function Shopping({ shoppingList }) {
           ))}
         </List>
       ) : null}
+    </Box>
+  )
+}
+
+function Invite({ joinSessionLink, setShareLinkCopied, shareLinkCopied }) {
+  return (
+    <Box paddingBottom={9} sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - 200px)' }}>
+      <Card
+        padding={2}
+        color="primary"
+        variant="solid"
+        sx={{ borderRadius: 2, width: 'fit-content', backgroundColor: 'primary.main' }}
+      >
+        <CardContent>
+          <Stack justifyContent="center" alignItems="center" spacing={2}>
+            <Typography variant="h6" color="white">
+              Join the fun!
+            </Typography>
+            <QRCodeSVG value={joinSessionLink} fgColor={'white'} bgColor={'transparent'} />
+            <Button
+              variant="outlined"
+              sx={{ color: 'white', borderColor: 'white' }}
+              onClick={() => {
+                navigator.clipboard.writeText(joinSessionLink)
+                setShareLinkCopied(true)
+                window.setTimeout(() => setShareLinkCopied(false), 2000)
+              }}
+            >
+              {shareLinkCopied ? 'Link copied!' : 'Copy link'}
+            </Button>
+          </Stack>
+        </CardContent>
+      </Card>
     </Box>
   )
 }
@@ -414,6 +435,7 @@ function Task(props) {
     isHost,
     isSpectator,
     formatTime,
+    sessionStarted,
   } = props
   const id = 'task' + task.uuid
   return (
@@ -454,7 +476,7 @@ function Task(props) {
           <p>{getInstructions(recipe, task)}</p>
           {!isDone && <Typography variant="subtitle2">Estimated task duration: {formatTime(task.duration)}</Typography>}
           {/* isCurrent && <Typography variant="subtitle2">Time until finished: {timeUntilFinished}</Typography> */}
-          {!isDone && (isHost || (!isSpectator && isCurrent && inputsReady)) && (
+          {!isDone && (isHost || (!isSpectator && isCurrent && inputsReady && sessionStarted)) && (
             <div
               style={{
                 display: 'flex',
@@ -804,6 +826,70 @@ function CelebrationPopup({ open, onClose, onRestartAnimation }) {
   )
 }
 
+function GoPopup({ open }) {
+  return (
+    <Dialog
+      open={open}
+      maxWidth="sm"
+      fullWidth
+      disableEscapeKeyDown
+      hideBackdrop={false}
+      PaperProps={{
+        sx: {
+          borderRadius: 4,
+          textAlign: 'center',
+          padding: 4,
+          position: 'relative',
+          zIndex: 1500,
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          animation: open ? 'goBounce 0.6s ease-out' : 'none',
+          '@keyframes goBounce': {
+            '0%': {
+              transform: 'scale(0.3)',
+              opacity: 0,
+            },
+            '50%': {
+              transform: 'scale(1.1)',
+            },
+            '70%': {
+              transform: 'scale(0.9)',
+            },
+            '100%': {
+              transform: 'scale(1)',
+              opacity: 1,
+            },
+          },
+        },
+      }}
+    >
+      <DialogContent sx={{ padding: 0 }}>
+        <Typography
+          variant="h1"
+          component="div"
+          sx={{
+            fontWeight: 'bold',
+            color: 'white',
+            fontSize: { xs: '4rem', sm: '6rem', md: '8rem' },
+            textShadow: '0 4px 20px rgba(0,0,0,0.3)',
+            letterSpacing: '0.1em',
+            animation: open ? 'goPulse 1s ease-in-out infinite' : 'none',
+            '@keyframes goPulse': {
+              '0%, 100%': {
+                transform: 'scale(1)',
+              },
+              '50%': {
+                transform: 'scale(1.05)',
+              },
+            },
+          }}
+        >
+          GO!
+        </Typography>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 const theme = createTheme({
   palette: {
     background: {
@@ -871,6 +957,10 @@ function MainApp() {
   const [timers, setTimers] = useState([])
   const [scale, setScale] = useState(1)
   const [miseEnPlace, setMiseEnPlace] = useState(false)
+  const [sessionStarted, setSessionStarted] = useState(false)
+  const [showGoPopup, setShowGoPopup] = useState(false)
+  const previousSessionStartedRef = useRef(false)
+  const sessionStartedInitializedRef = useRef(false)
 
   const helpRequestsRef = useRef(new Set())
   const [helpRequests, _setHelpRequests] = useState(helpRequestsRef.current)
@@ -1007,6 +1097,9 @@ function MainApp() {
     setCelebrationShown(false)
     setAllUsersCompleted(false)
     celebrationDismissedRef.current = false
+    setShowGoPopup(false)
+    previousSessionStartedRef.current = false
+    sessionStartedInitializedRef.current = false
     if (socketRef.current) {
       socketRef.current.emit('restart', { sessionId })
     }
@@ -1141,6 +1234,19 @@ function MainApp() {
       setMiseEnPlace(miseEnPlaceValue || false)
     })
 
+    socket.on('sessionStarted', (started) => {
+      console.log('Received session started from server:', started)
+      const previousValue = previousSessionStartedRef.current
+      setSessionStarted(started)
+      previousSessionStartedRef.current = started
+      if (!sessionStartedInitializedRef.current) {
+        sessionStartedInitializedRef.current = true
+      } else if (started && !previousValue && !isSpectator && !isHost) {
+        setShowGoPopup(true)
+        setTimeout(() => setShowGoPopup(false), 2500)
+      }
+    })
+
     socket.on('error', (error) => {
       console.error('Socket error:', error)
       setErrorMessage(error.message || 'An error occurred')
@@ -1172,6 +1278,15 @@ function MainApp() {
         sessionId,
         participantId,
         miseEnPlace: enabled,
+      })
+    }
+  }
+
+  const handleStartSession = () => {
+    if (socketRef.current && isHost) {
+      socketRef.current.emit('startSession', {
+        sessionId,
+        participantId,
       })
     }
   }
@@ -1508,9 +1623,6 @@ function MainApp() {
                     name,
                     setName,
                     updateName,
-                    joinSessionLink,
-                    setShareLinkCopied,
-                    shareLinkCopied,
                     restart,
                     isHost,
                     connectionId: ownId,
@@ -1522,11 +1634,14 @@ function MainApp() {
                     hostId,
                     baseUrl,
                     miseEnPlace,
-                    onMiseEnPlaceChange: handleMiseEnPlaceChange
+                    onMiseEnPlaceChange: handleMiseEnPlaceChange,
+                    sessionStarted,
+                    onStartSession: handleStartSession
                   }}
                 />
               )}
               {currentState === 'shopping' && <Shopping {...{ shoppingList }} />}
+              {currentState === 'invite' && <Invite {...{ joinSessionLink, setShareLinkCopied, shareLinkCopied }} />}
               {currentState === 'tools' && <></>}
               {currentState === 'graph' && <GraphView {...{ dependencyGraph, completedTasks }} />}
               {currentState === 'cooking' && (
@@ -1558,11 +1673,25 @@ function MainApp() {
                               </Stack>
                             </CardContent>
                           </Card>
+                          {!sessionStarted && !isSpectator && (
+                            <Card>
+                              <CardContent>
+                                <Stack spacing={2} alignItems="center">
+                                  <Typography variant="h4" gutterBottom>
+                                    Waiting for host to start the session...
+                                  </Typography>
+                                  <Typography variant="body1">
+                                    Please wait while the host prepares to begin.
+                                  </Typography>
+                                </Stack>
+                              </CardContent>
+                            </Card>
+                          )}
                           {/*}
                         <Typography variant="h1">
                           {ownLaneSelected ? 'My tasks' : isHost ? 'Tasks' : `${selectedTimelineOwner}'s tasks`}
                         </Typography>*/}
-                          {tasks.map((task, i) => {
+                          {(sessionStarted || isSpectator || isHost) && tasks.map((task, i) => {
                             const currentTaskIndex = (isHost || isSpectator) ? i : (timelines[selectedTimeline]?.length ?? 0) - currentTask - 1
                             const isCurrentTask = !(isHost || isSpectator) && i === currentTaskIndex
                             return (
@@ -1588,6 +1717,7 @@ function MainApp() {
                                   isHost,
                                   isSpectator,
                                   formatTime,
+                                  sessionStarted,
                                   jumpToNextTask: () => {
                                     const nextTask = R.findLastIndex(
                                       (task) => ![...completedTasksRef.current, ...tasksInProgress].includes(task.uuid),
@@ -1601,7 +1731,7 @@ function MainApp() {
                               />
                             )
                           })}
-                          {(() => {
+                          {(sessionStarted || isSpectator || isHost) && (() => {
                             if (ownLane !== undefined && timelines[ownLane]) {
                               const userTimeline = timelines[ownLane]
                               if (userTimeline && userTimeline.length > 0) {
@@ -1687,6 +1817,7 @@ function MainApp() {
               >
                 <BottomNavigationAction label="Settings" value="settings" icon={<SettingsIcon />} />
                 <BottomNavigationAction label="Shopping" value="shopping" icon={<ShoppingCartIcon />} />
+                <BottomNavigationAction label="Invite" value="invite" icon={<ShareIcon />} />
                 {/*<BottomNavigationAction label="Tools" value="tools" icon={<HandymanIcon />} />*/}
                 <BottomNavigationAction label="Tasks" value="cooking" icon={<ChecklistIcon />} />
                 {isHost && <BottomNavigationAction label="Graph" value="graph" icon={<AccountTreeIcon />} />}
@@ -1733,6 +1864,7 @@ function MainApp() {
           setAnimationRestartKey(prev => prev + 1)
         }}
       />
+      <GoPopup open={showGoPopup} />
       <FoodParticleAnimation active={allUsersCompleted && celebrationShown} restartKey={animationRestartKey} />
     </ThemeProvider>
   )

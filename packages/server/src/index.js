@@ -106,13 +106,14 @@ io.on('connection', (socket) => {
 
       socket.join(sessionId);
       
-      const sessionData = db.prepare(`SELECT recipe_name, scale, mise_en_place FROM sessions WHERE session_id = ?`).get(sessionId);
+      const sessionData = db.prepare(`SELECT recipe_name, scale, mise_en_place, session_started FROM sessions WHERE session_id = ?`).get(sessionId);
       if (sessionData) {
         if (sessionData.recipe_name) {
           socket.emit('recipeName', sessionData.recipe_name);
         }
         socket.emit('scale', sessionData.scale || 1);
         socket.emit('miseEnPlace', sessionData.mise_en_place === 1);
+        socket.emit('sessionStarted', sessionData.session_started === 1);
       }
 
       const isSpectatorValue = isSpectator !== undefined ? (isSpectator ? 1 : 0) : 1;
@@ -285,13 +286,30 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('startSession', ({ sessionId, participantId }) => {
+    try {
+      if (participantId !== '0') {
+        socket.emit('error', { message: 'Only the host can start the session' });
+        return;
+      }
+
+      db.prepare(`UPDATE sessions SET session_started = ? WHERE session_id = ?`).run(1, sessionId);
+      io.to(sessionId).emit('sessionStarted', true);
+    } catch (error) {
+      console.error('Error starting session:', error);
+      socket.emit('error', { message: 'Failed to start session' });
+    }
+  });
+
   socket.on('restart', ({ sessionId }) => {
     try {
       db.prepare(`DELETE FROM completed_tasks WHERE session_id = ?`).run(sessionId);
       db.prepare(`UPDATE help_requests SET active = ? WHERE session_id = ?`).run(0, sessionId);
+      db.prepare(`UPDATE sessions SET session_started = ? WHERE session_id = ?`).run(0, sessionId);
 
       io.to(sessionId).emit('completedTasks', []);
       io.to(sessionId).emit('helpRequests', []);
+      io.to(sessionId).emit('sessionStarted', false);
     } catch (error) {
       console.error('Error restarting session:', error);
     }
@@ -316,6 +334,11 @@ io.on('connection', (socket) => {
         }));
 
       io.to(sessionId).emit('connections', participants);
+
+      const sessionData = db.prepare(`SELECT session_started FROM sessions WHERE session_id = ?`).get(sessionId);
+      if (sessionData && !isSpectator) {
+        socket.emit('sessionStarted', sessionData.session_started === 1);
+      }
     } catch (error) {
       console.error('Error updating participation status:', error);
       socket.emit('error', { message: 'Failed to update participation status' });
