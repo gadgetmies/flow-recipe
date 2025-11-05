@@ -18,6 +18,7 @@
         <tool id="square-dish">square dish</tool>
         <tool id="cover">cover</tool>
         <tool id="kitchen-scale">kitchen scale</tool>
+        <tool id="flour-sieve">flour sieve</tool>
     </tools>
     <tasks>
         <task operation="measure">
@@ -164,11 +165,14 @@
                 <output id="layer-with-cream">cream layer</output>
             </outputs>
         </task>
-        <task operation="sprinkle">
+        <task operation="dust">
             <inputs>
                 <input ref="layer-with-cream"/>
                 <input ref="cocoa-powder"/>
             </inputs>
+            <tools>
+                <tool ref="flour-sieve"/>
+            </tools>
             <outputs>
                 <output id="dusted-tiramisu">dusted tiramisu</output>
             </outputs>

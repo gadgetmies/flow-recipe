@@ -489,18 +489,15 @@ ${node.querySelector('options').outerHTML}
     timeline: (node, scale = 1) => ({ active: 60 * scale, passive: 0 }),
     title: (node) => 'Brush',
   },
-  sprinkle: {
+  dust: {
     instruction: (recipe, node) => {
-      const text = getTextInstructions(recipe, node)
-      if (text !== undefined) {
-        return text
-      }
       const firstInputName = getNameForInputAtIndex(recipe, node, 0)
       const secondInputName = getNameForInputAtIndex(recipe, node, 1)
-      return `Sprinkle ${secondInputName} over ${firstInputName}`
+      const toolName = getNameForToolAtIndex(recipe, node, 0)
+      return `Dust ${firstInputName} with ${secondInputName} using ${toolName}`
     },
     timeline: (node, scale = 1) => ({ active: 60 * Math.sqrt(scale), passive: 0 }),
-    title: (node) => 'Sprinkle',
+    title: (node) => 'Dust',
   },
   slice: {
     timeline: (node, scale = 1) => ({ active: 60 * Math.sqrt(scale), passive: 0 }),
