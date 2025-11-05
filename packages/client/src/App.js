@@ -24,6 +24,7 @@ import { io } from 'socket.io-client'
 import ForceGraph2D from 'react-force-graph-2d'
 import * as R from 'ramda'
 import QRCodeSVG from 'qrcode.react'
+import confetti from 'canvas-confetti'
 import {
   Alert,
   BottomNavigation,
@@ -35,6 +36,9 @@ import {
   Container,
   createTheme,
   CssBaseline,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   Fab,
   FormControl,
   FormControlLabel,
@@ -662,6 +666,120 @@ function Timers({
   )
 }
 
+function FoodParticleAnimation({ active, restartKey }) {
+  const foodEmojis = ['🍰', '🍪', '🎂', '🍕', '🌮', '🍔', '🥐', '🍓', '🍇', '🍎', '🥑', '🍉', '🍌', '🥝', '🍑', '🥨', '🧁', '🥧']
+  const canvasRef = useRef(null)
+  const confettiInstanceRef = useRef(null)
+
+  useEffect(() => {
+    if (!active) {
+      if (canvasRef.current && canvasRef.current.parentNode) {
+        canvasRef.current.parentNode.removeChild(canvasRef.current)
+        canvasRef.current = null
+        confettiInstanceRef.current = null
+      }
+      return
+    }
+
+    if (!canvasRef.current) {
+      const canvas = document.createElement('canvas')
+      canvas.style.position = 'fixed'
+      canvas.style.top = '0'
+      canvas.style.left = '0'
+      canvas.style.width = '100%'
+      canvas.style.height = '100%'
+      canvas.style.pointerEvents = 'none'
+      canvas.style.zIndex = '1600'
+      document.body.appendChild(canvas)
+      canvasRef.current = canvas
+
+      confettiInstanceRef.current = confetti.create(canvas, {
+        resize: true,
+        useWorker: false
+      })
+    }
+
+    const scalar = 6
+    const defaults = {
+      spread: 360,
+      ticks: 50,
+      gravity: 2,
+      decay: 0.96,
+      flat: true,
+      startVelocity: 25,
+      shapes: foodEmojis.map(emoji => confetti.shapeFromText({ text: emoji, scalar })),
+      scalar
+    }
+
+    if (confettiInstanceRef.current) {
+      confettiInstanceRef.current({
+        ...defaults,
+      })
+    }
+
+    return () => {
+      // Cleanup is handled in the main effect when active becomes false
+    }
+  }, [active, restartKey])
+
+  return null
+}
+
+function CelebrationPopup({ open, onClose, onRestartAnimation }) {
+  const handleClose = (event, reason) => {
+    if (reason && reason === 'backdropClick') {
+      return
+    }
+    onClose()
+  }
+
+  const handleCelebrate = () => {
+    if (onRestartAnimation) {
+      onRestartAnimation()
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="sm"
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 4,
+          textAlign: 'center',
+          padding: 2,
+          position: 'relative',
+          zIndex: 1500,
+        },
+      }}
+    >
+      <DialogTitle>
+        <Typography variant="h3" component="div" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+          🎉 Congratulations! 🎉
+        </Typography>
+      </DialogTitle>
+      <DialogContent>
+        <Typography variant="h5" sx={{ mb: 2 }}>
+          All tasks completed!
+        </Typography>
+        <Typography variant="body1" sx={{ mb: 3 }}>
+          Great teamwork! You've successfully completed the recipe together.
+        </Typography>
+        <Stack direction="row" spacing={2} justifyContent="center">
+          <Button variant="contained" color="primary" onClick={handleCelebrate} size="large">
+            Celebrate!
+          </Button>
+          <Button variant="outlined" color="primary" onClick={handleClose} size="large">
+            Dismiss
+          </Button>
+        </Stack>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 const theme = createTheme({
   palette: {
     background: {
@@ -705,6 +823,11 @@ function App() {
   const helpRequestsRef = useRef(new Set())
   const [helpRequests, _setHelpRequests] = useState(helpRequestsRef.current)
   const [helpRequested, setHelpRequested] = useState(false)
+
+  const [allUsersCompleted, setAllUsersCompleted] = useState(false)
+  const [celebrationShown, setCelebrationShown] = useState(false)
+  const celebrationDismissedRef = useRef(false)
+  const [animationRestartKey, setAnimationRestartKey] = useState(0)
 
   const timelinesRef = useRef(timelines)
   const ownLaneRef = useRef(ownLane)
@@ -829,6 +952,9 @@ function App() {
   const restart = async () => {
     setTasksCompleted([])
     appendSessionSettings(sessionId, { completedTasks: [] })
+    setCelebrationShown(false)
+    setAllUsersCompleted(false)
+    celebrationDismissedRef.current = false
     if (socketRef.current) {
       socketRef.current.emit('restart', { sessionId })
     }
@@ -1186,6 +1312,27 @@ function App() {
     setSetupDone(true)
   }, [recipe, connections, concatCompletedTasks, tasksInProgress, scale, isSpectator])
 
+  useEffect(() => {
+    if (timelines.length === 0 || timelines.every(t => t.length === 0)) {
+      setAllUsersCompleted(false)
+      return
+    }
+
+    const allCompleted = timelines.every(timeline => {
+      if (timeline.length === 0) return true
+      return timeline.every(task => completedTasks.includes(task.uuid))
+    })
+
+    setAllUsersCompleted(allCompleted)
+
+    if (allCompleted && !celebrationShown && !celebrationDismissedRef.current) {
+      setCelebrationShown(true)
+    } else if (!allCompleted) {
+      setCelebrationShown(false)
+      celebrationDismissedRef.current = false
+    }
+  }, [timelines, completedTasks, celebrationShown])
+
   const dependencyGraph = timelines.reduce(
     (g, timeline) => {
       timeline.forEach(({ uuid, title, dependencies }) => {
@@ -1321,7 +1468,7 @@ function App() {
                   <Box sx={{ pb: 20 }}>
                     <Box paddingY={2}>
                       {timelines[0]?.length === 0 ? (
-                        'Waiting for connections'
+                        'Waiting for participants to join...'
                       ) : (
                         <Stack spacing={2}>
                           <Card>
@@ -1390,6 +1537,29 @@ function App() {
                               />
                             )
                           })}
+                          {(() => {
+                            if (ownLane !== undefined && timelines[ownLane]) {
+                              const userTimeline = timelines[ownLane]
+                              if (userTimeline && userTimeline.length > 0) {
+                                const allUserTasksCompleted = userTimeline.every(task => completedTasks.includes(task.uuid))
+                                if (allUserTasksCompleted) {
+                                  return (
+                                    <Card sx={{ bgcolor: 'success.light', color: 'success.contrastText' }}>
+                                      <CardContent>
+                                        <Stack direction="row" spacing={2} alignItems="center">
+                                          <CheckCircleIcon sx={{ fontSize: 40 }} />
+                                          <Typography variant="h5">
+                                            You've completed all your tasks!
+                                          </Typography>
+                                        </Stack>
+                                      </CardContent>
+                                    </Card>
+                                  )
+                                }
+                              }
+                            }
+                            return null
+                          })()}
                         </Stack>
                       )}
                     </Box>
@@ -1484,6 +1654,17 @@ function App() {
       </div>
       */}
       </Container>
+      <CelebrationPopup
+        open={allUsersCompleted && celebrationShown}
+        onClose={() => {
+          setCelebrationShown(false)
+          celebrationDismissedRef.current = true
+        }}
+        onRestartAnimation={() => {
+          setAnimationRestartKey(prev => prev + 1)
+        }}
+      />
+      <FoodParticleAnimation active={allUsersCompleted && celebrationShown} restartKey={animationRestartKey} />
     </ThemeProvider>
   )
 }
