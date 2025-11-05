@@ -73,6 +73,7 @@
                                         <xs:element name="input">
                                             <xs:complexType mixed="true">
                                                 <xs:attribute name="ref" type="xs:string" use="required"/>
+                                                <xs:attribute name="amount" type="xs:decimal"/>
                                             </xs:complexType>
                                         </xs:element>
                                         <xs:element name="tool">
@@ -121,6 +122,7 @@
                                                     <xs:element name="input" maxOccurs="unbounded">
                                                         <xs:complexType mixed="true">
                                                             <xs:attribute name="ref" type="xs:string" use="required"/>
+                                                            <xs:attribute name="amount" type="xs:decimal"/>
                                                         </xs:complexType>
                                                     </xs:element>
                                                 </xs:sequence>
@@ -157,6 +159,7 @@
                                                     <xs:element name="input">
                                                         <xs:complexType mixed="true">
                                                             <xs:attribute name="ref" type="xs:string" use="required"/>
+                                                            <xs:attribute name="amount" type="xs:decimal"/>
                                                         </xs:complexType>
                                                     </xs:element>
                                                     <xs:element name="tool">
