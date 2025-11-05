@@ -5,6 +5,7 @@ import {
   getFirstInputRef,
   getFirstToolName,
   getInputRefNodes,
+  getInputs,
   getNameForInputAtIndex,
   getNameForToolAtIndex,
   getNodesProducingInputs,
@@ -34,6 +35,17 @@ const xmlToElement = (xml) => {
   xml = xml.trim() // Never return a text node of whitespace as the result
   template.innerHTML = xml
   return template.content.firstChild
+}
+
+function getInputNameWithAmount(recipe, node, index) {
+  const inputName = getNameForInputAtIndex(recipe, node, index)
+  const inputs = getInputs(node)
+  const input = inputs[index]
+  if (input && input.hasAttribute('amount')) {
+    const amount = input.getAttribute('amount')
+    return `${amount} ${inputName}`
+  }
+  return inputName
 }
 
 export const getTextInstructions = (graph, node) => {
@@ -95,7 +107,7 @@ export const operations = {
       const options = getOptions(node)
       const temperatureOption = getOption(options, 'temperature')
 
-      const firstInputName = `${getFirstInputName(recipe, node)}`
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
 
       return temperatureOption
         ? `Heat ${firstInputName} to ${getNumericValueString('temperature', options)}`
@@ -131,28 +143,44 @@ export const operations = {
   crumble: {
     instruction: (recipe, node) => {
       // TODO: How to generate names for outputs so they can be referenced in the instructions?
-      return `Crumble ${getFirstInputName(recipe, node)}`
+      return `Crumble ${getInputNameWithAmount(recipe, node, 0)}`
     },
     timeline: (node, scale = 1) => ({ active: 30 * scale, passive: 0 }),
     title: (node) => 'Crumble',
   },
   mix: {
     instruction: (recipe, node) => {
-      const inputs = getInputRefNodes(recipe, node).map((i) => getElementName(i))
+      const inputElements = getInputs(node)
+      const inputNames = getInputRefNodes(recipe, node).map((i, idx) => {
+        const name = getElementName(i)
+        const input = inputElements[idx]
+        if (input && input.hasAttribute('amount')) {
+          return `${input.getAttribute('amount')} ${name}`
+        }
+        return name
+      })
       const tools = getToolRefNodes(recipe, node).map((i) => getElementName(i))
 
-      const last = inputs.splice(-1, 1)
+      const last = inputNames.splice(-1, 1)
 
-      return <div>Mix {`${inputs.join(', ')}${inputs.length > 0 ? ' & ' : ''}${last}${tools[0] ? ` with ${tools[0]}${tools[1] ? ` in ${tools[1]}` : ''}` : ''}`}</div>
+      return <div>Mix {`${inputNames.join(', ')}${inputNames.length > 0 ? ' & ' : ''}${last}${tools[0] ? ` with ${tools[0]}${tools[1] ? ` in ${tools[1]}` : ''}` : ''}`}</div>
     },
     timeline: (node, scale = 1) => ({ active: 60 * Math.sqrt(scale), passive: 0 }),
     title: (node) => 'Mix',
   },
   incorporate: {
     instruction: (recipe, node) => {
-      const inputs = getInputRefNodes(recipe, node).map((i) => getElementName(i))
+      const inputElements = getInputs(node)
+      const inputNames = getInputRefNodes(recipe, node).map((i, idx) => {
+        const name = getElementName(i)
+        const input = inputElements[idx]
+        if (input && input.hasAttribute('amount')) {
+          return `${input.getAttribute('amount')} ${name}`
+        }
+        return name
+      })
 
-      const [first, ...rest] = inputs
+      const [first, ...rest] = inputNames
       const last = rest.splice(-1, 1)
 
       return (
@@ -166,8 +194,8 @@ export const operations = {
   },
   'mix-in-steps': {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       return `Mix ${secondInputName} to ${firstInputName} in steps`
     },
     timeline: (node, scale = 1) => ({
@@ -207,7 +235,7 @@ export const operations = {
   },
   fill: {
     instruction: (recipe, node) => {
-      return `Fill ${getFirstInputName(recipe, node)}`
+      return `Fill ${getInputNameWithAmount(recipe, node, 0)}`
     },
     timeline: (node, scale = 1) => ({ active: 240 * scale, passive: 0 }),
     title: (node) => 'Fill',
@@ -215,7 +243,7 @@ export const operations = {
   pour: {
     instruction: (recipe, node) => {
       // TODO: this does not work when pouring to a input rather than a tool (e.g. greased mould)
-      return `Pour ${getFirstInputName(recipe, node)} into ${getFirstToolName(recipe, node) || getNameForInputAtIndex(recipe, node, 1)}` // TODO: this will make the order of the tools matter i.e. the bowl must come first, then e.g. spatula
+      return `Pour ${getInputNameWithAmount(recipe, node, 0)} into ${getFirstToolName(recipe, node) || getInputNameWithAmount(recipe, node, 1)}` // TODO: this will make the order of the tools matter i.e. the bowl must come first, then e.g. spatula
     },
     timeline: (node, scale = 1) => ({ active: 30 * scale, passive: 0 }),
     title: (node) => 'Pour',
@@ -230,14 +258,14 @@ export const operations = {
   },
   express: {
     instruction: (recipe, node) => {
-      return `Express oils from ${getFirstInputName(recipe, node)} over ${getNameForInputAtIndex(recipe, node, 1) || getFirstToolName(recipe, node)}`
+      return `Express oils from ${getInputNameWithAmount(recipe, node, 0)} over ${getInputNameWithAmount(recipe, node, 1) || getFirstToolName(recipe, node)}`
     },
     timeline: (node, scale = 1) => ({ active: 30 * scale, passive: 0 }),
     title: (node) => 'Express',
   },
   spherify: {
     instruction: (recipe, node) => {
-      return `Roll ${getFirstInputName(recipe, node)} into balls`
+      return `Roll ${getInputNameWithAmount(recipe, node, 0)} into balls`
     },
     timeline: (node, scale = 1) => ({ active: 240, passive: 0 }), // TODO: what should the scale be here? probably not the individual buns?
     title: (node) => 'Roll into balls',
@@ -258,50 +286,50 @@ export const operations = {
   },
   stir: {
     instruction: (recipe, node) => {
-      return `Stir ${getFirstInputName(recipe, node)} with ${getFirstToolName(recipe, node)}`
+      return `Stir ${getInputNameWithAmount(recipe, node, 0)} with ${getFirstToolName(recipe, node)}`
     },
     timeline: (node, scale = 1) => ({ active: 30 * scale, passive: 0 }),
     title: (node) => 'Stir',
   },
   muddle: {
     instruction: (recipe, node) => {
-      return `Muddle ${getFirstInputName(recipe, node)} with ${getFirstToolName(recipe, node)}`
+      return `Muddle ${getInputNameWithAmount(recipe, node, 0)} with ${getFirstToolName(recipe, node)}`
     },
     timeline: (node, scale = 1) => ({ active: 30 * scale, passive: 0 }),
     title: (node) => 'Muddle',
   },
   peel: {
     instruction: (recipe, node) => {
-      return `Peel ${getFirstInputName(recipe, node)} with ${getFirstToolName(recipe, node)}`
+      return `Peel ${getInputNameWithAmount(recipe, node, 0)} with ${getFirstToolName(recipe, node)}`
     },
     timeline: (node, scale = 1) => ({ active: 60 * scale, passive: 0 }),
     title: (node) => 'Peel',
   },
   soften: {
     instruction: (recipe, node) => {
-      return `Soften ${getFirstInputName(recipe, node)} with ${getFirstToolName(recipe, node)}`
+      return `Soften ${getInputNameWithAmount(recipe, node, 0)} with ${getFirstToolName(recipe, node)}`
     },
     timeline: (node, scale = 1) => ({ active: 120 * Math.sqrt(scale), passive: 0 }),
     title: (node) => 'Soften',
   },
   ball: {
     instruction: (recipe, node) => {
-      return `Carve out balls from ${getFirstInputName(recipe, node)} with ${getFirstToolName(recipe, node)}`
+      return `Carve out balls from ${getInputNameWithAmount(recipe, node, 0)} with ${getFirstToolName(recipe, node)}`
     },
     timeline: (node, scale = 1) => ({ active: 180 * scale, passive: 0 }),
     title: (node) => 'Ball',
   },
   enjoy: {
     instruction: (recipe, node) => {
-      return `Enjoy the ${getFirstInputName(recipe, node)}!`
+      return `Enjoy the ${getInputNameWithAmount(recipe, node, 0)}!`
     },
     timeline: (node) => ({ active: 180, passive: 0 }),
     title: (node) => 'Enjoy',
   },
   decorate: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       return `Decorate ${firstInputName} with ${secondInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 180 * scale, passive: 0 }),
@@ -309,8 +337,8 @@ export const operations = {
   },
   cream: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       return `Cream ${firstInputName} and ${secondInputName} with ${getFirstToolName(recipe, node)}`
     },
     timeline: (node, scale = 1) => ({ active: 120 * scale, passive: 0 }),
@@ -318,8 +346,8 @@ export const operations = {
   },
   stack: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       return `Stack ${firstInputName} on top of ${secondInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 60 * scale, passive: 0 }),
@@ -330,7 +358,7 @@ export const operations = {
       const options = getOptions(node)
       const powerOption = getOption(options, 'power')
 
-      const firstInputName = `${getFirstInputName(recipe, node)}`
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
 
       return powerOption
         ? `Bake ${firstInputName} with ${getNumericValueString(
@@ -358,8 +386,8 @@ export const operations = {
     timeline: (node, scale = 1) => ({ active: 120 * scale, passive: 0 }),
     title: (node) => 'Place',
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       const firstToolName = getNameForToolAtIndex(recipe, node, 0)
       return `Place ${firstInputName} into ${firstToolName || secondInputName}`
     },
@@ -377,7 +405,7 @@ export const operations = {
     instruction: (recipe, node) => {
       const options = getOptions(node)
       const parts = `${getNumericValueFromOption('parts', options)}`
-      return `Split ${getFirstInputName(recipe, node)} into ${parts} parts`
+      return `Split ${getInputNameWithAmount(recipe, node, 0)} into ${parts} parts`
     },
     expand: (recipe, node, scale) => {
       const options = getOptions(node)
@@ -405,7 +433,7 @@ ${node.querySelector('options').outerHTML}
       const options = getOptions(node)
       // Perhaps it would be better to have a grouping element in the xml and place the steps inside it
       // although that might be problematic as other items might be able to squeeze between.
-      return `Bake ${getNameForInputAtIndex(recipe, node, 1)} at ${getNumericValueString('temperature', options)}`
+      return `Bake ${getInputNameWithAmount(recipe, node, 1)} at ${getNumericValueString('temperature', options)}`
     },
     expand: (recipe, node, scale) => {
       const options = getOptions(node)
@@ -460,7 +488,7 @@ ${node.querySelector('options').outerHTML}
   },
   'put-into-oven': {
     instruction: (recipe, node) => {
-      return `Put ${getNameForInputAtIndex(recipe, node, 0)} into oven`
+      return `Put ${getInputNameWithAmount(recipe, node, 0)} into oven`
     },
     timeline: (node, scale = 1) => ({
       title: 'Put into oven',
@@ -471,7 +499,7 @@ ${node.querySelector('options').outerHTML}
   },
   'take-out-of-oven': {
     instruction: (recipe, node) => {
-      return `Take ${getNameForInputAtIndex(recipe, node, 0)} out of oven`
+      return `Take ${getInputNameWithAmount(recipe, node, 0)} out of oven`
     },
     timeline: (node, scale = 1) => ({
       title: 'Take out',
@@ -482,8 +510,8 @@ ${node.querySelector('options').outerHTML}
   },
   brush: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       return `Brush ${firstInputName} with ${secondInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 60 * scale, passive: 0 }),
@@ -491,8 +519,8 @@ ${node.querySelector('options').outerHTML}
   },
   dust: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       const toolName = getNameForToolAtIndex(recipe, node, 0)
       return `Dust ${firstInputName} with ${secondInputName} using ${toolName}`
     },
@@ -506,12 +534,12 @@ ${node.querySelector('options').outerHTML}
       const options = getOptions(node)
       const parts = `${getNumericValueFromOption('parts', options)}`
       const toolName = getNameForToolAtIndex(recipe, node, 0)
-      return `Slice ${getFirstInputName(recipe, node)} into ${parts} parts with ${toolName}`
+      return `Slice ${getInputNameWithAmount(recipe, node, 0)} into ${parts} parts with ${toolName}`
     },
   },
   grate: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
       return `Grate ${firstInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 120 * scale, passive: 0 }), // TODO: calculate time based on weight (and type of input)
@@ -519,8 +547,8 @@ ${node.querySelector('options').outerHTML}
   },
   spread: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       return `Spread ${firstInputName} onto ${secondInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 360 * Math.sqrt(scale), passive: 0 }), // Probably best to define this in the task
@@ -528,7 +556,7 @@ ${node.querySelector('options').outerHTML}
   },
   transfer: {
     instruction: (recipe, node) => {
-      const inputName = getNameForInputAtIndex(recipe, node, 0)
+      const inputName = getInputNameWithAmount(recipe, node, 0)
       const toolName = getNameForToolAtIndex(recipe, node, 1)
       return `Transfer ${inputName} onto ${toolName}`
     },
@@ -537,7 +565,7 @@ ${node.querySelector('options').outerHTML}
   },
   beat: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
       return `Beat ${firstInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 60 * scale, passive: 0 }),
@@ -545,7 +573,7 @@ ${node.querySelector('options').outerHTML}
   },
   'place-on-sheet': {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
       return `Place ${firstInputName} on a sheet`
     },
     timeline: (node, scale = 1) => ({ active: 120 * scale, passive: 0 }),
@@ -558,7 +586,7 @@ ${node.querySelector('options').outerHTML}
       const duration =
         getDurationInSeconds(getOptions(node)) / (unit === 'hours' ? 60 * 60 : unit === 'minutes' ? 60 : 1)
 
-      return `Chill ${getFirstInputName(recipe, node)} for ${duration} ${unit}`
+      return `Chill ${getInputNameWithAmount(recipe, node, 0)} for ${duration} ${unit}`
     },
     timeline: (node, scale = 1) => ({
       active: 30 * Math.sqrt(scale),
@@ -566,14 +594,14 @@ ${node.querySelector('options').outerHTML}
     }),
     title: (node) => 'Chill',
     timer: (recipe, node) => ({
-      title: `Chill ${getFirstInputName(recipe, node)}`,
+      title: `Chill ${getInputNameWithAmount(recipe, node, 0)}`,
       duration: getDurationInSeconds(getOptions(node)),
     }),
   },
   spoon: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1) // TODO: there can be multiple inputs!
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1) // TODO: there can be multiple inputs!
       return `Spoon ${secondInputName} on ${firstInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 60 * Math.sqrt(scale), passive: 0 }),
@@ -581,8 +609,8 @@ ${node.querySelector('options').outerHTML}
   },
   cover: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       return `Cover ${secondInputName} with ${firstInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 60 * scale, passive: 0 }),
@@ -590,7 +618,7 @@ ${node.querySelector('options').outerHTML}
   },
   level: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
       return `Level ${firstInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 120 * Math.sqrt(scale), passive: 0 }),
@@ -598,8 +626,8 @@ ${node.querySelector('options').outerHTML}
   },
   'add-on-top': {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       return `Add ${secondInputName} on top of ${firstInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 120 * Math.sqrt(scale), passive: 0 }),
@@ -607,8 +635,8 @@ ${node.querySelector('options').outerHTML}
   },
   press: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       return `Press ${secondInputName} into ${firstInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 120 * Math.sqrt(scale), passive: 0 }),
@@ -616,8 +644,8 @@ ${node.querySelector('options').outerHTML}
   },
   line: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
       return `Line ${firstInputName} with ${secondInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 120 * scale, passive: 0 }),
@@ -642,7 +670,7 @@ ${node.querySelector('options').outerHTML}
   },
   boil: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
       return `Boil ${firstInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 30 * Math.sqrt(scale), passive: 200 }),
@@ -650,16 +678,17 @@ ${node.querySelector('options').outerHTML}
   },
   soak: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
-      const secondInputName = getNameForInputAtIndex(recipe, node, 1)
-      return `Soak ${firstInputName} in ${secondInputName}`
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
+      const duration = getNumericValueFromOption('duration', getOptions(node))
+      return `Soak ${firstInputName} in ${secondInputName} for ${duration} ${getUnitFromOption('duration', getOptions(node))}`
     },
     timeline: (node, scale = 1) => ({ active: 60 * Math.sqrt(scale), passive: 120 }),
     title: (node) => 'Soak',
   },
   whip: {
     instruction: (recipe, node) => {
-      const firstInputName = getNameForInputAtIndex(recipe, node, 0)
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
       return `Whip ${firstInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 300 * scale, passive: 0 }),
