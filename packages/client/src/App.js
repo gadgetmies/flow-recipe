@@ -16,6 +16,8 @@ TODO:
 import './reset.css'
 import './App.css'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Routes, Route } from 'react-router-dom'
+import GraphViewPage from './GraphViewPage'
 import { findFinalOutputId, findTaskProducing, getInstructions } from './recipeTools'
 import { calculateShoppingList } from './shoppingListGenerator'
 import { expandNode, scheduleItemsInTimelines } from './timelineScheduler'
@@ -64,41 +66,15 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import { pink, purple } from '@mui/material/colors'
 
-const queryParams = new Proxy(new URLSearchParams(window.location.search), {
-  get: (searchParams, prop) => searchParams.get(prop),
-})
-
 const getSettings = (sessionId) => JSON.parse(window.localStorage.getItem(sessionId)) || {}
 const appendSessionSettings = (sessionId, settings) => {
   window.localStorage.setItem(sessionId, JSON.stringify({ ...getSettings(sessionId), ...settings }))
 }
 
-const baseUrl = window.location.href.split(/[?#]/)[0]
-const sessionId = queryParams.session || uuidV4()
-
-let storedParticipantId = getSettings(sessionId).participantId
-if (!storedParticipantId) {
-  storedParticipantId = queryParams.session ? uuidV4() : '0'
-  appendSessionSettings(sessionId, { participantId: storedParticipantId })
-}
-
-const participantId = storedParticipantId
-const isHost = participantId === '0'
-
-window.history.replaceState({ sessionId }, 'Flow Recipe', `${baseUrl}?session=${sessionId}`)
-
-const ownId = `recipes-${sessionId}-${participantId}`
-const hostId = `recipes-${sessionId}-0`
-
-const formatTime = (seconds) => (seconds ? new Date(seconds * 1000).toISOString().substr(11, 8) : 0)
-
-const laneHeight = 80
-const zoom = 0.4
-
 const SERVER_URL = process.env.REACT_APP_SERVER_URL || 
   (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001')
 
-const InitDialog = ({ name, setName, isSpectator: defaultIsSpectator, handleParticipationStatusChange, setNameSet, updateName }) => {
+const InitDialog = ({ name, setName, isSpectator: defaultIsSpectator, handleParticipationStatusChange, setNameSet, updateName, sessionId }) => {
   const [isSpectator, _setIsSpectator] = useState(defaultIsSpectator)
   return (
   <Grid2 container padding={2} direction="column" alignItems="center" justify="center" style={{ minHeight: '100vh' }}>
@@ -159,7 +135,9 @@ function Settings({
   scale,
   onScaleChange,
   isSpectator,
-  onParticipationStatusChange
+  onParticipationStatusChange,
+  hostId,
+  baseUrl
 }) {
   return (
     <Box paddingBottom={9}>
@@ -316,7 +294,7 @@ function Shopping({ shoppingList }) {
   )
 }
 
-function GraphView({ dependencyGraph, completedTasks }) {
+export function GraphView({ dependencyGraph, completedTasks }) {
   const graphRef = useRef()
   
   if (!dependencyGraph || dependencyGraph.nodes.length === 0) {
@@ -396,6 +374,7 @@ function Task(props) {
     jumpToNextTask,
     isHost,
     isSpectator,
+    formatTime,
   } = props
   const id = 'task' + task.uuid
   return (
@@ -486,6 +465,9 @@ function Timeline(props) {
     selectedTimeline,
     selectedTask,
     completedTasks,
+    zoom,
+    laneHeight,
+    isHost,
   } = props
   return (
     <Box
@@ -576,6 +558,8 @@ function Timers({
   helpRequested,
   helpRequests,
   ownName,
+  formatTime,
+  isHost,
 }) {
   const [currentTime, setCurrentTime] = useState(Date.now())
 
@@ -791,7 +775,34 @@ const theme = createTheme({
   },
 })
 
-function App() {
+function MainApp() {
+  const formatTime = (seconds) => (seconds ? new Date(seconds * 1000).toISOString().substr(11, 8) : 0)
+  const laneHeight = 80
+  const zoom = 0.4
+
+  const queryParams = new Proxy(new URLSearchParams(window.location.search), {
+    get: (searchParams, prop) => searchParams.get(prop),
+  })
+
+  const baseUrl = window.location.href.split(/[?#]/)[0]
+  const sessionId = queryParams.session || uuidV4()
+
+  let storedParticipantId = getSettings(sessionId).participantId
+  if (!storedParticipantId) {
+    storedParticipantId = queryParams.session ? uuidV4() : '0'
+    appendSessionSettings(sessionId, { participantId: storedParticipantId })
+  }
+
+  const participantId = storedParticipantId
+  const isHost = participantId === '0'
+
+  const ownId = `recipes-${sessionId}-${participantId}`
+  const hostId = `recipes-${sessionId}-0`
+
+  useEffect(() => {
+    window.history.replaceState({ sessionId }, 'Flow Recipe', `${baseUrl}?session=${sessionId}`)
+  }, [sessionId, baseUrl])
+
   const settings = getSettings(sessionId)
 
   const [title, setTitle] = useState('')
@@ -1434,7 +1445,7 @@ function App() {
           />
         )*/}
         {!nameSet ? (
-          <InitDialog {...{ setName, name, isSpectator, handleParticipationStatusChange, updateName, setNameSet }} />
+          <InitDialog {...{ setName, name, isSpectator, handleParticipationStatusChange, updateName, setNameSet, sessionId }} />
         ) : (
           <>
             <div>
@@ -1457,7 +1468,9 @@ function App() {
                     scale,
                     onScaleChange: handleScaleChange,
                     isSpectator,
-                    onParticipationStatusChange: handleParticipationStatusChange
+                    onParticipationStatusChange: handleParticipationStatusChange,
+                    hostId,
+                    baseUrl
                   }}
                 />
               )}
@@ -1486,7 +1499,10 @@ function App() {
                                   In case you need assistance, you can raise your hand virtually by pressing the ✋
                                   -button in the bottom right corner.
                                 </p>
-                                <p>Happy baking, have fun! 😊🧑‍🍳</p>
+                                <p>
+                                  Remeber to wash your hands before starting 💦👏😊! 
+                                </p>
+                                <p>Happy baking, have fun! 🧑‍🍳</p>
                               </Stack>
                             </CardContent>
                           </Card>
@@ -1519,6 +1535,7 @@ function App() {
                                   setCurrentTask,
                                   isHost,
                                   isSpectator,
+                                  formatTime,
                                   jumpToNextTask: () => {
                                     const nextTask = R.findLastIndex(
                                       (task) => ![...completedTasksRef.current, ...tasksInProgress].includes(task.uuid),
@@ -1575,6 +1592,9 @@ function App() {
                         selectedTimeline,
                         selectedTask,
                         completedTasks,
+                        zoom,
+                        laneHeight,
+                        isHost,
                       }}
                     />
                   </Box>{' '}
@@ -1589,6 +1609,8 @@ function App() {
                       helpRequested,
                       helpRequests,
                       ownName: name,
+                      formatTime,
+                      isHost,
                     }}
                   />
                 </>
@@ -1661,6 +1683,15 @@ function App() {
       />
       <FoodParticleAnimation active={allUsersCompleted && celebrationShown} restartKey={animationRestartKey} />
     </ThemeProvider>
+  )
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/graph" element={<GraphViewPage />} />
+      <Route path="*" element={<MainApp />} />
+    </Routes>
   )
 }
 
