@@ -94,8 +94,8 @@ const db = getDatabase();
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
-  socket.on('joinSession', async ({ sessionId, participantId, name }) => {
-    console.log('joinSession', { sessionId, participantId, name })
+  socket.on('joinSession', async ({ sessionId, participantId, name, isSpectator }) => {
+    console.log('joinSession', { sessionId, participantId, name, isSpectator })
     try {
       const existingSession = db.prepare(`SELECT session_id, recipe_name FROM sessions WHERE session_id = ?`).get(sessionId);
       
@@ -114,29 +114,32 @@ io.on('connection', (socket) => {
         socket.emit('scale', sessionData.scale || 1);
       }
 
+      const isSpectatorValue = isSpectator !== undefined ? (isSpectator ? 1 : 0) : 1;
+
       const existingParticipant = db.prepare(
         `SELECT joined_at FROM participants WHERE session_id = ? AND participant_id = ?`
       ).get(sessionId, participantId);
 
       if (existingParticipant) {
         db.prepare(
-          `UPDATE participants SET socket_id = ?, name = ? WHERE session_id = ? AND participant_id = ?`
-        ).run(socket.id, name || '', sessionId, participantId);
+          `UPDATE participants SET socket_id = ?, name = ?, is_spectator = ? WHERE session_id = ? AND participant_id = ?`
+        ).run(socket.id, name || '', isSpectatorValue, sessionId, participantId);
       } else {
         db.prepare(
-          `INSERT INTO participants (session_id, participant_id, socket_id, name, joined_at)
-           VALUES (?, ?, ?, ?, ?)`
-        ).run(sessionId, participantId, socket.id, name || '', new Date().toISOString());
+          `INSERT INTO participants (session_id, participant_id, socket_id, name, joined_at, is_spectator)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        ).run(sessionId, participantId, socket.id, name || '', new Date().toISOString(), isSpectatorValue);
       }
 
       const participants = db
         .prepare(
-          `SELECT participant_id, name FROM participants WHERE session_id = ? ORDER BY joined_at`
+          `SELECT participant_id, name, is_spectator FROM participants WHERE session_id = ? ORDER BY joined_at`
         )
         .all(sessionId)
         .map((p) => ({
           id: p.participant_id,
           name: p.name,
+          isSpectator: p.is_spectator === 1,
         }));
 
       io.to(sessionId).emit('connections', participants);
@@ -174,12 +177,13 @@ io.on('connection', (socket) => {
 
       const participants = db
         .prepare(
-          `SELECT participant_id, name FROM participants WHERE session_id = ? ORDER BY joined_at`
+          `SELECT participant_id, name, is_spectator FROM participants WHERE session_id = ? ORDER BY joined_at`
         )
         .all(sessionId)
         .map((p) => ({
           id: p.participant_id,
           name: p.name,
+          isSpectator: p.is_spectator === 1,
         }));
 
       io.to(sessionId).emit('connections', participants);
@@ -190,6 +194,15 @@ io.on('connection', (socket) => {
 
   socket.on('taskCompleted', ({ sessionId, participantId, taskUuid }) => {
     try {
+      const participant = db.prepare(
+        `SELECT is_spectator FROM participants WHERE session_id = ? AND participant_id = ?`
+      ).get(sessionId, participantId);
+
+      if (participant && participant.is_spectator === 1 && participantId !== '0') {
+        socket.emit('error', { message: 'Spectators cannot complete tasks' });
+        return;
+      }
+
       db.prepare(
         `INSERT OR IGNORE INTO completed_tasks (session_id, participant_id, task_uuid, completed_at)
          VALUES (?, ?, ?, ?)`
@@ -211,12 +224,12 @@ io.on('connection', (socket) => {
       if (requested) {
         db.prepare(
           `INSERT OR REPLACE INTO help_requests (session_id, participant_id, active, requested_at)
-           VALUES (?, ?, 1, ?)`
-        ).run(sessionId, participantId, new Date().toISOString());
+           VALUES (?, ?, ?, ?)`
+        ).run(sessionId, participantId, 1, new Date().toISOString());
       } else {
         db.prepare(
-          `UPDATE help_requests SET active = 0 WHERE session_id = ? AND participant_id = ?`
-        ).run(sessionId, participantId);
+          `UPDATE help_requests SET active = ? WHERE session_id = ? AND participant_id = ?`
+        ).run(0, sessionId, participantId);
       }
 
       const helpRequests = db
@@ -258,12 +271,37 @@ io.on('connection', (socket) => {
   socket.on('restart', ({ sessionId }) => {
     try {
       db.prepare(`DELETE FROM completed_tasks WHERE session_id = ?`).run(sessionId);
-      db.prepare(`UPDATE help_requests SET active = 0 WHERE session_id = ?`).run(sessionId);
+      db.prepare(`UPDATE help_requests SET active = ? WHERE session_id = ?`).run(0, sessionId);
 
       io.to(sessionId).emit('completedTasks', []);
       io.to(sessionId).emit('helpRequests', []);
     } catch (error) {
       console.error('Error restarting session:', error);
+    }
+  });
+
+  socket.on('updateParticipationStatus', ({ sessionId, participantId, isSpectator }) => {
+    try {
+      const isSpectatorValue = isSpectator ? 1 : 0;
+      db.prepare(
+        `UPDATE participants SET is_spectator = ? WHERE session_id = ? AND participant_id = ?`
+      ).run(isSpectatorValue, sessionId, participantId);
+
+      const participants = db
+        .prepare(
+          `SELECT participant_id, name, is_spectator FROM participants WHERE session_id = ? ORDER BY joined_at`
+        )
+        .all(sessionId)
+        .map((p) => ({
+          id: p.participant_id,
+          name: p.name,
+          isSpectator: p.is_spectator === 1,
+        }));
+
+      io.to(sessionId).emit('connections', participants);
+    } catch (error) {
+      console.error('Error updating participation status:', error);
+      socket.emit('error', { message: 'Failed to update participation status' });
     }
   });
 
@@ -275,17 +313,18 @@ io.on('connection', (socket) => {
 
     if (participant) {
       db.prepare(
-        `UPDATE help_requests SET active = 0 WHERE session_id = ? AND participant_id = ?`
-      ).run(participant.session_id, participant.participant_id);
+        `UPDATE help_requests SET active = ? WHERE session_id = ? AND participant_id = ?`
+      ).run(0, participant.session_id, participant.participant_id);
 
       const participants = db
         .prepare(
-          `SELECT participant_id, name FROM participants WHERE session_id = ? AND socket_id != ? ORDER BY joined_at`
+          `SELECT participant_id, name, is_spectator FROM participants WHERE session_id = ? AND socket_id != ? ORDER BY joined_at`
         )
         .all(participant.session_id, socket.id)
         .map((p) => ({
           id: p.participant_id,
           name: p.name,
+          isSpectator: p.is_spectator === 1,
         }));
 
       io.to(participant.session_id).emit('connections', participants);

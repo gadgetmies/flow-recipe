@@ -18,6 +18,7 @@ const EXPECTED_SCHEMAS = {
   socket_id TEXT NOT NULL,
   name TEXT NOT NULL DEFAULT '',
   joined_at TEXT NOT NULL,
+  is_spectator BOOLEAN NOT NULL DEFAULT 1,
   PRIMARY KEY (session_id, participant_id),
   FOREIGN KEY (session_id) REFERENCES sessions(session_id)
 )`,
@@ -35,7 +36,7 @@ const EXPECTED_SCHEMAS = {
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL,
   participant_id TEXT NOT NULL,
-  active INTEGER NOT NULL DEFAULT 1,
+  active BOOLEAN NOT NULL DEFAULT 1,
   requested_at TEXT NOT NULL,
   FOREIGN KEY (session_id) REFERENCES sessions(session_id),
   FOREIGN KEY (session_id, participant_id) REFERENCES participants(session_id, participant_id),

@@ -1,9 +1,6 @@
 /*
 
 TODO:
-* Spectator mode
-  * Join the session only after clicking join / spectate
-* Keep participant order same after refresh
 * Link multi outputs
 * Remove duplication from cucumber grating
 * Instructions (collaborate, measure into a bowl)
@@ -39,15 +36,21 @@ import {
   createTheme,
   CssBaseline,
   Fab,
+  FormControl,
+  FormControlLabel,
+  FormLabel,
   Grid2,
   List,
   ListItem,
   Paper,
+  Radio,
+  RadioGroup,
   Stack,
   TextField,
   ThemeProvider,
   Typography,
   Link,
+  Chip,
 } from '@mui/material'
 import SettingsIcon from '@mui/icons-material/Settings'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
@@ -91,7 +94,9 @@ const zoom = 0.4
 const SERVER_URL = process.env.REACT_APP_SERVER_URL || 
   (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001')
 
-const NameDialog = ({ name, setName, setNameSet, updateName }) => (
+const InitDialog = ({ name, setName, isSpectator: defaultIsSpectator, handleParticipationStatusChange, setNameSet, updateName }) => {
+  const [isSpectator, _setIsSpectator] = useState(defaultIsSpectator)
+  return (
   <Grid2 container padding={2} direction="column" alignItems="center" justify="center" style={{ minHeight: '100vh' }}>
     <Grid2 item xs={3}>
       <Card>
@@ -101,14 +106,26 @@ const NameDialog = ({ name, setName, setNameSet, updateName }) => (
               Set your name
             </Typography>
             <TextField name={'name'} label="name" onChange={(e) => setName(e.target.value)} value={name} />
+            <FormControl component="fieldset">
+              <FormLabel component="legend">Participation</FormLabel>
+              <RadioGroup
+                row
+                value={isSpectator ? 'spectate' : 'participate'}
+                onChange={(e) => _setIsSpectator(e.target.value === 'spectate')}
+              >
+                <FormControlLabel value="participate" control={<Radio />} label="Participate" />
+                <FormControlLabel value="spectate" control={<Radio />} label="Spectate" />
+              </RadioGroup>
+            </FormControl>
             <Button
               variant="contained"
               disabled={name === ''}
               onClick={() => {
                 setNameSet(true)
-                appendSessionSettings(sessionId, { name })
+                appendSessionSettings(sessionId, { name, isSpectator })
                 window.localStorage.setItem('global-settings', JSON.stringify({ defaultName: name }))
                 updateName(name)
+                handleParticipationStatusChange(isSpectator)
               }}
             >
               Let's begin!
@@ -118,7 +135,8 @@ const NameDialog = ({ name, setName, setNameSet, updateName }) => (
       </Card>
     </Grid2>
   </Grid2>
-)
+  )
+}
 
 function Settings({
   title,
@@ -136,6 +154,8 @@ function Settings({
   recipeName,
   scale,
   onScaleChange,
+  isSpectator,
+  onParticipationStatusChange
 }) {
   return (
     <Box paddingBottom={9}>
@@ -147,23 +167,40 @@ function Settings({
             <List>
               {!setupDone
                 ? 'Connecting...'
-                : connections.map(({ name: connectionName, id }) => (
+                : connections.map(({ name: connectionName, id, isSpectator: connIsSpectator }) => (
                     <ListItem key={id}>
                       {connectionId === id ? (
-                        <TextField
-                          name="name"
-                          label="your name"
-                          value={name}
-                          onChange={(e) => {
-                            // TODO: should this use a ref, because the updates come from the peer?
-                            const newName = e.target.value
-                            console.log({ name: newName })
-                            setName(newName)
-                            updateName(newName)
-                          }}
-                        />
+                        <Stack spacing={1} sx={{ width: '100%' }}>
+                          <TextField
+                            name="name"
+                            label="your name"
+                            value={name}
+                            onChange={(e) => {
+                              const newName = e.target.value
+                              console.log({ name: newName })
+                              setName(newName)
+                              updateName(newName)
+                            }}
+                          />
+                          <Stack direction="row" spacing={1} flexWrap="wrap">
+                            {isHost && <Chip label="Host" color="secondary" size="small" />}
+                            {connIsSpectator !== undefined && (
+                              <Chip 
+                                label={connIsSpectator ? 'Spectator' : 'Participant'} 
+                                color={connIsSpectator ? 'default' : 'primary'}
+                                size="small"
+                              />
+                            )}
+                          </Stack>
+                        </Stack>
                       ) : (
-                        connectionName + (id === '0' ? ' (Host)' : '')
+                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                          <Typography>
+                            {connectionName}
+                          </Typography>
+                          {id === hostId && <Chip label="Host" color="secondary" size="small" />}
+                          {connIsSpectator && <Chip label="Spectator" size="small" />}
+                        </Stack>
                       )}
                     </ListItem>
                   ))}
@@ -201,6 +238,19 @@ function Settings({
             ) : (
               <Typography>Scale: {scale}</Typography>
             )}
+            <Stack spacing={2} sx={{ mt: 2 }}>
+              <Typography variant="subtitle1">Participation Status</Typography>
+              <Typography>Current: {isSpectator ? 'Spectator' : 'Participant'}</Typography>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  const newIsSpectator = !isSpectator
+                  onParticipationStatusChange(newIsSpectator)
+                }}
+              >
+                {isSpectator ? 'Join Session' : 'Leave Session'}
+              </Button>
+            </Stack>
           </CardContent>
         </Card>
         <Card
@@ -341,10 +391,11 @@ function Task(props) {
     startTimer,
     jumpToNextTask,
     isHost,
+    isSpectator,
   } = props
   const id = 'task' + task.uuid
   return (
-    <Card sx={{ opacity: isCurrent || isHost ? 1 : 0.5 }} id={id} style={{ scrollMarginTop: 50 }} key={id}>
+    <Card sx={{ opacity: isCurrent || isSpectator ? 1 : 0.5 }} id={id} style={{ scrollMarginTop: 50 }} key={id}>
       {/*TODO: Why does the scroll margin top not work?*/}
       <CardContent>
         <Typography variant="h4" gutterBottom>
@@ -381,7 +432,7 @@ function Task(props) {
           <p>{getInstructions(recipe, task)}</p>
           {!isDone && <Typography variant="subtitle2">Estimated task duration: {formatTime(task.duration)}</Typography>}
           {/* isCurrent && <Typography variant="subtitle2">Time until finished: {timeUntilFinished}</Typography> */}
-          {!isDone && (isHost || (isCurrent && inputsReady)) && (
+          {!isDone && (isHost || (!isSpectator && isCurrent && inputsReady)) && (
             <div
               style={{
                 display: 'flex',
@@ -635,12 +686,14 @@ function App() {
   const [recipeName, setRecipeName] = useState(isHost ? queryParams.recipe || 'bday-cake' : null)
   let globalSettings = JSON.parse(window.localStorage.getItem('global-settings'))
   const [name, setName] = useState(settings?.name || globalSettings?.defaultName || '')
-  const [nameSet, setNameSet] = useState(name !== '')
+  const defaultIsSpectator = settings?.isSpectator !== undefined ? settings.isSpectator : true
+  const [isSpectator, setIsSpectator] = useState(defaultIsSpectator)
+  const [nameSet, setNameSet] = useState(name !== '' && settings?.isSpectator !== undefined)
   const [shareLinkCopied, setShareLinkCopied] = useState(false)
   const [currentState, setCurrentState] = useState(settings.tab || isHost ? 'settings' : 'cooking')
   const [errorMessage, setErrorMessage] = useState(null)
 
-  const connectionsRef = useRef([{ id: hostId, name }])
+  const connectionsRef = useRef([{ id: hostId, name, isSpectator: false }])
   const [connections, _setConnections] = useState(connectionsRef.current)
   const [setupDone, setSetupDone] = useState(isHost)
   const completedTasksRef = useRef(settings.completedTasks || [])
@@ -854,6 +907,7 @@ function App() {
         sessionId,
         participantId,
         name: name || '',
+        isSpectator,
       })
     })
 
@@ -867,8 +921,13 @@ function App() {
       const connectionsList = participants.map((p) => ({
         id: p.id === '0' ? hostId : `recipes-${sessionId}-${p.id}`,
         name: p.name,
+        isSpectator: p.isSpectator || false,
       }))
       setConnections(connectionsList)
+      const ownConnection = connectionsList.find((c) => c.id === ownId)
+      if (ownConnection) {
+        setIsSpectator(ownConnection.isSpectator)
+      }
       setSetupDone(true)
     })
 
@@ -934,6 +993,18 @@ function App() {
     }
   }
 
+  const handleParticipationStatusChange = (newIsSpectator) => {
+    setIsSpectator(newIsSpectator)
+    appendSessionSettings(sessionId, { isSpectator: newIsSpectator })
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit('updateParticipationStatus', {
+        sessionId,
+        participantId,
+        isSpectator: newIsSpectator,
+      })
+    }
+  }
+
   useEffect(() => {
     if (!recipeName) {
       return
@@ -976,8 +1047,19 @@ function App() {
       return
     }
 
+    const hostConnection = connections[0]
+    const isHostSpectating = hostConnection?.isSpectator ?? false
+    const activeParticipants = connections.filter((c, i) => i === 0 || !c.isSpectator)
+    
+    if (activeParticipants.length < 2) {
+      return
+    }
+
     let newTimelines = []
-    for (let i = 1; i < connections.length; ++i) {
+    if (!isHostSpectating) {
+      newTimelines.push([])
+    }
+    for (let i = 1; i < activeParticipants.length; ++i) {
       newTimelines.push([])
     }
     const finalOutputId = findFinalOutputId(recipe)
@@ -1054,33 +1136,55 @@ function App() {
     setShoppingList(calculateShoppingList(newTimelines))
     const startedTasks = [...completedTasksRef.current, ...tasksInProgress]
     if (isHost) {
-      // TODO: remove duplication
-      setOwnLane(undefined)
-      setCurrentTimeline(0)
-      const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[0])
-      setCurrentTask(nextTask)
-      setSelectedTask({ task: nextTask, timeline: 0 })
-    } else {
-      const newOwnLane = connections.findIndex(({ id }) => id === ownId) -1
-      if (newOwnLane < 0) {
-        throw new Error('Own id not found in connections')
-      }
-      setOwnLane(newOwnLane)
-      setCurrentTimeline(newOwnLane)
-      // Only try to find next task if the timeline exists and has tasks
-      if (newTimelines[newOwnLane] && newTimelines[newOwnLane].length > 0) {
-        const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[newOwnLane])
-        setCurrentTask(nextTask)
-        setSelectedTask({ task: nextTask, timeline: newOwnLane })
+      if (!isHostSpectating) {
+        setOwnLane(0)
+        setCurrentTimeline(0)
+        if (newTimelines[0] && newTimelines[0].length > 0) {
+          const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[0])
+          setCurrentTask(nextTask)
+          setSelectedTask({ task: nextTask, timeline: 0 })
+        } else {
+          setCurrentTask(0)
+          setSelectedTask({ task: 0, timeline: 0 })
+        }
       } else {
-        // If no timeline exists yet, set to first task
-        setCurrentTask(0)
-        setSelectedTask({ task: 0, timeline: newOwnLane })
+        setOwnLane(undefined)
+        setCurrentTimeline(0)
+        if (newTimelines.length > 0 && newTimelines[0] && newTimelines[0].length > 0) {
+          const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[0])
+          setCurrentTask(nextTask)
+          setSelectedTask({ task: nextTask, timeline: 0 })
+        }
+      }
+    } else {
+      if (!isSpectator) {
+        const participantIndex = activeParticipants.findIndex(({ id }) => id === ownId)
+        if (participantIndex < 0) {
+          console.warn('Own id not found in active participants')
+          return
+        }
+        const newOwnLane = isHostSpectating ? participantIndex - 1 : participantIndex
+        if (newOwnLane < 0) {
+          console.warn('Calculated lane index is negative')
+          return
+        }
+        setOwnLane(newOwnLane)
+        setCurrentTimeline(newOwnLane)
+        // Only try to find next task if the timeline exists and has tasks
+        if (newTimelines[newOwnLane] && newTimelines[newOwnLane].length > 0) {
+          const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[newOwnLane])
+          setCurrentTask(nextTask)
+          setSelectedTask({ task: nextTask, timeline: newOwnLane })
+        } else {
+          // If no timeline exists yet, set to first task
+          setCurrentTask(0)
+          setSelectedTask({ task: 0, timeline: newOwnLane })
+        }
       }
     }
 
     setSetupDone(true)
-  }, [recipe, connections, concatCompletedTasks, tasksInProgress, scale])
+  }, [recipe, connections, concatCompletedTasks, tasksInProgress, scale, isSpectator])
 
   const dependencyGraph = timelines.reduce(
     (g, timeline) => {
@@ -1099,22 +1203,30 @@ function App() {
   const width = Math.max(...(timelines?.map((timeline) => -(timeline?.[timeline?.length - 1]?.start ?? 0)) ?? [0])) + nameLabelWidth
 
   const selectedTimeline = selectedTask.timeline
-  const selectedTaskData = timelines?.[selectedTimeline]?.[selectedTask.task]
+  let selectedTaskData = timelines?.[selectedTimeline]?.[selectedTask.task]
 
   const height = laneHeight * (timelines?.length ?? 0)
-  const task = selectedTaskData
-  //console.log({ task, selected: selectedTask })
-
+  
   let timeline
   let tasks
 
-  if (isHost) {
+  if (isHost || isSpectator) {
     timeline = timelines?.flat() ?? []
     tasks = timeline.sort(({ start: a }, { start: b }) => a - b)
+    if (selectedTaskData && selectedTaskData.uuid) {
+      const flatTask = timeline.find(t => t.uuid === selectedTaskData.uuid)
+      if (flatTask) {
+        selectedTaskData = flatTask
+      }
+    } else if (tasks.length > 0) {
+      selectedTaskData = tasks[0]
+    }
   } else {
     timeline = timelines?.[selectedTimeline] ?? []
     tasks = R.reverse(timeline)
   }
+  
+  const task = selectedTaskData
   const pendingInputs = task?.dependencies?.filter(({ uuid }) => !completedTasks.includes(uuid)) ?? []
   // TODO: get participants and outputs for inputs
   const inputsForTask = task?.dependencies?.map(({ uuid, input: { name } }) => {
@@ -1174,7 +1286,7 @@ function App() {
           />
         )*/}
         {!nameSet ? (
-          <NameDialog {...{ setName, name, updateName, setNameSet }} />
+          <InitDialog {...{ setName, name, isSpectator, handleParticipationStatusChange, updateName, setNameSet }} />
         ) : (
           <>
             <div>
@@ -1196,6 +1308,8 @@ function App() {
                     recipeName,
                     scale,
                     onScaleChange: handleScaleChange,
+                    isSpectator,
+                    onParticipationStatusChange: handleParticipationStatusChange
                   }}
                 />
               )}
@@ -1239,8 +1353,8 @@ function App() {
                           {ownLaneSelected ? 'My tasks' : isHost ? 'Tasks' : `${selectedTimelineOwner}'s tasks`}
                         </Typography>*/}
                           {tasks.map((task, i) => {
-                            const currentTaskIndex = isHost ? i : (timelines[selectedTimeline]?.length ?? 0) - currentTask - 1
-                            const isCurrentTask = !isHost && i === currentTaskIndex
+                            const currentTaskIndex = (isHost || isSpectator) ? i : (timelines[selectedTimeline]?.length ?? 0) - currentTask - 1
+                            const isCurrentTask = !(isHost || isSpectator) && i === currentTaskIndex
                             return (
                               <Task
                                 key={task.uuid}
@@ -1262,6 +1376,7 @@ function App() {
                                   currentTask,
                                   setCurrentTask,
                                   isHost,
+                                  isSpectator,
                                   jumpToNextTask: () => {
                                     const nextTask = R.findLastIndex(
                                       (task) => ![...completedTasksRef.current, ...tasksInProgress].includes(task.uuid),
@@ -1283,7 +1398,10 @@ function App() {
                         width,
                         height,
                         timelines,
-                        connections: connections.slice(1),
+                        connections: [
+                          ...(connections[0] && !connections[0].isSpectator ? [connections[0]] : []),
+                          ...connections.slice(1).filter(c => !c.isSpectator)
+                        ],
                         ownLane,
                         setCurrentTimeline,
                         setSelectedTask,
