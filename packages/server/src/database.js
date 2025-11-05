@@ -10,7 +10,8 @@ const EXPECTED_SCHEMAS = {
   session_id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
   recipe_name TEXT,
-  scale REAL DEFAULT 1
+  scale REAL DEFAULT 1,
+  mise_en_place BOOLEAN DEFAULT 0
 )`,
   participants: `CREATE TABLE IF NOT EXISTS participants (
   session_id TEXT NOT NULL,

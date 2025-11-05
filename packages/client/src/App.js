@@ -35,6 +35,7 @@ import {
   Button,
   Card,
   CardContent,
+  Checkbox,
   Container,
   createTheme,
   CssBaseline,
@@ -137,7 +138,9 @@ function Settings({
   isSpectator,
   onParticipationStatusChange,
   hostId,
-  baseUrl
+  baseUrl,
+  miseEnPlace,
+  onMiseEnPlaceChange
 }) {
   return (
     <Box paddingBottom={9}>
@@ -219,6 +222,21 @@ function Settings({
               />
             ) : (
               <Typography>Scale: {scale}</Typography>
+            )}
+            {isHost ? (
+              <Stack spacing={2} sx={{ mt: 2 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={miseEnPlace}
+                      onChange={(e) => onMiseEnPlaceChange(e.target.checked)}
+                    />
+                  }
+                  label="Mise en place (move measurement tasks to beginning)"
+                />
+              </Stack>
+            ) : (
+              <Typography sx={{ mt: 2 }}>Mise en place: {miseEnPlace ? 'Enabled' : 'Disabled'}</Typography>
             )}
             <Stack spacing={2} sx={{ mt: 2 }}>
               <Typography variant="subtitle1">Participation Status</Typography>
@@ -852,6 +870,7 @@ function MainApp() {
   const [tasksInProgress, setTasksInProgress] = useState(settings.tasksInProgress || [])
   const [timers, setTimers] = useState([])
   const [scale, setScale] = useState(1)
+  const [miseEnPlace, setMiseEnPlace] = useState(false)
 
   const helpRequestsRef = useRef(new Set())
   const [helpRequests, _setHelpRequests] = useState(helpRequestsRef.current)
@@ -1117,6 +1136,11 @@ function MainApp() {
       setScale(scaleValue || 1)
     })
 
+    socket.on('miseEnPlace', (miseEnPlaceValue) => {
+      console.log('Received mise en place from server:', miseEnPlaceValue)
+      setMiseEnPlace(miseEnPlaceValue || false)
+    })
+
     socket.on('error', (error) => {
       console.error('Socket error:', error)
       setErrorMessage(error.message || 'An error occurred')
@@ -1138,6 +1162,16 @@ function MainApp() {
         sessionId,
         participantId,
         scale: newScale,
+      })
+    }
+  }
+
+  const handleMiseEnPlaceChange = (enabled) => {
+    if (socketRef.current && isHost) {
+      socketRef.current.emit('updateMiseEnPlace', {
+        sessionId,
+        participantId,
+        miseEnPlace: enabled,
       })
     }
   }
@@ -1272,7 +1306,8 @@ function MainApp() {
       recipe,
       [{ uuid: finalOutputId, task: lastTask, amountsLeft: { [finalOutputId]: scale } }],
       newTimelines,
-      0
+      0,
+      miseEnPlace
     )
 
     const duplicates = newTimelines
@@ -1343,7 +1378,7 @@ function MainApp() {
     }
 
     setSetupDone(true)
-  }, [recipe, connections, concatCompletedTasks, tasksInProgress, scale, isSpectator])
+  }, [recipe, connections, concatCompletedTasks, tasksInProgress, scale, isSpectator, miseEnPlace])
 
   useEffect(() => {
     if (timelines.length === 0 || timelines.every(t => t.length === 0)) {
@@ -1513,7 +1548,9 @@ function MainApp() {
                     isSpectator,
                     onParticipationStatusChange: handleParticipationStatusChange,
                     hostId,
-                    baseUrl
+                    baseUrl,
+                    miseEnPlace,
+                    onMiseEnPlaceChange: handleMiseEnPlaceChange
                   }}
                 />
               )}

@@ -59,7 +59,7 @@ app.post('/api/sessions', (req, res) => {
     }
 
     db.prepare(
-      `INSERT INTO sessions (session_id, created_at, recipe_name, scale) VALUES (?, ?, ?, 1)`
+      `INSERT INTO sessions (session_id, created_at, recipe_name, scale, mise_en_place) VALUES (?, ?, ?, 1, 0)`
     ).run(sessionId, new Date().toISOString(), recipeToStore);
 
     res.status(201).json({ 
@@ -106,12 +106,13 @@ io.on('connection', (socket) => {
 
       socket.join(sessionId);
       
-      const sessionData = db.prepare(`SELECT recipe_name, scale FROM sessions WHERE session_id = ?`).get(sessionId);
+      const sessionData = db.prepare(`SELECT recipe_name, scale, mise_en_place FROM sessions WHERE session_id = ?`).get(sessionId);
       if (sessionData) {
         if (sessionData.recipe_name) {
           socket.emit('recipeName', sessionData.recipe_name);
         }
         socket.emit('scale', sessionData.scale || 1);
+        socket.emit('miseEnPlace', sessionData.mise_en_place === 1);
       }
 
       const isSpectatorValue = isSpectator !== undefined ? (isSpectator ? 1 : 0) : 1;
@@ -265,6 +266,22 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('Error updating scale:', error);
       socket.emit('error', { message: 'Failed to update scale' });
+    }
+  });
+
+  socket.on('updateMiseEnPlace', ({ sessionId, participantId, miseEnPlace }) => {
+    try {
+      if (participantId !== '0') {
+        socket.emit('error', { message: 'Only the host can update mise en place' });
+        return;
+      }
+
+      const miseEnPlaceValue = miseEnPlace ? 1 : 0;
+      db.prepare(`UPDATE sessions SET mise_en_place = ? WHERE session_id = ?`).run(miseEnPlaceValue, sessionId);
+      io.to(sessionId).emit('miseEnPlace', miseEnPlace);
+    } catch (error) {
+      console.error('Error updating mise en place:', error);
+      socket.emit('error', { message: 'Failed to update mise en place' });
     }
   });
 
