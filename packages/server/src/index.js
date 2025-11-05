@@ -52,14 +52,14 @@ app.post('/api/sessions', (req, res) => {
     }
 
     const recipeToStore = recipeName || 'bday-cake';
-    const existingSession = db.prepare(`SELECT id FROM sessions WHERE id = ?`).get(sessionId);
+    const existingSession = db.prepare(`SELECT session_id FROM sessions WHERE session_id = ?`).get(sessionId);
     
     if (existingSession) {
       return res.status(409).json({ error: 'Session already exists' });
     }
 
     db.prepare(
-      `INSERT INTO sessions (id, created_at, recipe_name, scale) VALUES (?, ?, ?, 1)`
+      `INSERT INTO sessions (session_id, created_at, recipe_name, scale) VALUES (?, ?, ?, 1)`
     ).run(sessionId, new Date().toISOString(), recipeToStore);
 
     res.status(201).json({ 
@@ -97,7 +97,7 @@ io.on('connection', (socket) => {
   socket.on('joinSession', async ({ sessionId, participantId, name }) => {
     console.log('joinSession', { sessionId, participantId, name })
     try {
-      const existingSession = db.prepare(`SELECT id, recipe_name FROM sessions WHERE id = ?`).get(sessionId);
+      const existingSession = db.prepare(`SELECT session_id, recipe_name FROM sessions WHERE session_id = ?`).get(sessionId);
       
       if (!existingSession) {
         socket.emit('error', { message: 'Session not found' });
@@ -106,7 +106,7 @@ io.on('connection', (socket) => {
 
       socket.join(sessionId);
       
-      const sessionData = db.prepare(`SELECT recipe_name, scale FROM sessions WHERE id = ?`).get(sessionId);
+      const sessionData = db.prepare(`SELECT recipe_name, scale FROM sessions WHERE session_id = ?`).get(sessionId);
       if (sessionData) {
         if (sessionData.recipe_name) {
           socket.emit('recipeName', sessionData.recipe_name);
@@ -114,31 +114,30 @@ io.on('connection', (socket) => {
         socket.emit('scale', sessionData.scale || 1);
       }
 
-      const participant = {
-        id: participantId,
-        socketId: socket.id,
-        sessionId,
-        name: name || '',
-        joinedAt: new Date().toISOString(),
-      };
+      const existingParticipant = db.prepare(
+        `SELECT joined_at FROM participants WHERE session_id = ? AND participant_id = ?`
+      ).get(sessionId, participantId);
 
-      db.prepare(
-        `INSERT OR REPLACE INTO participants (id, socket_id, session_id, name, joined_at)
-         VALUES (?, ?, ?, ?, ?)`
-      ).run(
-        `${sessionId}-${participantId}`,
-        socket.id,
-        sessionId,
-        name || '',
-        participant.joinedAt
-      );
+      if (existingParticipant) {
+        db.prepare(
+          `UPDATE participants SET socket_id = ?, name = ? WHERE session_id = ? AND participant_id = ?`
+        ).run(socket.id, name || '', sessionId, participantId);
+      } else {
+        db.prepare(
+          `INSERT INTO participants (session_id, participant_id, socket_id, name, joined_at)
+           VALUES (?, ?, ?, ?, ?)`
+        ).run(sessionId, participantId, socket.id, name || '', new Date().toISOString());
+      }
 
       const participants = db
         .prepare(
-          `SELECT id, name, joined_at FROM participants WHERE session_id = ? ORDER BY joined_at`
+          `SELECT participant_id, name FROM participants WHERE session_id = ? ORDER BY joined_at`
         )
         .all(sessionId)
-        .map(extractParticipantId(sessionId));
+        .map((p) => ({
+          id: p.participant_id,
+          name: p.name,
+        }));
 
       io.to(sessionId).emit('connections', participants);
 
@@ -152,7 +151,7 @@ io.on('connection', (socket) => {
       const helpRequests = db
         .prepare(
           `SELECT DISTINCT p.name FROM help_requests hr
-           JOIN participants p ON hr.participant_id = p.id
+           JOIN participants p ON hr.session_id = p.session_id AND hr.participant_id = p.participant_id
            WHERE hr.session_id = ? AND hr.active = 1`
         )
         .all(sessionId)
@@ -170,21 +169,18 @@ io.on('connection', (socket) => {
   socket.on('updateName', ({ sessionId, participantId, name }) => {
     try {
       db.prepare(
-        `UPDATE participants SET name = ? WHERE id = ?`
-      ).run(name, `${sessionId}-${participantId}`);
+        `UPDATE participants SET name = ? WHERE session_id = ? AND participant_id = ?`
+      ).run(name, sessionId, participantId);
 
       const participants = db
         .prepare(
-          `SELECT id, name, joined_at FROM participants WHERE session_id = ? ORDER BY joined_at`
+          `SELECT participant_id, name FROM participants WHERE session_id = ? ORDER BY joined_at`
         )
         .all(sessionId)
-        .map((p) => {
-          const [session, pid] = p.id.split('-');
-          return {
-            id: pid,
-            name: p.name,
-          };
-        });
+        .map((p) => ({
+          id: p.participant_id,
+          name: p.name,
+        }));
 
       io.to(sessionId).emit('connections', participants);
     } catch (error) {
@@ -194,11 +190,10 @@ io.on('connection', (socket) => {
 
   socket.on('taskCompleted', ({ sessionId, participantId, taskUuid }) => {
     try {
-      const participantKey = `${sessionId}-${participantId}`;
       db.prepare(
         `INSERT OR IGNORE INTO completed_tasks (session_id, participant_id, task_uuid, completed_at)
          VALUES (?, ?, ?, ?)`
-      ).run(sessionId, participantKey, taskUuid, new Date().toISOString());
+      ).run(sessionId, participantId, taskUuid, new Date().toISOString());
 
       const completedTasks = db
         .prepare(`SELECT DISTINCT task_uuid FROM completed_tasks WHERE session_id = ?`)
@@ -213,22 +208,21 @@ io.on('connection', (socket) => {
 
   socket.on('askForHelp', ({ sessionId, participantId, requested }) => {
     try {
-      const participantKey = `${sessionId}-${participantId}`;
       if (requested) {
         db.prepare(
           `INSERT OR REPLACE INTO help_requests (session_id, participant_id, active, requested_at)
            VALUES (?, ?, 1, ?)`
-        ).run(sessionId, participantKey, new Date().toISOString());
+        ).run(sessionId, participantId, new Date().toISOString());
       } else {
         db.prepare(
           `UPDATE help_requests SET active = 0 WHERE session_id = ? AND participant_id = ?`
-        ).run(sessionId, participantKey);
+        ).run(sessionId, participantId);
       }
 
       const helpRequests = db
         .prepare(
           `SELECT DISTINCT p.name FROM help_requests hr
-           JOIN participants p ON hr.participant_id = p.id
+           JOIN participants p ON hr.session_id = p.session_id AND hr.participant_id = p.participant_id
            WHERE hr.session_id = ? AND hr.active = 1`
         )
         .all(sessionId)
@@ -253,7 +247,7 @@ io.on('connection', (socket) => {
         return;
       }
 
-      db.prepare(`UPDATE sessions SET scale = ? WHERE id = ?`).run(scaleValue, sessionId);
+      db.prepare(`UPDATE sessions SET scale = ? WHERE session_id = ?`).run(scaleValue, sessionId);
       io.to(sessionId).emit('scale', scaleValue);
     } catch (error) {
       console.error('Error updating scale:', error);
@@ -276,20 +270,23 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
     const participant = db
-      .prepare(`SELECT session_id FROM participants WHERE socket_id = ?`)
+      .prepare(`SELECT session_id, participant_id FROM participants WHERE socket_id = ?`)
       .get(socket.id);
 
     if (participant) {
-      db.prepare(`UPDATE help_requests SET active = 0 WHERE participant_id LIKE ?`).run(
-        `%${participant.session_id}%`
-      );
+      db.prepare(
+        `UPDATE help_requests SET active = 0 WHERE session_id = ? AND participant_id = ?`
+      ).run(participant.session_id, participant.participant_id);
 
       const participants = db
         .prepare(
-          `SELECT id, name, joined_at FROM participants WHERE session_id = ? AND socket_id != ? ORDER BY joined_at`
+          `SELECT participant_id, name FROM participants WHERE session_id = ? AND socket_id != ? ORDER BY joined_at`
         )
         .all(participant.session_id, socket.id)
-        .map(extractParticipantId(participant.session_id));
+        .map((p) => ({
+          id: p.participant_id,
+          name: p.name,
+        }));
 
       io.to(participant.session_id).emit('connections', participants);
     }
@@ -300,16 +297,4 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-function extractParticipantId(sessionId) {
-  return (p) => {
-    // The id format is `${sessionId}-${participantId}` where both ids may contain dashes.
-    // To extract the participant id, remove `${sessionId}-` prefix from p.id.
-    const pid = p.id.slice(sessionId.length + 1);
-    return {
-      id: pid,
-      name: p.name,
-    };
-  };
-}
 
