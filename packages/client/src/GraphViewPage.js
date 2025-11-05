@@ -109,13 +109,36 @@ function GraphViewPage() {
         recipe,
         [{ uuid: finalOutputId, task: lastTask, amountsLeft: { [finalOutputId]: scale } }],
         newTimelines,
-        0
+        0,
+        false
       )
 
       const graph = newTimelines.reduce(
         (g, timeline) => {
-          timeline.forEach(({ uuid, title, dependencies }) => {
-            g?.nodes.push({ id: uuid, title: `${uuid}-${title}` })
+          timeline.forEach(({ uuid, title, dependencies, task }) => {
+            const dependencyInputNames = dependencies.map(d => d.input?.name).filter(Boolean)
+            
+            const ingredientInputNames = []
+            if (task) {
+              const inputs = task.querySelectorAll('input')
+              inputs.forEach((input) => {
+                const inputId = input.getAttribute('ref')
+                const referencedElement = recipe.getElementById(inputId)
+                if (referencedElement && referencedElement.tagName === 'ingredient') {
+                  const ingredientName = Array.from(referencedElement.childNodes)
+                    .filter((node) => node.nodeType === Node.TEXT_NODE)
+                    .map((node) => node.textContent)
+                    .join('')
+                    .trim()
+                  if (ingredientName) {
+                    ingredientInputNames.push(ingredientName)
+                  }
+                }
+              })
+            }
+            
+            const inputNames = [...new Set([...dependencyInputNames, ...ingredientInputNames])]
+            g?.nodes.push({ id: uuid, title: `${uuid}-${title}`, inputNames })
             dependencies.forEach(({ uuid: iuuid }) => g?.links.push({ source: iuuid, target: uuid }))
           })
           return g

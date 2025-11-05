@@ -329,10 +329,22 @@ export function GraphView({ dependencyGraph, completedTasks }) {
         }}
         nodeCanvasObject={(node, ctx, globalScale) => {
           const label = node.title || node.id
-          const fontSize = 12 / globalScale
+          const fontSize = 10 / globalScale
+          const inputFontSize = 8 / globalScale
           ctx.font = `${fontSize}px Sans-Serif`
           const textWidth = ctx.measureText(label).width
-          const bckgDimensions = [textWidth, fontSize].map((n) => n + fontSize * 0.2)
+          
+          const inputNames = node.inputNames || []
+          const inputText = inputNames.length > 0 ? inputNames.join(', ') : ''
+          let inputTextWidth = 0
+          if (inputText) {
+            ctx.font = `${inputFontSize}px Sans-Serif`
+            inputTextWidth = ctx.measureText(inputText).width
+          }
+          
+          const maxWidth = Math.max(textWidth, inputTextWidth)
+          const totalHeight = fontSize + (inputText ? inputFontSize + fontSize * 0.1 : 0)
+          const bckgDimensions = [maxWidth, totalHeight].map((n) => n + fontSize * 0.2)
 
           ctx.fillStyle = completedTasks.includes(node.id) ? 'rgba(30, 233, 165, 0.9)' : 'rgba(255, 255, 255, 0.9)'
           ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
@@ -340,7 +352,16 @@ export function GraphView({ dependencyGraph, completedTasks }) {
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
           ctx.fillStyle = '#333'
-          ctx.fillText(label, node.x, node.y)
+          
+          const verticalOffset = inputText ? -inputFontSize / 2 : 0
+          ctx.font = `${fontSize}px Sans-Serif`
+          ctx.fillText(label, node.x, node.y + verticalOffset)
+          
+          if (inputText) {
+            ctx.font = `${inputFontSize}px Sans-Serif`
+            ctx.fillStyle = '#666'
+            ctx.fillText(inputText, node.x, node.y + fontSize / 2 + inputFontSize / 2 + fontSize * 0.05)
+          }
 
           node.__bckgDimensions = bckgDimensions
         }}
@@ -1347,8 +1368,30 @@ function MainApp() {
 
   const dependencyGraph = timelines.reduce(
     (g, timeline) => {
-      timeline.forEach(({ uuid, title, dependencies }) => {
-        g?.nodes.push({ id: uuid, title: `${uuid}-${title}` })
+      timeline.forEach(({ uuid, title, dependencies, task }) => {
+        const dependencyInputNames = dependencies.map(d => d.input?.name).filter(Boolean)
+        
+        const ingredientInputNames = []
+        if (task && recipe) {
+          const inputs = task.querySelectorAll('input')
+          inputs.forEach((input) => {
+            const inputId = input.getAttribute('ref')
+            const referencedElement = recipe.getElementById(inputId)
+            if (referencedElement && referencedElement.tagName === 'ingredient') {
+              const ingredientName = Array.from(referencedElement.childNodes)
+                .filter((node) => node.nodeType === Node.TEXT_NODE)
+                .map((node) => node.textContent)
+                .join('')
+                .trim()
+              if (ingredientName) {
+                ingredientInputNames.push(ingredientName)
+              }
+            }
+          })
+        }
+        
+        const inputNames = [...new Set([...dependencyInputNames, ...ingredientInputNames])]
+        g?.nodes.push({ id: uuid, title: `${uuid}-${title}`, inputNames })
         dependencies.forEach(({ uuid: iuuid }) => g?.links.push({ source: iuuid, target: uuid }))
       })
       return g
