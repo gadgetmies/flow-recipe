@@ -84,10 +84,12 @@
             </outputs>
         </task>
         <task operation="add-on-top">
-            <inputs>
-                <input ref="sandwich-base"/>
+            <instructions>
+                Add the
                 <input ref="cucumber-slices"/>
-            </inputs>
+                on top of the
+                <input ref="sandwich-base"/>
+            </instructions>
             <outputs>
                 <output id="sandwich-with-cucumber">sandwich with cucumber</output>
             </outputs>
