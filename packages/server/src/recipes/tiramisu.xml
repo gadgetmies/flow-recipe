@@ -1,5 +1,6 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd">
+<?xml version="1.0" encoding="utf-8"?>
+<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="recipe.xsd">
     <title>Simplified Tiramisu (using ready-made ingredients)</title>
     <ingredients>
         <ingredient id="ladyfingers">ladyfingers</ingredient>
@@ -19,20 +20,21 @@
         <tool id="cover">cover</tool>
         <tool id="kitchen-scale">kitchen scale</tool>
         <tool id="flour-sieve">flour sieve</tool>
+        <tool id="plate">plate</tool>
     </tools>
     <tasks>
         <task operation="measure">
             <options>
                 <option name="amount">
-                    <numeric-value number="250" unit="g"/>
+                    <numeric-value number="250" unit="g" />
                 </option>
             </options>
             <tools>
-                <tool ref="mixing-bowl" reusable="true"/>
-                <tool ref="kitchen-scale" reusable="true"/>
+                <tool ref="mixing-bowl" reusable="true" />
+                <tool ref="kitchen-scale" reusable="true" />
             </tools>
             <inputs>
-                <input ref="mascarpone"/>
+                <input ref="mascarpone" />
             </inputs>
             <outputs>
                 <output id="measured-mascarpone">mascarpone</output>
@@ -45,11 +47,11 @@
                 </option>
             </options>
             <tools>
-                <tool ref="mixing-bowl" reusable="true"/>
-                <tool ref="kitchen-scale" reusable="true"/>
+                <tool ref="mixing-bowl" reusable="true" />
+                <tool ref="kitchen-scale" reusable="true" />
             </tools>
             <inputs>
-                <input ref="sugar"/>
+                <input ref="sugar" />
             </inputs>
             <outputs>
                 <output id="measured-sugar">sugar</output>
@@ -58,14 +60,14 @@
         <task operation="measure">
             <options>
                 <option name="amount">
-                    <numeric-value number="1" unit="tsp"/>
+                    <numeric-value number="1" unit="tsp" />
                 </option>
             </options>
             <tools>
-                <tool ref="cup" reusable="true"/>
+                <tool ref="cup" reusable="true" />
             </tools>
             <inputs>
-                <input ref="vanilla-extract"/>
+                <input ref="vanilla-extract" />
             </inputs>
             <outputs>
                 <output id="measured-vanilla">vanilla extract</output>
@@ -78,10 +80,10 @@
                 </option>
             </options>
             <tools>
-                <tool ref="mixing-bowl" reserved="true" reusable="true"/>
+                <tool ref="mixing-bowl" reserved="true" reusable="true" />
             </tools>
             <inputs>
-                <input ref="coffee"/>
+                <input ref="coffee" />
             </inputs>
             <outputs>
                 <output id="measured-coffee">coffee</output>
@@ -89,13 +91,13 @@
         </task>
         <task operation="mix">
             <tools>
-                <tool ref="spoon" reusable="true"/>
-                <tool ref="mixing-bowl" reserved="true" reusable="true"/>
+                <tool ref="spoon" reusable="true" />
+                <tool ref="mixing-bowl" reserved="true" reusable="true" />
             </tools>
             <inputs>
-                <input ref="measured-mascarpone"/>
-                <input ref="measured-sugar"/>
-                <input ref="measured-vanilla"/>
+                <input ref="measured-mascarpone" />
+                <input ref="measured-sugar" />
+                <input ref="measured-vanilla" />
             </inputs>
             <outputs>
                 <output id="cream-base">cream base</output>
@@ -103,12 +105,12 @@
         </task>
         <task operation="fold">
             <tools>
-                <tool ref="mixing-bowl" reserved="true" reusable="true"/>
-                <tool ref="spoon" reusable="true"/>
+                <tool ref="mixing-bowl" reserved="true" reusable="true" />
+                <tool ref="spoon" reusable="true" />
             </tools>
             <inputs>
-                <input ref="cream-base"/>
-                <input ref="whipped-cream"/>
+                <input ref="cream-base" />
+                <input ref="whipped-cream" />
             </inputs>
             <outputs>
                 <output id="cream-mixture">cream mixture</output>
@@ -116,10 +118,10 @@
         </task>
         <task operation="pour">
             <tools>
-                <tool ref="shallow-dish" reusable="true"/>
+                <tool ref="shallow-dish" reusable="true" />
             </tools>
             <inputs>
-                <input ref="measured-coffee"/>
+                <input ref="measured-coffee" />
             </inputs>
             <outputs>
                 <output id="coffee-in-dish">coffee dish</output>
@@ -128,26 +130,24 @@
         <task operation="soak">
             <options>
                 <option name="duration">
-                    <numeric-value number="2" unit="seconds"/>
+                    <numeric-value number="5" unit="seconds" />
                 </option>
             </options>
-            <tools>
-                <tool ref="shallow-dish" reusable="true"/>
-            </tools>
-            <inputs>
-                <input ref="ladyfingers"/>
-                <input ref="coffee-in-dish"/>
-            </inputs>
+            <instructions><!--
+                TODO: how to indicate the plate is the same plate? -->
+            Take a <tool ref="plate" />. Soak <input ref="ladyfingers" amount="10" /> in the <input
+                    ref="coffee-in-dish" /> for 5 seconds and place them on the <tool ref="plate" />
+            . </instructions>
             <outputs>
                 <output id="dipped-ladyfingers-layer">dipped ladyfingers</output>
             </outputs>
         </task>
         <task operation="place">
             <tools>
-                <tool ref="square-dish" reusable="true"/>
+                <tool ref="square-dish" reusable="true" />
             </tools>
             <inputs>
-                <input ref="dipped-ladyfingers-layer"/>
+                <input ref="dipped-ladyfingers-layer" />
             </inputs>
             <outputs>
                 <output id="first-ladyfinger-layer">layer of ladyfingers</output>
@@ -155,11 +155,11 @@
         </task>
         <task operation="spread">
             <tools>
-                <tool ref="spoon" reusable="true"/>
+                <tool ref="spoon" reusable="true" />
             </tools>
             <inputs>
-                <input ref="cream-mixture"/>
-                <input ref="first-ladyfinger-layer"/>
+                <input ref="cream-mixture" />
+                <input ref="first-ladyfinger-layer" />
             </inputs>
             <outputs>
                 <output id="layer-with-cream">cream layer</output>
@@ -167,11 +167,11 @@
         </task>
         <task operation="dust">
             <inputs>
-                <input ref="layer-with-cream"/>
-                <input ref="cocoa-powder"/>
+                <input ref="layer-with-cream" />
+                <input ref="cocoa-powder" />
             </inputs>
             <tools>
-                <tool ref="flour-sieve"/>
+                <tool ref="flour-sieve" />
             </tools>
             <outputs>
                 <output id="dusted-tiramisu">dusted tiramisu</output>
