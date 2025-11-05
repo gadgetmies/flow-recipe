@@ -127,6 +127,10 @@ export function getFirstToolName(recipe, node) {
   return getNameForToolAtIndex(recipe, node, 0)
 }
 
+export function getToolsNames(recipe, node) {
+  return getTools(recipe, node).map((t) => getElementName(t))
+}
+
 export function getFirstInputName(recipe, node) {
   return getNameForInputAtIndex(recipe, node, 0)
 }

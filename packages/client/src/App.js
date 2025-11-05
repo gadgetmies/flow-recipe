@@ -1482,12 +1482,6 @@ function App() {
                                   below. Please note that this is not a test of speed or skills, but of collaboration.
                                 </p>
                                 <p>
-                                  The scheduling nor the recipe is very smart at the moment, so expect to have many cups
-                                  and bowls used during the process. Tools, such as whisks, spatulas, spoons etc. might
-                                  need to be reused, so please return those to the tool bowl when you have completed the
-                                  step that required the use of the tool.
-                                </p>
-                                <p>
                                   In case you need assistance, you can raise your hand virtually by pressing the ✋
                                   -button in the bottom right corner.
                                 </p>

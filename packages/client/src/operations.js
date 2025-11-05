@@ -13,6 +13,7 @@ import {
   getOption,
   getOptions,
   getOutputs,
+  getToolRefNodes,
   getUnitFromOption,
 } from './recipeTools'
 
@@ -72,11 +73,16 @@ export const operations = {
         try {
           toolName = getFirstToolName(recipe, node)
         } catch (e) {}
+        let secondToolName
+        secondToolName = getNameForToolAtIndex(recipe, node, 1)
+        try {
+        } catch (e) {}
+
         const container = getNodesProducingInputs(recipe, node)[1]
         return (
           <div>
             Measure {`${amount} ${name}`}
-            {container ? ` into ${getElementName(container)}` : toolName ? ` into ${toolName}` : ''}
+            {container ? ` into ${getElementName(container)}` : toolName ? ` into ${toolName}${secondToolName ? ` using ${secondToolName}` : ''}` : ''}
           </div>
         )
       } catch (e) {
@@ -133,10 +139,11 @@ export const operations = {
   mix: {
     instruction: (recipe, node) => {
       const inputs = getInputRefNodes(recipe, node).map((i) => getElementName(i))
+      const tools = getToolRefNodes(recipe, node).map((i) => getElementName(i))
 
       const last = inputs.splice(-1, 1)
 
-      return <div>Mix {`${inputs.join(', ')}${inputs.length > 0 ? ' & ' : ''}${last}`}</div>
+      return <div>Mix {`${inputs.join(', ')}${inputs.length > 0 ? ' & ' : ''}${last}${tools[0] ? ` with ${tools[0]}${tools[1] ? ` in ${tools[1]}` : ''}` : ''}`}</div>
     },
     timeline: (node, scale = 1) => ({ active: 60 * Math.sqrt(scale), passive: 0 }),
     title: (node) => 'Mix',
@@ -354,7 +361,7 @@ export const operations = {
       const firstInputName = getNameForInputAtIndex(recipe, node, 0)
       const secondInputName = getNameForInputAtIndex(recipe, node, 1)
       const firstToolName = getNameForToolAtIndex(recipe, node, 0)
-      return `Place ${firstInputName} on ${firstToolName || secondInputName}`
+      return `Place ${firstInputName} into ${firstToolName || secondInputName}`
     },
   },
   split: {
@@ -490,7 +497,7 @@ ${node.querySelector('options').outerHTML}
       }
       const firstInputName = getNameForInputAtIndex(recipe, node, 0)
       const secondInputName = getNameForInputAtIndex(recipe, node, 1)
-      return `Sprinkle ${secondInputName} on ${firstInputName}`
+      return `Sprinkle ${secondInputName} over ${firstInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 60 * Math.sqrt(scale), passive: 0 }),
     title: (node) => 'Sprinkle',
@@ -648,7 +655,7 @@ ${node.querySelector('options').outerHTML}
     instruction: (recipe, node) => {
       const firstInputName = getNameForInputAtIndex(recipe, node, 0)
       const secondInputName = getNameForInputAtIndex(recipe, node, 1)
-      return `Soak ${firstInputName} with ${secondInputName}`
+      return `Soak ${firstInputName} in ${secondInputName}`
     },
     timeline: (node, scale = 1) => ({ active: 60 * Math.sqrt(scale), passive: 120 }),
     title: (node) => 'Soak',
