@@ -517,6 +517,15 @@ ${node.querySelector('options').outerHTML}
     timeline: (node, scale = 1) => ({ active: 60 * scale, passive: 0 }),
     title: (node) => 'Brush',
   },
+  sprinkle: {
+    instruction: (recipe, node) => {
+      const firstInputName = getInputNameWithAmount(recipe, node, 0)
+      const secondInputName = getInputNameWithAmount(recipe, node, 1)
+      return `Sprinkle ${firstInputName} on ${secondInputName}`
+    },
+    timeline: (node, scale = 1) => ({ active: 60 * scale, passive: 0 }),
+    title: (node) => 'Sprinkle',
+  },
   dust: {
     instruction: (recipe, node) => {
       const firstInputName = getInputNameWithAmount(recipe, node, 0)
