@@ -114,7 +114,7 @@ const InitDialog = ({ name, setName, isSpectator: defaultIsSpectator, handlePart
               <FormLabel component="legend">Participation</FormLabel>
               <RadioGroup
                 row
-                value={isSpectator ? 'spectate' : 'participate'}
+                value={isSpectator === undefined ? undefined : isSpectator ? 'spectate' : 'participate'}
                 onChange={(e) => _setIsSpectator(e.target.value === 'spectate')}
               >
                 <FormControlLabel value="participate" control={<Radio />} label="Participate" />
@@ -123,7 +123,7 @@ const InitDialog = ({ name, setName, isSpectator: defaultIsSpectator, handlePart
             </FormControl>
             <Button
               variant="contained"
-              disabled={name === ''}
+              disabled={name === '' || isSpectator === undefined}
               onClick={() => {
                 setNameSet(true)
                 appendSessionSettings(sessionId, { name, isSpectator })
@@ -805,7 +805,7 @@ function App() {
   const [recipeName, setRecipeName] = useState(isHost ? queryParams.recipe || 'bday-cake' : null)
   let globalSettings = JSON.parse(window.localStorage.getItem('global-settings'))
   const [name, setName] = useState(settings?.name || globalSettings?.defaultName || '')
-  const defaultIsSpectator = settings?.isSpectator !== undefined ? settings.isSpectator : true
+  const defaultIsSpectator = settings?.isSpectator
   const [isSpectator, setIsSpectator] = useState(defaultIsSpectator)
   const [nameSet, setNameSet] = useState(name !== '' && settings?.isSpectator !== undefined)
   const [shareLinkCopied, setShareLinkCopied] = useState(false)
