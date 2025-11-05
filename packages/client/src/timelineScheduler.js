@@ -82,23 +82,12 @@ function calculateDependencies(graph, task, timelines, previousDependencies, sca
       // TODO: This means ingredients right? Or is there another option?
       continue
     }
-    // This will be a problem if the task produces multiple different outputs.
+
     const producerTask = producerOutput.parentNode.parentNode
     const outputTaskUuid = producerTask.getAttribute('uuid')
     const amountsOutputProduces = Object.fromEntries(
       getOutputs(producerTask).map((output) => [output.getAttribute('id'), Number(output.getAttribute('amount') || 1)])
     )
-
-    const timelineItemsWithAmountsLeft = timelines.flatMap((timeline) =>
-      timeline.flatMap((item) =>
-        item.dependencies.filter(({ amountsLeft }) => amountsLeft[inputId]).length > 0 ? item : []
-      )
-    )
-
-    if (timelineItemsWithAmountsLeft.length > 0) {
-      // TODO: Ensure there is enough left and adjust the amounts!!!
-      continue
-    }
 
     const previousItems = []
     const uuidMatch = ({ uuid }) => uuid.split('-')[0] === outputTaskUuid
@@ -121,7 +110,7 @@ function calculateDependencies(graph, task, timelines, previousDependencies, sca
           scheduled: true,
           ...itemWithAmountsLeft,
           amountsLeft: {
-            ...itemsWithAmountsLeft[i].amountsLeft,
+            ...itemWithAmountsLeft.amountsLeft,
             [inputId]: 0,
           },
         })
@@ -150,39 +139,7 @@ function calculateDependencies(graph, task, timelines, previousDependencies, sca
       })
     }
   }
-
-  const scheduled = []
-  const unscheduledByBaseUuid = new Map()
-  
-  for (const entry of dependenciesToSchedule) {
-    if (entry.scheduled) {
-      scheduled.push(entry)
-      continue
-    }
-    
-    const baseUuid = entry.uuid.split('-')[0]
-    const existing = unscheduledByBaseUuid.get(baseUuid)
-    
-    if (!existing) {
-      unscheduledByBaseUuid.set(baseUuid, {
-        ...entry,
-        uuid: baseUuid,
-      })
-    } else {
-      const mergedAmountsLeft = { ...existing.amountsLeft }
-      for (const [outputId, amount] of Object.entries(entry.amountsLeft)) {
-        mergedAmountsLeft[outputId] = (mergedAmountsLeft[outputId] || 0) + (amount || 0)
-      }
-      
-      unscheduledByBaseUuid.set(baseUuid, {
-        ...existing,
-        amountsLeft: mergedAmountsLeft,
-        uuid: baseUuid,
-      })
-    }
-  }
-  
-  return [...scheduled, ...Array.from(unscheduledByBaseUuid.values())]
+  return dependenciesToSchedule
 }
 
 function hasOnlyIngredientInputs(graph, task) {
