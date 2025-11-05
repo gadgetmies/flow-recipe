@@ -1,13 +1,18 @@
 /*
 
 TODO:
+* Spectator mode
+  * Join the session only after clicking join / spectate
+* Keep participant order same after refresh
+* Link multi outputs
 * Remove duplication from cucumber grating
 * Instructions (collaborate, measure into a bowl)
 * Tool for measure
 * Numbering for measurements -> number cups
-* Add "Ask for help" button
 * Multiple end results -> jokes (gt, sandwich) (perhaps a virtual last step?)
-* Shared final step
+* Automatically generated shared final step (enjoy)
+  * Generate final output name from recipe
+* Fix scaling
 
 */
 
@@ -1327,7 +1332,7 @@ function App() {
                 <BottomNavigationAction label="Shopping" value="shopping" icon={<ShoppingCartIcon />} />
                 {/*<BottomNavigationAction label="Tools" value="tools" icon={<HandymanIcon />} />*/}
                 <BottomNavigationAction label="Tasks" value="cooking" icon={<ChecklistIcon />} />
-                <BottomNavigationAction label="Graph" value="graph" icon={<AccountTreeIcon />} />
+                {isHost && <BottomNavigationAction label="Graph" value="graph" icon={<AccountTreeIcon />} />}
               </BottomNavigation>
             </Paper>
           </>
