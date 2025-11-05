@@ -181,37 +181,6 @@ function isMeasurementTaskWithOnlyIngredientInputs(graph, item) {
   return hasOnlyIngredientInputs(graph, item.task)
 }
 
-function recalculateTimelineTimes(timeline) {
-  if (timeline.length === 0) {
-    return
-  }
-  
-  let currentTime = 0
-  
-  for (const item of timeline) {
-    const operation = getOperationForNode(item.task)
-    const outputs = getOutputs(item.task)
-    const totalOutputAmount = outputs.reduce((sum, output) => {
-      const outputId = output.getAttribute('id')
-      return sum + (item.amountsLeft[outputId] || 0)
-    }, 0)
-    const scale = Math.max(1, totalOutputAmount)
-    
-    const operationTimelineItem = operation.timeline(item.task, scale)
-    const passiveDuration = value(operationTimelineItem.passive, item.task)
-    const activeDuration = value(operationTimelineItem.active, item.task)
-    
-    const start = Math.max(0, currentTime - passiveDuration)
-    const end = start + activeDuration
-    
-    item.start = start
-    item.end = end
-    item.duration = passiveDuration + activeDuration
-    
-    currentTime = end
-  }
-}
-
 function moveMeasurementTasksToBeginning(graph, timelines) {
   for (let timelineIndex = 0; timelineIndex < timelines.length; timelineIndex++) {
     const timeline = timelines[timelineIndex]

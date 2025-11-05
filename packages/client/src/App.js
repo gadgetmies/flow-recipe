@@ -666,8 +666,9 @@ function Timers({
   )
 }
 
+const foodEmojis = ['🍰', '🍪', '🎂', '🍕', '🌮', '🍔', '🥐', '🍓', '🍇', '🍎', '🥑', '🍉', '🍌', '🥝', '🍑', '🥨', '🧁', '🥧']
+
 function FoodParticleAnimation({ active, restartKey }) {
-  const foodEmojis = ['🍰', '🍪', '🎂', '🍕', '🌮', '🍔', '🥐', '🍓', '🍇', '🍎', '🥑', '🍉', '🍌', '🥝', '🍑', '🥨', '🧁', '🥧']
   const canvasRef = useRef(null)
   const confettiInstanceRef = useRef(null)
 
@@ -1096,7 +1097,7 @@ function App() {
     return () => {
       socket.disconnect()
     }
-  }, [name, findNextTask, scrollToIndex])
+  }, [name, findNextTask, scrollToIndex, isSpectator])
 
   const handleScaleChange = (newScale) => {
     console.log('handleScaleChange', newScale)
