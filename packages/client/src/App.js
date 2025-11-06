@@ -990,17 +990,17 @@ function MainApp() {
     appendSessionSettings(sessionId, { tab })
   }
 
-  const concatCompletedTasks = useCallback((completed) => {
-    const merged = Array.from(new Set([...completedTasksRef.current, ...completed]))
-    setTasksCompleted(merged)
-  }, [])
-
-  const setTasksCompleted = (completed) => {
+  const setTasksCompleted = useCallback((completed) => {
     // TODO: use uuids
     appendSessionSettings(sessionId, { completedTasks: completed })
     completedTasksRef.current = completed
     _setCompletedTasks(completed)
-  }
+  }, [sessionId])
+
+  const concatCompletedTasks = useCallback((completed) => {
+    const merged = Array.from(new Set([...completedTasksRef.current, ...completed]))
+    setTasksCompleted(merged)
+  }, [setTasksCompleted])
 
   const scrollToTask = useCallback((uuid) => {
     console.log(
@@ -1025,6 +1025,8 @@ function MainApp() {
     scrollToTask(uuid)
   }, [scrollToTask])
 
+  const socketRef = useRef(null)
+
   const startTimer = ({ timer: { duration, title }, uuid }) => {
     const newTimers = [{ end: Date.now() + duration * 1000, taskUuid: uuid, title }, ...timers]
     setTimers(newTimers)
@@ -1036,11 +1038,21 @@ function MainApp() {
     setTimers(newTimers)
   }
 
+  const sendTaskCompleted = useCallback((taskId) => {
+    if (socketRef.current) {
+      socketRef.current.emit('taskCompleted', {
+        sessionId,
+        participantId,
+        taskUuid: taskId,
+      })
+    }
+  }, [sessionId, participantId])
+
   const markTaskCompleted = useCallback(async (uuid) => {
     setTasksCompleted([...completedTasksRef.current, uuid])
     setTasksInProgress(R.without([uuid], tasksInProgress))
     sendTaskCompleted(uuid)
-  }, [tasksInProgress])
+  }, [tasksInProgress, setTasksCompleted, sendTaskCompleted])
 
   const findNextTask = useCallback((timeline) => {
     if (!timelinesRef.current?.[timeline]) return -1;
@@ -1066,8 +1078,6 @@ function MainApp() {
     setSelectedTask({ task: nextTask, timeline: ownLane })
   }
 
-  const socketRef = useRef(null)
-
   const setConnections = (newConnections) => {
     connectionsRef.current = newConnections
     _setConnections(newConnections)
@@ -1086,16 +1096,6 @@ function MainApp() {
         sessionId,
         participantId,
         requested,
-      })
-    }
-  }
-
-  const sendTaskCompleted = (taskId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('taskCompleted', {
-        sessionId,
-        participantId,
-        taskUuid: taskId,
       })
     }
   }
@@ -1175,7 +1175,7 @@ function MainApp() {
     }
 
     createSessionIfNeeded()
-  }, [recipeName])
+  }, [recipeName, isHost, sessionId, queryParams.session])
 
   useEffect(() => {
     const socket = io(SERVER_URL)
@@ -1268,7 +1268,7 @@ function MainApp() {
     return () => {
       socket.disconnect()
     }
-  }, [name, findNextTask, scrollToIndex, isSpectator])
+  }, [name, findNextTask, scrollToIndex, isSpectator, hostId, isHost, ownId, participantId, sessionId, setTasksCompleted])
 
   const handleScaleChange = (newScale) => {
     console.log('handleScaleChange', newScale)
@@ -1502,7 +1502,7 @@ function MainApp() {
     }
 
     setSetupDone(true)
-  }, [recipe, connections, concatCompletedTasks, tasksInProgress, scale, isSpectator, miseEnPlace])
+  }, [recipe, connections, concatCompletedTasks, tasksInProgress, scale, isSpectator, miseEnPlace, isHost, ownId])
 
   useEffect(() => {
     if (timelines.length === 0 || timelines.every(t => t.length === 0)) {
