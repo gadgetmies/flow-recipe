@@ -1,5 +1,8 @@
 // Simulation (README §8): simulated participants execute a plan with noisy durations; every start/finish goes through
 // the online mode (applyEvent / replan), appointments trigger the interrupt chooser when the holder is busy.
+//
+// `createSimulation` holds the loop state and advances it one tick at a time (the browser demo drives it from an
+// animation frame); `simulate` runs the same loop to completion.
 
 import { createState, applyEvent, replan, dueInterrupts } from '../online/index.js'
 import { fmt } from './render.js'
@@ -24,10 +27,21 @@ function gauss(r) {
 const WORK_KINDS = new Set(['work', 'cleaning', 'resume', 'appointment', 'check'])
 
 /**
+ * Create a stepwise simulation. The session is started (sessionStarted + first online re-plan) immediately; ticks are
+ * processed by `step(ms)` / `run()`.
+ *
  * @param {object} cfg { session, catalogue, graph?, seed, speedNoise, lateStartProbability, tick, maxSimHours, verbose }
- * @param {function} onTick optional (now, state, log) → void
+ * @param {function} [onTick] optional (now, state, log) → void, called after every processed tick
+ * @returns {{
+ *   step: (ms: number) => { now, clock, state, log, entries, done, metrics },   // advance the clock by `ms`; processes every tick it passes
+ *   run: () => { now, clock, state, log, entries, done, metrics },             // process ticks until done
+ *   result: () => { events, finalPlan, draftPlan, metrics, log },              // the `simulate` result shape for the current state
+ *   state, now, clock, log, entries, done, metrics, counters, tick, startTime, draftPlan   // getters
+ * }}
+ * `now` is the next tick to process (ticks are at startTime + k·tick), `clock` the continuous time the caller advanced
+ * to; `entries` are the log lines as { at, text }.
  */
-export function simulate(cfg, onTick) {
+export function createSimulation(cfg, onTick = cfg.onTick) {
   const { session, catalogue, graph } = cfg
   const seed = cfg.seed ?? 42
   const r = rng(seed)
@@ -35,7 +49,12 @@ export function simulate(cfg, onTick) {
   const lateStartProbability = cfg.lateStartProbability ?? 0.1
   const tick = cfg.tick ?? 5000
   const log = []
-  const say = (now, msg) => { log.push(`${fmt(now)} ${msg}`); if (cfg.verbose) console.log(`${fmt(now)} ${msg}`) }
+  const entries = [] // { at, text } — the same lines with their simulated time (the browser formats the clock itself)
+  const say = (now, msg) => {
+    log.push(`${fmt(now)} ${msg}`)
+    entries.push({ at: now, text: msg })
+    if (cfg.verbose) console.log(`${fmt(now)} ${msg}`)
+  }
 
   let state = createState(session, catalogue, { graph })
   const draft = state.plan
@@ -46,8 +65,10 @@ export function simulate(cfg, onTick) {
   let replans = 1
   let interrupts = 0
   let eventsCount = 1
+  let done = false
+  let clock = startTime // the caller's continuous clock; the tick at `now` is processed once the clock passes it
 
-  const sims = new Map() // participantId → { current: { uuid, finishAt }, nextStartAt }
+  const sims = new Map() // participantId → { current: { uuid, title, finishAt, unitsDone }, delayUntil }
   for (const lane of state.plan.lanes) sims.set(lane.participantId, { current: null, delayUntil: 0, paused: null })
 
   const itemsDone = () => state.plan.lanes.every((l) => l.items.filter((it) => WORK_KINDS.has(it.kind)).every((it) => it.status === 'done'))
@@ -77,7 +98,8 @@ export function simulate(cfg, onTick) {
   const limitMs = (cfg.maxSimHours ?? 8) * 3600 * 1000
   const nameOf = (pid) => (session.participants.find((p) => p.id === pid) || {}).name || pid
 
-  while (now - startTime < limitMs) {
+  /** Process the tick at `now` (finishes, interrupts, starts). */
+  const processTick = () => {
     // 1. finishes
     for (const [pid, s] of sims) {
       if (s.current && s.current.finishAt <= now) {
@@ -133,14 +155,66 @@ export function simulate(cfg, onTick) {
       s.current = { uuid: next.uuid, title: next.title, finishAt: now + dur, unitsDone: (t) => (units ? Math.min(units, Math.floor(units * (t - startedAt) / dur)) : null) }
       say(now, `${nameOf(lane.participantId)} starts: ${next.title} (${Math.round(dur / 60000)} min)`)
     }
-    if (onTick) onTick(now, state, log)
-    if (itemsDone()) break
-    now += tick
   }
 
-  const finalPlan = state.plan
-  const metrics = computeMetrics(finalPlan, session, { interrupts, replans, events: eventsCount, simEnd: now })
-  return { events: state.events || [], finalPlan, draftPlan: draft, metrics, log }
+  /**
+   * One iteration of the simulation loop: process the tick at `now`, then either stop (every item done or the time
+   * limit reached) or advance `now` by one tick. Returns false once the simulation is done.
+   */
+  const runTick = () => {
+    if (done) return false
+    if (now - startTime >= limitMs) { done = true; return false }
+    processTick()
+    if (onTick) onTick(now, state, log)
+    if (itemsDone()) { done = true; return false }
+    now += tick
+    return true
+  }
+
+  const metrics = () => computeMetrics(state.plan, session, { interrupts, replans, events: eventsCount, simEnd: now })
+  const snapshot = () => ({ now, clock, state, log, entries, done, metrics: metrics() })
+
+  const sim = {
+    /** Advance the caller's clock by `ms` and process every tick it passes (one tick per `tick` ms). */
+    step(ms) {
+      clock += Math.max(0, ms || 0)
+      while (!done && now < clock) if (!runTick()) break
+      return snapshot()
+    },
+    /** Process ticks until the simulation is done. */
+    run() {
+      while (runTick()) { /* keep going */ }
+      clock = now
+      return snapshot()
+    },
+    /** The `simulate` result shape for the current state. */
+    result() {
+      return { events: state.events || [], finalPlan: state.plan, draftPlan: draft, metrics: metrics(), log }
+    },
+    get state() { return state },
+    get now() { return now },
+    get clock() { return clock },
+    get done() { return done },
+    get log() { return log },
+    get entries() { return entries },
+    get metrics() { return metrics() },
+    get counters() { return { replans, interrupts, events: eventsCount } },
+    tick,
+    startTime,
+    draftPlan: draft,
+  }
+  return sim
+}
+
+/**
+ * Run a whole simulation synchronously.
+ * @param {object} cfg { session, catalogue, graph?, seed, speedNoise, lateStartProbability, tick, maxSimHours, verbose }
+ * @param {function} onTick optional (now, state, log) → void
+ */
+export function simulate(cfg, onTick) {
+  const sim = createSimulation(cfg, onTick)
+  sim.run()
+  return sim.result()
 }
 
 export function computeMetrics(plan, session, extra = {}) {

@@ -1,5 +1,6 @@
 // The Gantt view of the plan: one row per lane, absolute time axis, a moving "now" line, items coloured by kind and
-// status. Tapping an item selects it. Horizontally scrollable; auto-centres on the own current item.
+// status. Tapping an item selects it. Horizontally scrollable; auto-centres on the own current item. The clock is the
+// wall clock unless a `now` prop is given (the demo passes its simulated clock; the view then follows that line).
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Typography } from '@mui/material'
@@ -33,15 +34,17 @@ export default function PlanLanes({
   onSelect,
   fixed = true,
   showNow = true,
+  now: nowProp = null,
 }) {
   const scrollRef = useRef(null)
-  const [now, setNow] = useState(Date.now())
+  const [wallClock, setWallClock] = useState(Date.now())
+  const now = nowProp ?? wallClock
 
   useEffect(() => {
-    if (!showNow) return undefined
-    const id = setInterval(() => setNow(Date.now()), 1000)
+    if (!showNow || nowProp !== null) return undefined
+    const id = setInterval(() => setWallClock(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [showNow])
+  }, [showNow, nowProp])
 
   const lanes = useMemo(() => plan?.lanes || [], [plan])
   const allItems = useMemo(() => lanes.flatMap((l) => l.items), [lanes])
@@ -81,6 +84,17 @@ export default function PlanLanes({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centreKey])
 
+  // with an external clock, keep the now line in view (scroll when it leaves the visible window)
+  const nowX = x(now)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (nowProp === null || !el || !showNow) return
+    const margin = 24
+    if (nowX < el.scrollLeft + margin || nowX > el.scrollLeft + el.clientWidth - margin) {
+      el.scrollLeft = Math.max(0, nowX - el.clientWidth / 3)
+    }
+  }, [nowProp, nowX, showNow])
+
   if (lanes.length === 0) {
     return (
       <Box sx={{ p: 2 }}>
@@ -91,7 +105,6 @@ export default function PlanLanes({
     )
   }
 
-  const nowX = x(now)
   const nowVisible = showNow && now >= t0 && now <= t1
 
   const body = (

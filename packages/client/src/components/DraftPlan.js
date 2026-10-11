@@ -5,14 +5,14 @@ import PlanLanes from './PlanLanes'
 import { fmtClock, fmtMinutes } from '../utils/time'
 import { diagnosticSeverity, dishTitle, participantName } from '../utils/plan'
 
-function LatenessChip({ late }) {
+export function LatenessChip({ late }) {
   const seconds = late || 0
   if (seconds > 0) return <Chip size="small" color="error" label={`${fmtMinutes(seconds)} late`} />
   if (seconds < 0) return <Chip size="small" color="info" label={`${fmtMinutes(-seconds)} early`} />
   return <Chip size="small" color="success" label="on time" />
 }
 
-export default function DraftPlan({ plan, session, ownParticipantId, selectedUuid, onSelect }) {
+export default function DraftPlan({ plan, session, ownParticipantId, selectedUuid, onSelect, now = null }) {
   if (!plan) {
     return (
       <Box sx={{ p: 2 }}>
@@ -115,7 +115,7 @@ export default function DraftPlan({ plan, session, ownParticipantId, selectedUui
             <Typography variant="h6" gutterBottom sx={{ px: 1 }}>
               Lanes
             </Typography>
-            <PlanLanes plan={plan} session={session} ownParticipantId={ownParticipantId} selectedUuid={selectedUuid} onSelect={onSelect} fixed={false} />
+            <PlanLanes plan={plan} session={session} ownParticipantId={ownParticipantId} selectedUuid={selectedUuid} onSelect={onSelect} fixed={false} now={now} />
           </CardContent>
         </Card>
       </Stack>

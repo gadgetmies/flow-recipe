@@ -2,6 +2,7 @@
 // else sees a read-only summary and edits their own profile.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 import {
   Accordion,
   AccordionDetails,
@@ -609,9 +610,14 @@ export default function HostSettings({
                 </Button>
               </Stack>
               <Divider sx={{ my: 2 }} />
-              {session?.dishes?.[0] && (
-                <Link href={`${baseUrl}?recipe=${session.dishes[0].recipeId}`}>New session with recipe: {session.dishes[0].title || session.dishes[0].recipeId}</Link>
-              )}
+              <Stack spacing={0.5}>
+                {session?.dishes?.[0] && (
+                  <Link href={`${baseUrl}?recipe=${session.dishes[0].recipeId}`}>New session with recipe: {session.dishes[0].title || session.dishes[0].recipeId}</Link>
+                )}
+                <Link component={RouterLink} to="/demo" variant="body2">
+                  Open demo (simulated cooks, no server needed)
+                </Link>
+              </Stack>
             </CardContent>
           </Card>
         )}

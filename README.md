@@ -7,6 +7,17 @@ Goals:
 * Create a format for describing cooking and baking recipes in a structured and accurate manner in order to enable 
     programmatic scheduling and adaptation. 
 
+## Demo
+
+Open `/demo` in the client (for example `http://localhost:3000/demo#buns,tiramisu` with `yarn dev`, or add `?mock=1`
+to run without a server) to watch simulated participants cook several recipes at once. Pick the recipes and their
+serve times, the number of cooks, the inventory (4 or 2 baking sheets), the cleaning policy and a seed, press
+**Plan** to see the draft plan (dish lateness, fairness, diagnostics, lanes), then **Play**, **Step** or **Reset** the
+simulation: the scheduler runs in the browser, re-plans live as the simulated cooks run early, late or get
+interrupted by timers, and the page shows the lanes with the simulated clock, each participant's current task, the
+dish status, metrics and the event log. The same seed gives the same run. The CLI alternative is
+`yarn workspace @flow-recipe/scheduler demo --recipes buns,tiramisu --participants 3 --seed 7`.
+
 ---
 
 # Getting Started with Create React App

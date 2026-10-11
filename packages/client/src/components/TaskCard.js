@@ -1,5 +1,6 @@
 // One plan item as a card: title, dish chip, instructions, planned window, hand-offs, tools, units, and the action
 // buttons that emit events (taskStarted / taskDone / taskPaused / taskProgress / appointmentAcknowledged).
+// `readOnly` hides the buttons (the demo), `now` replaces the wall clock for countdowns (the demo's simulated clock).
 
 import { useEffect, useState } from 'react'
 import { Box, Button, Card, CardContent, Chip, LinearProgress, Stack, Typography } from '@mui/material'
@@ -23,20 +24,24 @@ export default function TaskCard({
   laneParticipantId,
   isCurrent = false,
   expanded = true,
-  canAct = false,
+  canAct: canActProp = false,
   actAs = null,
   onToggle,
   onEvent,
   timerDue = null,
+  readOnly = false,
+  now: nowProp = null,
 }) {
-  const [now, setNow] = useState(Date.now())
+  const [wallClock, setWallClock] = useState(Date.now())
+  const now = nowProp ?? wallClock
   const hasTimer = !!item.timer
   useEffect(() => {
-    if (!expanded || (!hasTimer && !item.passiveUntil)) return undefined
-    const id = setInterval(() => setNow(Date.now()), 1000)
+    if (!expanded || nowProp !== null || (!hasTimer && !item.passiveUntil)) return undefined
+    const id = setInterval(() => setWallClock(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [expanded, hasTimer, item.passiveUntil])
+  }, [expanded, hasTimer, item.passiveUntil, nowProp])
 
+  const canAct = canActProp && !readOnly
   const isDone = item.status === 'done'
   const isStarted = item.status === 'started'
   const isPaused = item.status === 'paused'

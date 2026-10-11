@@ -1,13 +1,9 @@
-// Instruction text for task instances. Uses `instructionText` from catalogue/instructions.js when that module is
-// present at runtime (it is written concurrently), else a plain "Title: input names" fallback.
+// Instruction text for task instances. Uses `instructionText` from catalogue/instructions.js (a static import: the
+// browser bundle cannot use top-level await), with a plain "Title: input names" fallback when it yields nothing.
 
-let external = null
-try {
-  const mod = await import('../catalogue/instructions.js')
-  external = typeof mod.instructionText === 'function' ? mod.instructionText : null
-} catch {
-  external = null
-}
+import { instructionText } from '../catalogue/instructions.js'
+
+const external = typeof instructionText === 'function' ? instructionText : null
 
 function refName(ref, recipe, tasks) {
   const ing = recipe?.ingredients?.find((i) => i.id === ref)
