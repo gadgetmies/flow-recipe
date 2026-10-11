@@ -239,20 +239,35 @@ exactly one appointment holder, serve windows met or a diagnostic present.
 ```js
 Event = { type: 'sessionStarted'|'taskStarted'|'taskDone'|'taskPaused'|'taskProgress'|'timerFired'|'appointmentAcknowledged'|'participantJoined'|'participantLeft'|'participantPaused'|'resourceChanged'|'deadlineChanged', at: epochMs, participantId?, uuid?, units?, payload? }
 State = { session, graph, catalogue, plan, events: [Event], frozen: { [uuid]: Item } }
-createState(session, catalogue) → State          // builds graph and offline plan
+createState(session, catalogue, { graph? }) → State   // builds graph (unless given) and the offline plan
 applyEvent(state, event) → { state, replanNeeded: bool, reason }
 replan(state, now) → { state, plan, diff }       // frozen prefix, stability, placeholder reconciliation
-chooseInterruptTarget(state, appointment, now) → { participantId, cost, preempts: uuid|null } | null
+diffPlans(prev, next, now, horizonSeconds) → diff
+chooseInterruptTarget(state, appointment | uuid, now) → { participantId, cost, preempts: uuid|null, broadcast? } | null
+dueInterrupts(state, now) → [{ item, uuid, opensAt, holder, target }]   // appointments opening within lead + reaction whose holder is busy
 ```
+Items carry their actuals: `taskStarted` sets `actualStart` and shifts the planned times by the delta (originals kept
+in `plannedStart`/`plannedEnd`); `taskPaused` turns the item into `kind: 'resume'` with `progress { done, of,
+remainingActive }` under the same uuid, so later events keep addressing one item.
 
 ## 8. Simulation (sim/index.js)
 
 ```js
-simulate({ session, catalogue, seed, speedNoise: 0.25, lateStartProbability: 0.1, tick: 5_000 }, onTick?)
-  → { events, finalPlan, metrics: { lateness: {dishId: seconds}, interrupts, replans, fairness, blockedSeconds, idleLopsided } , log: [string] }
+simulate({ session, catalogue, graph?, seed, speedNoise: 0.25, lateStartProbability: 0.1, tick: 5_000 }, onTick?)
+  → { events, finalPlan, draftPlan, metrics: { lateness: {dishId: seconds}, interrupts, replans, events, fairness, blockedSeconds, idleLopsided }, log: [string] }
+createSimulation(cfg) → { step(ms), state, now, log }   // the same loop, advanced incrementally (browser demo)
+renderLanes(plan, { width }) → string                   // text Gantt (CLI); fmt(ms) → 'HH:MM'
 ```
 Participants start their next item when it is due and they are free, finish after `active × speed × noise`,
 acknowledge appointments with a reaction delay; every event goes through `applyEvent`/`replan`.
+
+## 8b. Dev tools
+
+```
+node scripts/plan-recipes.js buns,tiramisu 3 [items]     # plan real recipes from packages/server/src/recipes and print the lanes
+node scripts/validate-recipes.js                         # schema + parse + validate every recipe
+node bin/demo.js --recipes buns,tiramisu,negroni --participants 4 --sheets 2 --seed 7 [--verbose] [--plan-only]
+```
 
 ## 9. Top-level helper
 

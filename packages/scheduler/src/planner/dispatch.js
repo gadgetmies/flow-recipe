@@ -37,8 +37,8 @@ export function dispatch(graph, session, windows, opts = {}) {
       freeAt: now0, lastContext: null, load: 0, timers: [], blocked: [], items: [], lastItemEnd: now0,
     }))
   if (participants.length === 0) {
-    diagnostics.push({ code: 'NO_PARTICIPANTS', message: 'No cooking participants; nothing can be scheduled.' })
-    return { items: [], participants, diagnostics, dishes: [], done: false, log }
+    diagnostics.push({ code: 'NO_PARTICIPANTS', message: 'Nobody is cooking yet: add participants (or expected participants) to get a plan.' })
+    return { items: [], participants, loads: {}, expected: {}, diagnostics, dishes: graph.dishes.map((d) => ({ dishId: d.id, plannedServeRel: null, spread: 0, lastFinishRel: null })), done: false, runtime: new Map(), log }
   }
   const pById = new Map(participants.map((p) => [p.id, p]))
 
@@ -163,7 +163,7 @@ export function dispatch(graph, session, windows, opts = {}) {
   function priorityKey(r) {
     const u = r.task.completion ? URGENCY_RANK[r.task.completion.urgency] ?? 2 : 2
     const anchoredBoost = r.window.anchored ? 0 : 1
-    return [r.isCleaning ? 0 : 1, u * 0 + 0, r.window.LS, anchoredBoost, -(r.task.tedium || 1), r.id]
+    return [r.fixedStart !== null ? 0 : r.isCleaning ? 1 : 2, u, r.window.LS, anchoredBoost, -(r.task.tedium || 1), r.id]
   }
   function cmpKey(a, b) {
     for (let i = 0; i < a.length; i++) {
@@ -298,7 +298,9 @@ export function dispatch(graph, session, windows, opts = {}) {
 
   function laneBlockOverlap(p, s, e, { soft = false } = {}) {
     // checks (a glance at the pot) are soft blocks: work that can be interrupted anywhere may overlap them
-    return p.blocked.find((b) => b.start < e && s < b.end && !(soft && String(b.uuid).includes('@check'))) || null
+    const hits = p.blocked.filter((b) => b.start < e && s < b.end && !(soft && String(b.uuid).includes('@check')))
+    if (!hits.length) return null
+    return hits.reduce((a, b) => (b.start < a.start ? b : a))
   }
 
   function makeCleaningTask(instance, needingTask, t) {
@@ -469,7 +471,7 @@ export function dispatch(graph, session, windows, opts = {}) {
     if (sn) { const slot = stations.freeSlot(sn, t); if (slot) stations.acquire(slot, activeEnd) }
 
     r.status = 'placed'; r.start = s; r.activeEnd = activeEnd; r.end = end; r.participant = p.id
-    p.freeAt = activeEnd
+    p.freeAt = Math.max(p.freeAt, activeEnd)
     p.lastContext = contextOf(task)
     p.load += (active * (task.tedium || 1)) + setup
     loads[p.id] = p.load
@@ -714,7 +716,8 @@ export function dispatch(graph, session, windows, opts = {}) {
         // skip instances that are needed soon (a pending task of that type with LS within 2× the clean time) — cleaning them now is still fine, it makes them clean
         dirty.sort((a, b) => a.dirtySince - b.dirtySince || byId(a.id, b.id))
         const inst = dirty[0]
-        const cleanDur = cleanSeconds[inst.state === 'wash' ? 'wash' : 'rinse'] / p.speed + policy.switchMatrix.any
+        const m = policy.switchMatrix
+        const cleanDur = cleanSeconds[inst.state === 'wash' ? 'wash' : 'rinse'] / p.speed + m.any + m.otherDish + m.afterCleaning
         if (laneBlockOverlap(p, t, t + cleanDur)) continue
         const cr = makeCleaningTask(inst, null, t)
         cr.window.LS = t + 3600 * 4

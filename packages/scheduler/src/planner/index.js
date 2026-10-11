@@ -128,7 +128,7 @@ export function plan(graph, session, options = {}) {
     if (hold !== null && dd.spread > hold) diagnostics.push({ code: 'SPREAD', message: `${gd.title}: portions finish ${Math.round(dd.spread / 60)} min apart, more than the ${Math.round(hold / 60)} min hold.`, dish: gd.id, delta: dd.spread - hold })
     return { dishId: gd.id, title: gd.title, serveTarget: gd.serveTime, plannedServe, spread: Math.round(dd.spread || 0), holdUsed: hold, late: late === null ? null : Math.round(late) }
   })
-  if (!d.done) diagnostics.push({ code: 'INCOMPLETE', message: 'Some tasks could not be scheduled.' })
+  if (!d.done && !diagnostics.some((x) => x.code === 'NO_PARTICIPANTS')) diagnostics.push({ code: 'INCOMPLETE', message: 'Some tasks could not be scheduled.' })
 
   const allEnds = itemsMs.map((it) => it.passiveUntil || it.end)
   const endTime = allEnds.length ? Math.max(...allEnds) : t0
@@ -146,7 +146,7 @@ export function plan(graph, session, options = {}) {
     },
     shoppingList: shoppingList(s),
   }
-  const violations = checkPlan(result, graph, { minPassive: policy.minAppointmentPassiveSeconds })
+  const violations = diagnostics.some((x) => x.code === 'NO_PARTICIPANTS') ? [] : checkPlan(result, graph, { minPassive: policy.minAppointmentPassiveSeconds })
   if (violations.length) result.diagnostics.push({ code: 'INVARIANT', message: violations.slice(0, 5).join('; '), count: violations.length })
   return result
 }

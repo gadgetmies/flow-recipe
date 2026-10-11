@@ -900,3 +900,43 @@ participant, number of re-plans, number of interrupts, final lateness per dish, 
   the operation is the proposal) and never that they *must*.
 - Whether the host or every peer runs the search. The spec assumes host-authoritative with deterministic replay as a
   fallback for host loss.
+
+---
+
+## 15. Implementation notes (status of the code against this spec)
+
+The engine lives in `packages/scheduler` (pure ESM JavaScript, contracts in its README). The server plans on behalf
+of a session (`packages/server`, API in `packages/server/API.md`); the client renders the plan (`packages/client`).
+
+| Spec section | Module | State |
+|---|---|---|
+| §2, §10 recipe format and catalogue | `recipe.xsd` v2, `operations.xsd` v2, `src/recipe`, `src/catalogue` | done; all nine recipes migrated and validated (`scripts/validate-recipes.js`) |
+| §3, §5.1–5.2 model, expansion, batches, streams, buffers, sinks | `src/graph` | done; carriers follow their batch through streaming stages and are freed by the task that lists them in `<outputs>` |
+| §5.3 windows, anchored / floating | `src/planner/windows.js` | done; floating work additionally keeps within `policy.floatWindowSeconds` of its latest start |
+| §5.5 dispatch: people, tool instances, cleaning, appliances with modes and slots, stations, holding, appointments, chunking, buffers/blocking, fillers | `src/planner/dispatch.js`, `resources.js`, `cost.js` | done |
+| §5.4 pipelines, §5.6 search, §5.7 repair | `src/planner/pipeline.js`, `search.js`, `repair.js`, `objective.js` | in progress; the float-window rung of the ladder is in `plan()` |
+| §6 online mode, interrupts | `src/online` | done; `dueInterrupts` is polled by the server |
+| §8 worked example | `scripts/plan-recipes.js buns 3`, `bin/demo.js --sheets 2` | reproduces the oven rounds, appointments and the two-sheet blocking |
+| §12 property checks | `src/planner/check.js` (run on every plan; violations become an `INVARIANT` diagnostic) | done |
+| simulation | `src/sim` (CLI `bin/demo.js`, in-app `/demo`) | done |
+
+Decisions taken while implementing that refine the spec text:
+
+- **Carrier identity is per producer batch.** A tool holding an output is bound under `${outputId}#b<n>`; a
+  consumer takes the instances bound to its predecessors' keys, limited to the carriers its own units need, and
+  re-binds them under its own key. Consumers that do not list the carrier still carry it (buns stay on the sheet
+  through brushing). Only a task that lists the type in `<outputs>` frees it. A streaming consumer may re-bind an
+  instance before the producer finishes, so finishing never overwrites a binding.
+- **Shared containers.** Two tasks whose outputs feed the same consumer may share one reserved container when no
+  other instance exists (flour and sugar measured into the same bowl).
+- **Compatible reuse.** A dirty tool last used on the same dish and the same recipe step or unit stream needs no
+  cleaning between uses (one pastry brush across four sheets). Instruments (scales, towels, racks, films) never
+  soil.
+- **Short passive phases** (under `policy.minAppointmentPassiveSeconds`, default 3 min) keep the cook at the pan
+  instead of creating an appointment.
+- **Hold placement matters.** The hold that limits how long buns may wait belongs on the baked output, not on the
+  transfer to the rack; otherwise the planner delays the transfer to keep the *rack* fresh.
+- **Container-level operations** (transfer, line, pour, cover, stack) use a fixed cost plus a small per-unit term;
+  a per-bun transfer time made moving a sheet of buns take an hour.
+- **Fair share is relative to work assigned so far** (with a floor), not to the recipe total, so setup and cleaning
+  time count and early assignments are not over-penalised.

@@ -45,3 +45,12 @@ test('bowl shortage inserts a cleaning task', () => {
   assert.ok(all.some((it) => it.kind === 'cleaning'), 'cleaning item present: ' + all.map((i) => i.uuid).join(','))
   assert.ok(!p.diagnostics.some((d) => d.code === 'DEADLOCK'), JSON.stringify(p.diagnostics))
 })
+
+test('a session without cooks yields an empty draft with a diagnostic, not an exception', () => {
+  const serve = Date.UTC(2026, 9, 11, 18, 0, 0)
+  const graph = graphFixture(serve)
+  const p = plan(graph, { id: 's', dishes: [{ id: 'cake', recipeId: 'cake', recipe: null, scale: 1, serveTime: serve }], participants: [], inventory: defaultInventory(), policy: {} })
+  assert.equal(p.lanes.length, 0)
+  assert.ok(p.diagnostics.some((d) => d.code === 'NO_PARTICIPANTS'))
+  assert.equal(p.dishes.length, 1)
+})
