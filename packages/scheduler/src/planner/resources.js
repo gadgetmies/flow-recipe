@@ -15,7 +15,7 @@ export class ToolPool {
     const types = new Set([...counts.keys(), ...neededTypes])
     for (const type of types) {
       let n = counts.has(type) ? counts.get(type) : 1
-      if (!counts.has(type)) diagnostics.push({ code: 'TOOL_NOT_IN_INVENTORY', message: `Tool type '${type}' is not in the inventory; assuming one instance.`, tool: type })
+      if (!counts.has(type) && !diagnostics.some((d) => d.code === 'TOOL_NOT_IN_INVENTORY' && d.tool === type)) diagnostics.push({ code: 'TOOL_NOT_IN_INVENTORY', message: `Tool type '${type}' is not in the inventory; assuming one instance.`, tool: type })
       if (n === 0 && [...neededTypes].includes(type)) {
         diagnostics.push({ code: 'TOOL_COUNT_ZERO', message: `Inventory has zero '${type}'; assuming one instance so the plan can be built.`, tool: type })
         n = 1
@@ -100,13 +100,21 @@ export class AppliancePool {
 
   /** A free slot at t for the given mode, or null. A mode change is only possible while every slot is idle. */
   freeSlot(type, t, mode = null) {
+    const slots = this.freeSlots(type, t, mode, 1)
+    return slots ? slots[0] : null
+  }
+
+  /** `n` free slots at t for the given mode (n is capped at the appliance's slot count), or null. */
+  freeSlots(type, t, mode = null, n = 1) {
     const a = this.appliances.get(type)
     if (!a) return null
+    const need = Math.min(Math.max(1, n), a.slots.length)
     if (a.modes && mode && a.mode !== mode) {
       if (a.slots.some((s) => s.busyUntil > t)) return null
-      return a.slots[0]
+      return a.slots.slice(0, need)
     }
-    return a.slots.find((s) => s.busyUntil <= t) || null
+    const free = a.slots.filter((s) => s.busyUntil <= t)
+    return free.length >= need ? free.slice(0, need) : null
   }
 
   nextFreeTime(type, t) {

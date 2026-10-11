@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd"
+        version="2" id="tomato-soup">
+    <title>Tomato soup</title>
+    <serving temperature="hot" hold="10" hold-unit="minutes"/>
+    <ingredients>
+        <ingredient id="onion">onion</ingredient>
+        <ingredient id="garlic">garlic</ingredient>
+        <ingredient id="olive-oil">olive oil</ingredient>
+        <ingredient id="canned-tomatoes">canned chopped tomatoes</ingredient>
+        <ingredient id="stock">vegetable stock</ingredient>
+        <ingredient id="salt">salt</ingredient>
+        <ingredient id="black-pepper">black pepper</ingredient>
+    </ingredients>
+    <tools>
+        <tool id="knife">knife</tool>
+        <tool id="plate">plate</tool>
+        <!-- Not in the default inventory: the scheduler reports TOOL_NOT_IN_INVENTORY for these until the kitchen declares them. -->
+        <tool id="pot">pot<properties>
+                <property name="capacity">
+                    <numeric-value number="3" unit="l"/>
+                </property>
+            </properties>
+        </tool>
+        <tool id="blender">immersion blender</tool>
+        <tool id="spoon">spoon</tool>
+        <tool id="bowl">bowl<properties>
+                <property name="capacity">
+                    <numeric-value number="1" unit="bowl"/>
+                </property>
+            </properties>
+        </tool>
+    </tools>
+    <tasks>
+        <task operation="slice" id="slice-onion" requires="knife">
+            <options>
+                <option name="parts">
+                    <numeric-value number="10"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="onion"/>
+            </inputs>
+            <tools>
+                <tool ref="knife" soil="rinse"/>
+                <tool ref="plate" reserved="true"/>
+            </tools>
+            <outputs>
+                <output id="sliced-onion">sliced onion</output>
+            </outputs>
+            <instructions>
+                Peel and finely slice the <input ref="onion"/> with a <tool ref="knife" soil="rinse"/> and put it on a
+                <tool ref="plate" reserved="true"/>.
+            </instructions>
+        </task>
+        <task operation="slice" id="slice-garlic" requires="knife">
+            <options>
+                <option name="parts">
+                    <numeric-value number="6"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="garlic"/>
+            </inputs>
+            <tools>
+                <tool ref="knife" soil="rinse"/>
+                <tool ref="plate" reserved="true"/>
+            </tools>
+            <outputs>
+                <output id="sliced-garlic">sliced garlic</output>
+            </outputs>
+            <instructions>
+                Peel and thinly slice the <input ref="garlic"/> with a <tool ref="knife" soil="rinse"/> and put it on a
+                <tool ref="plate" reserved="true"/>.
+            </instructions>
+        </task>
+        <task operation="incorporate" id="add-aromatics-to-pot">
+            <inputs>
+                <input ref="olive-oil"/>
+                <input ref="sliced-onion"/>
+                <input ref="sliced-garlic"/>
+            </inputs>
+            <tools>
+                <tool ref="pot" reserved="true"/>
+            </tools>
+            <outputs>
+                <output id="aromatics-in-pot">onion and garlic in oil</output>
+                <tool ref="plate"/>
+            </outputs>
+            <instructions>
+                Put the <input ref="olive-oil"/>, <input ref="sliced-onion"/> and <input ref="sliced-garlic"/> into a
+                <tool ref="pot" reserved="true"/>.
+            </instructions>
+        </task>
+        <task operation="soften" id="sweat-aromatics" requires="hot-pan">
+            <inputs>
+                <input ref="aromatics-in-pot"/>
+            </inputs>
+            <tools>
+                <tool ref="pot" reserved="true"/>
+                <tool ref="spoon"/>
+            </tools>
+            <outputs>
+                <output id="softened-aromatics" hold="10" hold-unit="minutes">softened onion and garlic</output>
+            </outputs>
+            <instructions>
+                Sweat the <input ref="aromatics-in-pot"/> on the hob over medium heat, stirring with a
+                <tool ref="spoon"/>, until the onion is soft and translucent.
+            </instructions>
+        </task>
+        <task operation="incorporate" id="add-tomatoes-and-stock">
+            <inputs>
+                <input ref="softened-aromatics"/>
+                <input ref="canned-tomatoes"/>
+                <input ref="stock"/>
+            </inputs>
+            <tools>
+                <tool ref="pot" reserved="true"/>
+            </tools>
+            <outputs>
+                <output id="soup-base">soup base</output>
+            </outputs>
+            <instructions>
+                Pour the <input ref="canned-tomatoes"/> and the <input ref="stock"/> over the
+                <input ref="softened-aromatics"/> in the pot.
+            </instructions>
+        </task>
+        <task operation="boil" id="simmer-soup" requires="hot-pan">
+            <options>
+                <option name="duration">
+                    <numeric-value number="20" unit="minutes"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="soup-base"/>
+            </inputs>
+            <tools>
+                <tool ref="pot" reserved="true"/>
+            </tools>
+            <outputs>
+                <output id="simmered-soup">simmered soup</output>
+            </outputs>
+            <instructions>
+                Bring the <input ref="soup-base"/> to the boil, then simmer for
+                <option name="duration"><numeric-value number="20" unit="minutes"/></option>,
+                stirring now and then so it does not catch.
+            </instructions>
+        </task>
+        <task operation="mix" id="blend-soup">
+            <inputs>
+                <input ref="simmered-soup"/>
+            </inputs>
+            <tools>
+                <tool ref="pot" reserved="true"/>
+                <tool ref="blender" soil="wash"/>
+            </tools>
+            <outputs>
+                <output id="blended-soup">blended soup</output>
+            </outputs>
+            <instructions>
+                Blend the <input ref="simmered-soup"/> in the pot with the <tool ref="blender" soil="wash"/> until smooth.
+            </instructions>
+        </task>
+        <task operation="sprinkle" id="season-soup">
+            <inputs>
+                <input ref="blended-soup"/>
+                <input ref="salt"/>
+                <input ref="black-pepper"/>
+            </inputs>
+            <tools>
+                <tool ref="pot" reserved="true"/>
+                <tool ref="spoon"/>
+            </tools>
+            <outputs>
+                <output id="seasoned-soup">seasoned soup</output>
+            </outputs>
+            <instructions>
+                Season the <input ref="blended-soup"/> with <input ref="salt"/> and <input ref="black-pepper"/>
+                to taste.
+            </instructions>
+        </task>
+        <task operation="split" id="portion-soup">
+            <options>
+                <option name="parts">
+                    <numeric-value number="4"/>
+                </option>
+            </options>
+            <inputs>
+                <input ref="seasoned-soup"/>
+            </inputs>
+            <tools>
+                <tool ref="pot" reserved="true"/>
+            </tools>
+            <outputs>
+                <output id="soup-portion" amount="4" unit="bowl">portion of soup</output>
+            </outputs>
+        </task>
+        <task operation="pour" id="ladle-into-bowls">
+            <inputs>
+                <input ref="soup-portion"/>
+            </inputs>
+            <tools>
+                <tool ref="bowl" reserved="true"/>
+                <tool ref="spoon"/>
+            </tools>
+            <outputs>
+                <output id="tomato-soup-in-bowl" amount="4" unit="bowl" hold="10" hold-unit="minutes" final="true">tomato soup</output>
+                <tool ref="pot"/>
+            </outputs>
+            <instructions>
+                Ladle each <input ref="soup-portion"/> into a <tool ref="bowl" reserved="true"/>.
+            </instructions>
+        </task>
+    </tasks>
+</recipe>

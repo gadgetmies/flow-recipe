@@ -90,12 +90,19 @@ export function dispatch(graph, session, windows, opts = {}) {
   const items = []
 
   // ---- frozen prefix (online mode) -----------------------------------------------------------------------
+  // done: { taskId, participantId, start, end } where `end` is when the task is really over (after its passive
+  // phase, if any); running: { taskId, participantId, start, remainingActive }. Frozen tasks keep their holder,
+  // occupy their appliance slot until `end`, and when their passive phase is still running at `now` their
+  // completion appointment is (re)placed so the follow-up stays pinned (spec §6.2, "near-future appointments").
   const frozen = opts.frozen || { done: [], running: [] }
+  const frozenStillEnding = []
   for (const d of frozen.done || []) {
     const r = rt.get(d.taskId || d.uuid)
     if (!r) continue
-    r.status = 'done'; r.start = d.start; r.activeEnd = d.end; r.end = d.end; r.participant = d.participantId
+    r.status = 'done'; r.start = d.start; r.activeEnd = d.end - (r.task.passive || 0); r.end = d.end; r.participant = d.participantId
     r.frozenItem = d
+    if (r.end > now0 + 1e-9) frozenStillEnding.push(r)
+    else if (r.task.operation === 'preheat-oven' && r.task.appliance && r.task.appliance.mode) appliances.setMode(r.task.appliance.type, r.task.appliance.mode)
   }
   for (const d of frozen.running || []) {
     const r = rt.get(d.taskId || d.uuid)
@@ -106,7 +113,21 @@ export function dispatch(graph, session, windows, opts = {}) {
     r.end = r.activeEnd + (r.task.passive || 0)
     r.frozenItem = d
     if (p) { p.freeAt = Math.max(p.freeAt, r.activeEnd); p.lastContext = contextOf(r.task); p.load += (r.task.active || 0) * (r.task.tedium || 1) }
+    frozenStillEnding.push(r)
   }
+  for (const r of frozenStillEnding) {
+    const an = applianceNeed(r.task)
+    if (!an) continue
+    const slot = appliances.freeSlot(an.type, now0, an.mode) || appliances.get(an.type).slots[0]
+    appliances.acquire(an.type, slot, { until: r.end, holder: r.id, mode: an.mode })
+    if (r.task.operation === 'preheat-oven' && an.mode) r.setsMode = an
+  }
+
+  // Stability (spec §4.2 term C, §6.2): uuid/taskId → participantId the previous plan had within the stability
+  // horizon. The dispatcher subtracts W_stable × 60 from that participant's assignment cost (and from the
+  // appointment-holder cost), so small drifts keep near-future work with the same person.
+  const preferAssignments = opts.preferAssignments instanceof Map ? opts.preferAssignments : new Map(Object.entries(opts.preferAssignments || {}))
+  const stableBonus = (policy.weights.stable || 0) * 60
 
   function contextOf(task) {
     const c = task.context || {}
@@ -119,6 +140,12 @@ export function dispatch(graph, session, windows, opts = {}) {
   const totalActive = Object.values(graph.tasks).reduce((s, t) => s + (t.active || 0) * (t.tedium || 1), 0)
   const shareSum = participants.reduce((s, p) => s + p.targetShare, 0) || 1
   for (const p of participants) { loads[p.id] = p.load; expected[p.id] = totalActive * (p.targetShare / shareSum) }
+  // fair share of the work assigned SO FAR (plus a floor so early decisions are not over-penalised)
+  function refreshExpected() {
+    const sum = participants.reduce((a, p) => a + (loads[p.id] || 0), 0)
+    const floor = totalActive * 0.25
+    for (const p of participants) expected[p.id] = Math.max(sum, floor) * (p.targetShare / shareSum)
+  }
 
   // ---- helpers -------------------------------------------------------------------------------------------
   function predsSatisfiedAt(r) {
@@ -150,55 +177,112 @@ export function dispatch(graph, session, windows, opts = {}) {
   function carrierKey(task, type) {
     return `${task.dishId}:${type}:b${task.batch ? task.batch.index : 0}`
   }
+  /** Binding key for an output of a task: batch instances get their own key so carriers follow their batch. */
+  function bindKey(task, outId) {
+    return task.batch ? `${outId}#b${task.batch.index}` : outId
+  }
+  /** Keys under which our predecessors' outputs (and the tools holding them) are bound. */
+  function predKeys(r) {
+    if (r._predKeys) return r._predKeys
+    const keys = new Set()
+    for (const e of pred.get(r.id) || []) {
+      const pr = rt.get(e.from)
+      if (!pr) continue
+      for (const o of pr.task.outputs || []) keys.add(bindKey(pr.task, o.id))
+    }
+    r._predKeys = keys
+    return keys
+  }
+  const carrierTypes = new Set(graph.buffers.map((b) => b.carrier).filter(Boolean))
+  function carriersNeeded(task, type) {
+    if (!(task.batch && task.unitStream)) return Infinity
+    const buf = graph.buffers.find((b) => b.carrier === type && (b.from === task.id || b.to === task.id))
+    let cap = buf ? buf.capPerCarrier : null
+    if (!cap) { const inv = (session.inventory.tools || []).find((x) => x.type === type); if (inv && inv.capacity && inv.capacity.unit === task.unitStream) cap = inv.capacity.number }
+    return cap ? Math.max(1, Math.ceil(task.units / cap)) : 1
+  }
+
+  const NEVER_SOIL = new Set(['kitchen-scale', 'precision-scale', 'towel', 'parchment-paper', 'cling-film', 'cover', 'cooling-rack', 'serving-plate'])
+
+  function compatibleDirty(inst, task) {
+    // a dirty tool last used on the same food (same dish and same recipe step or unit stream) needs no cleaning
+    const u = inst.lastUse
+    if (!u || u.dishId !== task.dishId) return false
+    return u.recipeTaskId === task.recipeTaskId || (!!task.unitStream && u.unitStream === task.unitStream)
+  }
 
   function requiredToolBindings(r, t) {
-    // Returns { ok: bool, bindings: [{instance, mode, soil, type}], missingType, needsCleaning: instance|null }
+    // Returns { ok, bindings: [{instance, type, mode, soil, reserved}], missingType, needsCleaning, waitUntil }
+    const task = r.task
     const bindings = []
-    for (const need of r.task.tools || []) {
-      const qty = Math.max(1, need.qty || 1)
+    const keys = predKeys(r)
+    for (const need of task.tools || []) {
+      const soil = NEVER_SOIL.has(need.type) ? 'none' : (need.soil || task.soil || 'rinse')
+      const reserved = need.mode === 'reserved'
+      // 1. every instance that physically holds one of our inputs (reserved containers, carriers) comes with the input
+      let holding = tools.all(need.type).filter((i) => i.binding && keys.has(i.binding) && !bindings.some((b) => b.instance === i))
+      if (holding.length) {
+        // a batch on a unit stream takes only the carriers its units need; siblings take the rest
+        if (task.batch && task.unitStream) {
+          const needed = Math.min(holding.length, carriersNeeded(task, need.type))
+          holding = holding.filter((i) => i.busyUntil <= t + 1e-9).slice(0, needed)
+          if (holding.length < needed) {
+            const soonest = tools.all(need.type).filter((i) => i.binding && keys.has(i.binding)).map((i) => i.busyUntil).sort((a, b) => a - b)[0]
+            return { ok: false, bindings: [], missingType: need.type, needsCleaning: null, waitUntil: soonest ?? INF }
+          }
+        } else {
+          const busy = holding.find((i) => i.busyUntil > t + 1e-9)
+          if (busy) return { ok: false, bindings: [], missingType: need.type, needsCleaning: null, waitUntil: busy.busyUntil }
+        }
+        for (const i of holding) bindings.push({ instance: i, type: need.type, mode: need.mode || 'active', soil, reserved: true, inherited: true })
+        continue
+      }
+      let qty = Math.max(1, need.qty || 1)
+      const total = tools.all(need.type).length
+      if (qty > total) {
+        if (!diagnostics.some((d) => d.code === 'TOOL_QTY_CAPPED' && d.tool === need.type)) diagnostics.push({ code: 'TOOL_QTY_CAPPED', message: `'${task.title}' asks for ${qty} × ${need.type} but the kitchen has ${total}; using ${total}.`, tool: need.type, task: r.id })
+        qty = total
+      }
       for (let q = 0; q < qty; q++) {
         let inst = null
-        // 1. instance bound to an input output id (reserved tool passed along with the result)
-        for (const inp of r.task.inputs || []) {
-          inst = tools.bound(need.type, inp.ref)
-          if (inst && !bindings.some((b) => b.instance === inst)) break
-          inst = null
-        }
         // 2. carrier bound to this batch
-        if (!inst) {
-          const c = tools.bound(need.type, carrierKey(r.task, need.type))
-          if (c && !bindings.some((b) => b.instance === c)) inst = c
+        const c = tools.bound(need.type, carrierKey(task, need.type))
+        if (c && !bindings.some((b) => b.instance === c)) {
+          if (c.busyUntil > t + 1e-9) return { ok: false, bindings: [], missingType: need.type, needsCleaning: null, waitUntil: c.busyUntil }
+          inst = c
         }
         // 2b. share an instance reserved for an output that feeds the same consumer as our output
-        //     (measuring sugar into the bowl that already holds the flour)
         if (!inst) {
-          const myOuts = new Set((r.task.outputs || []).map((o) => o.id))
+          const myOuts = new Set((task.outputs || []).map((o) => o.id))
           for (const cand of tools.all(need.type)) {
             if (!cand.binding || bindings.some((b) => b.instance === cand)) continue
-            const consumer = [...rt.values()].find((x) => x.status === 'pending' && (x.task.inputs || []).some((i) => i.ref === cand.binding))
-            if (consumer && (consumer.task.inputs || []).some((i) => myOuts.has(i.ref)) && consumer.task.dishId === r.task.dishId) { inst = cand; break }
+            const consumer = [...rt.values()].find((x) => x.status === 'pending' && predKeys(x).has(cand.binding))
+            if (consumer && (consumer.task.inputs || []).some((i) => myOuts.has(i.ref)) && consumer.task.dishId === task.dishId) {
+              if (cand.busyUntil > t + 1e-9) return { ok: false, bindings: [], missingType: need.type, needsCleaning: null, waitUntil: cand.busyUntil }
+              inst = cand; break
+            }
           }
         }
-        if (inst && inst.busyUntil > t) return { ok: false, bindings: [], missingType: need.type, needsCleaning: null, waitUntil: inst.busyUntil }
-        // 3. free clean instance
+        // 3. free clean instance, else a dirty one last used on the same food
         if (!inst) {
-          const list = tools.all(need.type).filter((i) => i.binding === null && i.busyUntil <= t && i.state === 'clean' && !bindings.some((b) => b.instance === i))
-          inst = list[0] || null
+          const free = tools.all(need.type).filter((i) => i.binding === null && i.busyUntil <= t + 1e-9 && !bindings.some((b) => b.instance === i))
+          inst = free.find((i) => i.state === 'clean') || free.find((i) => compatibleDirty(i, task)) || null
+          if (inst && inst.state !== 'clean') inst.cleaningScheduled = false
         }
         if (!inst) {
           const dirty = tools.dirtyCandidate(need.type, t)
           return { ok: false, bindings: [], missingType: need.type, needsCleaning: dirty, waitUntil: tools.nextFreeTime(need.type, t) }
         }
-        bindings.push({ instance: inst, type: need.type, mode: need.mode || 'active', soil: need.soil || r.task.soil || 'rinse', reserved: need.mode === 'reserved' })
+        bindings.push({ instance: inst, type: need.type, mode: need.mode || 'active', soil, reserved })
       }
     }
     return { ok: true, bindings }
   }
 
   function applianceNeed(task) {
-    if (task.appliance && appliances.has(task.appliance.type)) return { type: task.appliance.type, mode: task.appliance.mode || null }
+    if (task.appliance && appliances.has(task.appliance.type)) return { type: task.appliance.type, mode: task.appliance.mode || null, slots: Math.max(1, task.appliance.slots || 1) }
     const st = task.context?.station
-    if (st === 'hob' && appliances.has('hob')) return { type: 'hob', mode: null }
+    if (st === 'hob' && appliances.has('hob')) return { type: 'hob', mode: null, slots: 1 }
     return null
   }
   function holdingNeed(task) {
@@ -212,8 +296,9 @@ export function dispatch(graph, session, windows, opts = {}) {
     return null
   }
 
-  function laneBlockOverlap(p, s, e) {
-    return p.blocked.find((b) => b.start < e && s < b.end) || null
+  function laneBlockOverlap(p, s, e, { soft = false } = {}) {
+    // checks (a glance at the pot) are soft blocks: work that can be interrupted anywhere may overlap them
+    return p.blocked.find((b) => b.start < e && s < b.end && !(soft && String(b.uuid).includes('@check'))) || null
   }
 
   function makeCleaningTask(instance, needingTask, t) {
@@ -242,12 +327,14 @@ export function dispatch(graph, session, windows, opts = {}) {
     return r
   }
 
-  function chooseHolder(r, endTime, dur) {
+  function chooseHolder(r, endTime, dur, appointmentUuid = null) {
     let best = null, bestCost = INF
     for (const p of participants) {
+      p.timers = p.timers.filter((x) => x.firesAt > r.activeEnd)
       if (p.timers.length >= p.maxTimers) continue
       if (!availableThrough(p, endTime - policy.leadSeconds, endTime + dur)) continue
       if (laneBlockOverlap(p, endTime - policy.leadSeconds, endTime + dur)) continue
+      if (p.freeAt > endTime - policy.leadSeconds + 1e-9 && p.id !== r.participant) continue
       const exp = Math.max(1, expected[p.id])
       let cost = policy.weights.fair * 60 * ((loads[p.id] || 0) - exp) / exp
       cost += 10 * p.timers.length
@@ -255,6 +342,8 @@ export function dispatch(graph, session, windows, opts = {}) {
       cost += sameDish ? 0 : 15
       // prefer whoever placed the task (they know the oven) unless overloaded
       if (p.id === r.participant) cost -= 10
+      // stability: keep the holder the previous plan had (spec §6.2)
+      if (appointmentUuid && preferAssignments.get(appointmentUuid) === p.id) cost -= stableBonus
       if (cost < bestCost) { bestCost = cost; best = p }
     }
     return best
@@ -263,11 +352,17 @@ export function dispatch(graph, session, windows, opts = {}) {
   function placeAppointment(r) {
     const c = r.task.completion
     if (!c || !(r.task.passive > 0) || c.urgency === 'relaxed') return
+    if (r.task.passive < (policy.minAppointmentPassiveSeconds ?? 180)) {
+      // too short to walk away from: the participant waits by the pan
+      const p = pById.get(r.participant)
+      if (p) { p.freeAt = Math.max(p.freeAt, r.end); p.load += (r.end - r.activeEnd) * 0.5; loads[p.id] = p.load }
+      return
+    }
     // successor that is the completion follow-up (take-out) when short; otherwise synthetic item
     const fsSucc = (succ.get(r.id) || []).filter((e) => e.kind === 'fs').map((e) => rt.get(e.to)).filter((s) => s && s.status === 'pending')
     const follow = fsSucc.filter((s) => (s.task.active || 0) <= APPOINTMENT_MAX_ACTIVE && (pred.get(s.id) || []).length === 1).sort((a, b) => byId(a.id, b.id))[0] || null
     const dur = follow ? (follow.task.active || c.duration || 30) : (c.duration || 30)
-    const holder = chooseHolder(r, r.end, dur)
+    const holder = chooseHolder(r, r.end, dur, follow ? follow.id : `${r.id}@done`)
     if (!holder) {
       diagnostics.push({ code: 'NO_APPOINTMENT_HOLDER', message: `Nobody is free to handle the end of '${r.task.title}'; it will be an interrupt.`, task: r.id })
       return
@@ -286,6 +381,7 @@ export function dispatch(graph, session, windows, opts = {}) {
     if (r.task.attention === 'monitored' && r.task.checkInterval > 0) {
       for (let k = r.activeEnd + r.task.checkInterval; k < r.end - 1; k += r.task.checkInterval) {
         const d = r.task.checkDuration || 10
+        if (holder.freeAt > k + 1e-9 || laneBlockOverlap(holder, k, k + d)) continue
         holder.blocked.push({ start: k, end: k + d, uuid: `${r.id}@check${Math.round(k)}` })
         items.push(itemFor({ uuid: `${r.id}@check${Math.round(k)}`, taskId: r.id, kind: 'check', participantId: holder.id, start: k, end: k + d, title: `Check ${r.task.title.toLowerCase()}`, instructions: `Check on ${r.task.title.toLowerCase()}`, task: r.task, window: { earliest: k - r.task.checkInterval / 2, latest: k + r.task.checkInterval / 2 }, urgency: 'timed' }))
       }
@@ -330,22 +426,41 @@ export function dispatch(graph, session, windows, opts = {}) {
     // resources
     const bind = requiredToolBindings(r, t)
     const toolRefs = []
+    const firstOut = task.outputs && task.outputs[0] ? task.outputs[0].id : null
+    const myKey = firstOut ? bindKey(task, firstOut) : carrierKey(task, 'x')
+    const returns = new Set(task.returnsTools || [])
     for (const b of bind.bindings || []) {
       const inst = b.instance
+      const isCarrier = carrierTypes.has(b.type)
       let binding = null
-      if (b.reserved) binding = (task.outputs && task.outputs[0]) ? task.outputs[0].id : null
-      const isCarrier = graph.buffers.some((buf) => buf.carrier === b.type && (buf.from === r.id || buf.to === r.id)) || (task.unitStream && task.returnsTools?.includes(b.type)) || (task.batch && task.unitStream)
-      if (task.batch && task.unitStream && !binding) binding = carrierKey(task, b.type)
-      else if (isCarrier && !binding) binding = carrierKey(task, b.type)
-      const until = b.reserved || binding ? end : activeEnd
+      if ((b.reserved || b.inherited || isCarrier) && !returns.has(b.type)) binding = myKey
+      const until = binding ? end : activeEnd
       tools.acquire(inst, { until, binding })
-      r.boundTools.push({ instance: inst, soil: b.soil, binding, reserved: !!binding })
+      inst.lastUse = { dishId: task.dishId, recipeTaskId: task.recipeTaskId, unitStream: task.unitStream || null }
+      r.boundTools.push({ instance: inst, soil: b.soil, binding, reserved: !!binding, type: b.type, returned: returns.has(b.type) })
       toolRefs.push({ type: b.type, instanceId: inst.id })
+    }
+    // tools bound to our inputs that we do not list: carriers travel with the food; other reserved tools are freed now
+    const keys = predKeys(r)
+    const listed = new Set((task.tools || []).map((x) => x.type))
+    const carriedCount = {}
+    for (const list of tools.instances.values()) for (const inst of list) {
+      if (!inst.binding || !keys.has(inst.binding) || listed.has(inst.type) || r.boundTools.some((b) => b.instance === inst)) continue
+      if (returns.has(inst.type)) { tools.release(inst, end, 'none', { unbind: true }); r.boundTools.push({ instance: inst, soil: 'none', binding: null, reserved: false, type: inst.type, returned: true }); toolRefs.push({ type: inst.type, instanceId: inst.id }); continue }
+      if (carrierTypes.has(inst.type)) {
+        carriedCount[inst.type] = (carriedCount[inst.type] || 0) + 1
+        if (carriedCount[inst.type] > carriersNeeded(task, inst.type)) { carriedCount[inst.type]--; continue }
+        tools.acquire(inst, { until: end, binding: myKey })
+        r.boundTools.push({ instance: inst, soil: 'none', binding: myKey, reserved: true, type: inst.type, carried: true })
+        toolRefs.push({ type: inst.type, instanceId: inst.id })
+      } else {
+        tools.release(inst, s, inst.state === 'clean' ? 'rinse' : 'none', { unbind: true })
+      }
     }
     const an = applianceNeed(task)
     if (an) {
-      const slot = appliances.freeSlot(an.type, t, an.mode)
-      if (slot) appliances.acquire(an.type, slot, { until: end, holder: r.id, mode: an.mode })
+      const slots = appliances.freeSlots(an.type, t, an.mode, task.operation === 'preheat-oven' ? 1 : an.slots) || []
+      for (const slot of slots) appliances.acquire(an.type, slot, { until: task.operation === 'preheat-oven' ? activeEnd : end, holder: r.id, mode: an.mode })
       if (task.operation === 'preheat-oven' && an.mode) r.setsMode = an
     }
     const hn = holdingNeed(task)
@@ -381,27 +496,20 @@ export function dispatch(graph, session, windows, opts = {}) {
   function finish(r, t) {
     // release resources at the task's end (called when the clock passes r.end)
     const task = r.task
+    const returns = new Set(task.returnsTools || [])
+    const hasSuccessors = (succ.get(r.id) || []).some((e) => { const s = rt.get(e.to); return s && s.task.kind !== 'sink' })
     for (const b of r.boundTools) {
-      if (b.reserved) {
-        // keep bound until a consumer takes it over; release when nobody downstream references the type
-        const downstreamUses = (succ.get(r.id) || []).some((e) => { const s = rt.get(e.to); return s && (s.task.tools || []).some((x) => x.type === b.instance.type) })
-        if (!downstreamUses || (task.returnsTools || []).includes(b.instance.type)) {
-          tools.release(b.instance, r.end, b.soil, { unbind: true })
-        } else {
-          // hand over: rebind to our output id so the consumer finds it
-          const out = task.outputs && task.outputs[0] ? task.outputs[0].id : null
-          b.instance.binding = out && !(task.batch && task.unitStream) ? out : b.binding
-          b.instance.busyUntil = r.end
-          b.instance.state = b.soil === 'wash' ? 'wash' : (b.instance.state === 'clean' ? 'rinse' : b.instance.state)
-        }
-      } else {
-        tools.release(b.instance, r.activeEnd, b.soil, { unbind: true })
+      const inst = b.instance
+      if (b.returned) continue
+      if (b.reserved && !returns.has(inst.type) && hasSuccessors) {
+        // the tool stays with the result until a consumer takes it (and either carries it on, returns it or frees it);
+        // a streaming consumer may already have re-bound it, so never overwrite the binding here
+        if (inst.binding === null) inst.binding = b.binding
+        inst.busyUntil = Math.max(inst.busyUntil, r.end)
+        if (b.soil !== 'none' && inst.state === 'clean') { inst.state = b.soil; inst.dirtySince = r.end }
+        continue
       }
-    }
-    for (const type of task.returnsTools || []) {
-      for (const inst of tools.all(type)) {
-        if (inst.binding === carrierKey(task, type) || (inst.binding && (task.inputs || []).some((i) => i.ref === inst.binding))) tools.release(inst, r.end, task.soil || 'rinse', { unbind: true })
-      }
+      tools.release(inst, b.reserved ? r.end : r.activeEnd, b.soil, { unbind: true })
     }
     if (r.setsMode) appliances.setMode(r.setsMode.type, r.setsMode.mode)
     if (r.isCleaning && r.cleans) tools.markCleaned(r.cleans, r.activeEnd)
@@ -425,6 +533,9 @@ export function dispatch(graph, session, windows, opts = {}) {
     }
   }
 
+  // frozen tasks whose passive phase is still running need their completion appointment (take-out) pinned
+  for (const r of frozenStillEnding) if (r.task.passive > 0) placeAppointment(r)
+
   // ---- main loop ------------------------------------------------------------------------------------------
   let t = now0
   let guard = 0
@@ -433,6 +544,7 @@ export function dispatch(graph, session, windows, opts = {}) {
 
   while (guard++ < maxIter) {
     releaseDueTasks(t)
+    for (const p of participants) p.timers = p.timers.filter((x) => x.firesAt > t)
     const pending = [...rt.values()].filter((r) => r.status === 'pending')
     if (pending.length === 0) break
 
@@ -447,6 +559,11 @@ export function dispatch(graph, session, windows, opts = {}) {
       if (r.fixedStart !== null) {
         if (r.fixedStart > t + 1e-9) { waitingTimes.push(r.fixedStart); continue }
       } else if (Number.isFinite(r.window.r) && r.window.r > t + 1e-9) { waitingTimes.push(r.window.r); continue }
+      else if (!r.window.anchored && !r.isCleaning && !policy.miseEnPlace && Number.isFinite(r.window.LS)) {
+        // floating work may not start more than a float window before its latest start (spec §5.3)
+        const earliest = r.window.LS - (policy.floatWindowSeconds ?? 3600)
+        if (earliest > t + 1e-9) { waitingTimes.push(earliest); continue }
+      }
       ready.push(r)
     }
     ready.sort((a, b) => cmpKey(priorityKey(a), priorityKey(b)))
@@ -475,7 +592,7 @@ export function dispatch(graph, session, windows, opts = {}) {
       }
       // resources other than people
       const an = applianceNeed(task)
-      if (an && !appliances.freeSlot(an.type, t, an.mode)) { r.waitedFor = { type: an.type, since: r.readySince }; waitingTimes.push(appliances.nextFreeTime(an.type, t)); continue }
+      if (an && !appliances.freeSlots(an.type, t, an.mode, task.operation === 'preheat-oven' ? 1 : an.slots)) { r.waitedFor = r.waitedFor || { type: an.type, since: r.readySince }; waitingTimes.push(appliances.nextFreeTime(an.type, t)); continue }
       const hn = holdingNeed(task)
       if (hn && !stations.freeSlot(hn, t)) { r.waitedFor = { type: hn, since: r.readySince }; waitingTimes.push(stations.nextFreeTime(hn, t)); continue }
       const sn = stationNeed(task)
@@ -483,11 +600,12 @@ export function dispatch(graph, session, windows, opts = {}) {
       const bind = requiredToolBindings(r, t)
       if (!bind.ok) {
         if (bind.needsCleaning && policy.cleaning !== 'never') { makeCleaningTask(bind.needsCleaning, task, t); placedAny = true }
-        r.waitedFor = { type: bind.missingType, since: r.readySince }
+        r.waitedFor = r.waitedFor || { type: bind.missingType, since: r.readySince }
         if (Number.isFinite(bind.waitUntil)) waitingTimes.push(bind.waitUntil)
         continue
       }
       // candidates
+      refreshExpected()
       const cands = []
       for (const p of participants) {
         if (p.freeAt > t + 1e-9) continue
@@ -497,13 +615,15 @@ export function dispatch(graph, session, windows, opts = {}) {
         const a = (task.active || 0) / p.speed
         const s = t + setup
         if (!availableThrough(p, s, s + Math.min(a, policy.minChunkSeconds))) continue
-        const block = laneBlockOverlap(p, s, s + a)
+        const block = laneBlockOverlap(p, s, s + a, { soft: task.preemptible === 'anywhere' })
         if (block && (task.preemptible === 'never' || !task.preemptible)) {
           if (block.start - s >= policy.minChunkSeconds && a > 0) { /* could do part? not preemptible → no */ }
           continue
         }
         const continuesChain = p.lastContext && p.lastContext.dish === task.dishId && task.unitStream && p.lastContext.station === (task.context?.station || 'counter')
-        const cost = assignmentCost({ p, task, setup, loads, expected, policy, isCleaning: !!r.isCleaning, continuesChain })
+        let cost = assignmentCost({ p, task, setup, loads, expected, policy, isCleaning: !!r.isCleaning, continuesChain })
+        // stability hook (online re-plan): the previous plan's assignee within the horizon gets W_stable × 60 off
+        if (preferAssignments.size && preferAssignments.get(r.id) === p.id) cost -= stableBonus
         cands.push({ p, cost, setup, a, block })
       }
       if (cands.length === 0) continue
@@ -594,6 +714,8 @@ export function dispatch(graph, session, windows, opts = {}) {
         // skip instances that are needed soon (a pending task of that type with LS within 2× the clean time) — cleaning them now is still fine, it makes them clean
         dirty.sort((a, b) => a.dirtySince - b.dirtySince || byId(a.id, b.id))
         const inst = dirty[0]
+        const cleanDur = cleanSeconds[inst.state === 'wash' ? 'wash' : 'rinse'] / p.speed + policy.switchMatrix.any
+        if (laneBlockOverlap(p, t, t + cleanDur)) continue
         const cr = makeCleaningTask(inst, null, t)
         cr.window.LS = t + 3600 * 4
         place(cr, p, t)
@@ -621,8 +743,13 @@ export function dispatch(graph, session, windows, opts = {}) {
       next = Math.min(next, tools.nextFreeTime(type, t), appliances.nextFreeTime(type, t), stations.nextFreeTime(type, t))
     }
     if (!placedAny && next === INF) {
-      const stuck = [...rt.values()].filter((r) => r.status === 'pending').map((r) => r.id)
-      diagnostics.push({ code: 'DEADLOCK', message: `Could not schedule ${stuck.length} task(s): ${stuck.slice(0, 5).join(', ')}${stuck.length > 5 ? '…' : ''}. Check tools, capabilities and availability.`, tasks: stuck })
+      const stuckRt = [...rt.values()].filter((r) => r.status === 'pending')
+      const stuck = stuckRt.map((r) => r.id)
+      const why = stuckRt.slice(0, 20).map((r) => {
+        const unmet = (pred.get(r.id) || []).map((e) => rt.get(e.from)).filter((p) => p && p.status !== 'done').map((p) => p.id)
+        return `${r.id}: ${unmet.length ? 'waits for ' + unmet.join(', ') : r.waitedFor ? 'no free ' + r.waitedFor.type : 'ready but unassignable'}`
+      })
+      diagnostics.push({ code: 'DEADLOCK', message: `Could not schedule ${stuck.length} task(s). ${why.join('; ')}${stuck.length > 6 ? '; …' : ''}`, tasks: stuck })
       break
     }
     if (next === INF) {

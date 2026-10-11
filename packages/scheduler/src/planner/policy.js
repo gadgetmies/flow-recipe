@@ -12,6 +12,8 @@ export const DEFAULT_POLICY = Object.freeze({
   cleaning: 'shared',
   endOfSessionCleaning: true,
   miseEnPlace: false,
+  floatWindowSeconds: 3600,
+  minAppointmentPassiveSeconds: 180,
   leadSeconds: 30,
   reactionSeconds: 30,
   ackTimeoutSeconds: 15,

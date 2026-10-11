@@ -14,12 +14,15 @@ function toRel(ms, t0) {
  * Compute windows for every task.
  * @param {object} graph Graph (README §5)
  * @param {number} t0 origin in epoch ms (session.now or startTime)
- * @param {object} opts { slackBuffer: seconds subtracted from every latest finish (robustness) }
+ * @param {object} opts { slackBuffer: seconds subtracted from every latest finish (robustness),
+ *   frozen: { [taskId]: { start, end } } relative seconds of done / in-progress tasks (online mode): their forward
+ *   pass uses the actual start and end instead of the catalogue estimate and they never count as infeasible }
  * @returns {{ windows: Object<string, Window>, criticalPathInfeasible: boolean, suggestedStart: number }}
  *  Window = { ES, LF, LS, r, anchored, duration, slack }
  */
 export function computeWindows(graph, t0, opts = {}) {
   const slack = opts.slackBuffer || 0
+  const frozen = opts.frozen || {}
   const tasks = graph.tasks
   const order = graph.order
   const succ = new Map()
@@ -61,10 +64,12 @@ export function computeWindows(graph, t0, opts = {}) {
 
   // Forward pass (resource-free), origin = 0
   const ES = {}
+  const fwdDur = (id) => (frozen[id] ? Math.max(0, frozen[id].end - frozen[id].start) : dur(id))
   for (const id of order) {
+    if (frozen[id]) { ES[id] = frozen[id].start; continue }
     let es = 0
     for (const e of pred.get(id)) {
-      if (e.kind === 'fs' || e.kind === 'maxlag') es = Math.max(es, ES[e.from] + dur(e.from))
+      if (e.kind === 'fs' || e.kind === 'maxlag') es = Math.max(es, ES[e.from] + fwdDur(e.from))
       else if (e.kind === 'stream') es = Math.max(es, ES[e.from] + (e.lag || 0))
     }
     ES[id] = es
@@ -82,7 +87,7 @@ export function computeWindows(graph, t0, opts = {}) {
     const anchored = Number.isFinite(r)
     const w = { ES: ES[id], LF: LF[id], LS: LS[id], r, anchored, duration: dur(id), slack: Number.isFinite(LS[id]) ? LS[id] - ES[id] : INF }
     windows[id] = w
-    if (Number.isFinite(LS[id]) && ES[id] > LS[id] + 1e-9) infeasible = true
+    if (!frozen[id] && Number.isFinite(LS[id]) && ES[id] > LS[id] + 1e-9) infeasible = true
     if (t.kind !== 'sink' && Number.isFinite(LS[id])) minLS = Math.min(minLS, LS[id])
   }
 

@@ -1,199 +1,95 @@
-import { useEffect, useState } from 'react'
+// Standalone graph page: /graph?session=<id> fetches the session's plan and draws its dependency graph.
+
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { findFinalOutputId, findTaskProducing } from './recipeTools'
-import { expandNode, scheduleItemsInTimelines } from './timelineScheduler'
-import { GraphView } from './App'
-import { Box, Typography, Container, createTheme, ThemeProvider, CssBaseline } from '@mui/material'
-import { pink, purple } from '@mui/material/colors'
+import { Box, Typography, Container, ThemeProvider, CssBaseline } from '@mui/material'
+import theme from './theme'
+import { getSession } from './api'
+import { isMockMode } from './config'
 
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 
-  (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001')
+const GraphView = lazy(() => import('./components/GraphView'))
 
-const theme = createTheme({
-  palette: {
-    background: {
-      default: '#e7ecf8',
-    },
-    primary: pink,
-    secondary: purple,
-  },
-})
-
-function GraphViewPage() {
-  const [searchParams] = useSearchParams()
-  const recipeName = searchParams.get('recipe')
-  const [recipe, setRecipe] = useState(null)
-  const [title, setTitle] = useState('')
-  const [dependencyGraph, setDependencyGraph] = useState({ nodes: [], links: [] })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    if (!recipeName) {
-      setError('Recipe parameter is required. Use ?recipe=recipe-name')
-      setLoading(false)
-      return
-    }
-
-    const loadRecipe = async () => {
-      try {
-        setLoading(true)
-        const response = await fetch(`${SERVER_URL}/api/recipes/${recipeName}`)
-        if (!response.ok) {
-          throw new Error(`Failed to load recipe: ${response.statusText}`)
-        }
-        const xmlText = await response.text()
-        const parser = new DOMParser()
-        const recipeDoc = parser.parseFromString(xmlText, 'text/xml')
-        setRecipe(recipeDoc)
-      } catch (error) {
-        console.error('Failed to load recipe:', error)
-        setError(error.message || 'Failed to load recipe')
-        setLoading(false)
-      }
-    }
-    loadRecipe()
-  }, [recipeName])
-
-  useEffect(() => {
-    if (!recipe) {
-      return
-    }
-    const titleElement = recipe.querySelector('title')
-    if (titleElement) {
-      setTitle(titleElement.innerHTML)
-    }
-  }, [recipe])
-
-  useEffect(() => {
-    if (!recipe) {
-      return
-    }
-
-    try {
-      const scale = 1
-      const newTimelines = [[]]
-      
-      const finalOutputId = findFinalOutputId(recipe)
-      const lastTask = findTaskProducing(recipe, finalOutputId)
-
-      if (!lastTask) {
-        throw new Error('Could not find final task')
-      }
-
-      let xPathResult = recipe.evaluate('(//task)', recipe, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null)
-      for (let i = 0; i < xPathResult.snapshotLength; ++i) {
-        const node = xPathResult.snapshotItem(i)
-        expandNode(recipe, node, scale)
-      }
-
-      xPathResult = recipe.evaluate(
-        '(//task|//ingredient|//tool|//ns:task)',
-        recipe,
-        function (prefix) {
-          if (prefix === 'ns') {
-            return 'http://www.w3.org/1999/xhtml'
-          } else {
-            return null
-          }
-        },
-        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-        null
-      )
-      for (let i = 0; i < xPathResult.snapshotLength; ++i) {
-        const node = xPathResult.snapshotItem(i)
-        node.setAttribute('uuid', i)
-      }
-
-      scheduleItemsInTimelines(
-        recipe,
-        [{ uuid: finalOutputId, task: lastTask, amountsLeft: { [finalOutputId]: scale } }],
-        newTimelines,
-        0,
-        false
-      )
-
-      const graph = newTimelines.reduce(
-        (g, timeline) => {
-          timeline.forEach(({ uuid, title, dependencies, task }) => {
-            const dependencyInputNames = dependencies.map(d => d.input?.name).filter(Boolean)
-            
-            const ingredientInputNames = []
-            if (task) {
-              const inputs = task.querySelectorAll('input')
-              inputs.forEach((input) => {
-                const inputId = input.getAttribute('ref')
-                const referencedElement = recipe.getElementById(inputId)
-                if (referencedElement && referencedElement.tagName === 'ingredient') {
-                  const ingredientName = Array.from(referencedElement.childNodes)
-                    .filter((node) => node.nodeType === Node.TEXT_NODE)
-                    .map((node) => node.textContent)
-                    .join('')
-                    .trim()
-                  if (ingredientName) {
-                    ingredientInputNames.push(ingredientName)
-                  }
-                }
-              })
-            }
-            
-            const inputNames = [...new Set([...dependencyInputNames, ...ingredientInputNames])]
-            g?.nodes.push({ id: uuid, title: `${uuid}-${title}`, inputNames })
-            dependencies.forEach(({ uuid: iuuid }) => g?.links.push({ source: iuuid, target: uuid }))
-          })
-          return g
-        },
-        { nodes: [], links: [] }
-      )
-
-      setDependencyGraph(graph)
-      setLoading(false)
-    } catch (error) {
-      console.error('Error processing recipe:', error)
-      setError(error.message || 'Error processing recipe')
-      setLoading(false)
-    }
-  }, [recipe])
-
-  if (loading) {
-    return (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Container sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography>Loading recipe graph...</Typography>
-        </Container>
-      </ThemeProvider>
-    )
-  }
-
-  if (error) {
-    return (
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Container sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography color="error">{error}</Typography>
-        </Container>
-      </ThemeProvider>
-    )
-  }
-
+function Page({ children }) {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Container sx={{ minHeight: '100vh', py: 2 }}>
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="h4" gutterBottom>
-            {title || 'Recipe Graph'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Recipe: {recipeName}
-          </Typography>
-        </Box>
-        <GraphView dependencyGraph={dependencyGraph} completedTasks={[]} />
-      </Container>
+      <Container sx={{ minHeight: '100vh', py: 2 }}>{children}</Container>
     </ThemeProvider>
   )
 }
 
-export default GraphViewPage
+function GraphViewPage() {
+  const [searchParams] = useSearchParams()
+  const sessionId = searchParams.get('session')
+  const recipeName = searchParams.get('recipe')
+  const [data, setData] = useState(null)
+  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(!!sessionId)
 
+  useEffect(() => {
+    if (!sessionId) return undefined
+    let cancelled = false
+    setLoading(true)
+    getSession(sessionId, isMockMode())
+      .then((d) => {
+        if (cancelled) return
+        setData(d)
+        setLoading(false)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setError(e.message || 'Failed to load session')
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId])
+
+  if (!sessionId) {
+    return (
+      <Page>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '80vh' }}>
+          <Typography color={recipeName ? 'text.primary' : 'error'} textAlign="center">
+            {recipeName
+              ? `Graphs are built from sessions now: create a session with recipe "${recipeName}" and open /graph?session=<id>.`
+              : 'Session parameter is required. Use ?session=<session id>'}
+          </Typography>
+        </Box>
+      </Page>
+    )
+  }
+  if (loading) {
+    return (
+      <Page>
+        <Typography>Loading session graph...</Typography>
+      </Page>
+    )
+  }
+  if (error) {
+    return (
+      <Page>
+        <Typography color="error">{error}</Typography>
+      </Page>
+    )
+  }
+
+  const title = (data?.session?.dishes || []).map((d) => d.title || d.recipeId).join(' + ')
+  return (
+    <Page>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h4" gutterBottom>
+          {title || 'Session graph'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Session: {sessionId} · {data?.plan ? `${data.plan.mode} ${data.plan.status}` : 'no plan yet'}
+        </Typography>
+      </Box>
+      <Suspense fallback={<Typography>Loading graph…</Typography>}>
+        <GraphView plan={data?.plan} />
+      </Suspense>
+    </Page>
+  )
+}
+
+export default GraphViewPage

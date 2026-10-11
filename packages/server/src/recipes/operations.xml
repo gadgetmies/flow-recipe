@@ -23,13 +23,13 @@
     <operation name="crumble" min-inputs="1" max-inputs="1" min-outputs="1"
                attention="attended" divisible="none" preemptible="never" soil="rinse" station="counter" tedium="1">
         <title>Crumble</title>
-        <timeline model="per-unit" active="0" per-unit="30" passive="0"/>
+        <timeline model="per-unit" active="20" per-unit="5" passive="0"/>
     </operation>
 
     <operation name="separate" min-inputs="1" max-inputs="1" min-outputs="1"
                attention="attended" divisible="none" preemptible="anywhere" resume-cost="20" soil="wash" station="counter" tedium="1">
         <title>Separate</title>
-        <timeline model="per-unit" active="0" per-unit="120" passive="0"/>
+        <timeline model="per-unit" active="60" per-unit="15" passive="0"/>
     </operation>
 
     <operation name="grate" min-inputs="1" max-inputs="1" min-outputs="1"
@@ -113,7 +113,7 @@
     <operation name="stir" min-inputs="1" max-inputs="1" min-outputs="1" requires-tools="true"
                attention="attended" divisible="units" min-chunk="180" preemptible="anywhere" resume-cost="20" soil="rinse" station="bar" tedium="1">
         <title>Stir</title>
-        <timeline model="per-unit" active="0" per-unit="30" passive="0"/>
+        <timeline model="per-unit" active="20" per-unit="5" passive="0"/>
     </operation>
 
     <operation name="muddle" min-inputs="1" min-outputs="1" requires-tools="true"
@@ -153,7 +153,10 @@
                attention="monitored" check-interval="120" check-duration="10" divisible="none" preemptible="never"
                soil="rinse" station="hob" tedium="1" requires="hot-pan">
         <title>Boil</title>
-        <timeline model="sub-linear" active="0" per-unit="30" passive="200"/>
+        <options>
+            <option name="duration" type="numeric" required="false" default-unit="minutes"/>
+        </options>
+        <timeline model="sub-linear" active="0" per-unit="30" passive="200" passive-from="duration"/>
         <completion urgency="critical" early="0" late="60" duration="30"/>
     </operation>
 
@@ -261,10 +264,10 @@
     <operation name="ball" min-inputs="1" max-inputs="1" min-outputs="1" requires-tools="true"
                attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1">
         <title>Ball</title>
-        <timeline model="per-unit" active="0" per-unit="180" passive="0"/>
+        <timeline model="per-unit" active="30" per-unit="20" passive="0"/>
     </operation>
 
-    <operation name="place-on-sheet" min-inputs="1" max-inputs="1" min-outputs="1"
+    <operation name="place-on-sheet" min-inputs="1" max-inputs="2" min-outputs="1"
                attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1">
         <title>Place on sheet</title>
         <timeline model="per-unit" active="0" per-unit="5" passive="0"/>
@@ -273,7 +276,7 @@
     <operation name="place" min-inputs="1" max-inputs="2" min-outputs="1"
                attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1">
         <title>Place</title>
-        <timeline model="per-unit" active="0" per-unit="120" passive="0"/>
+        <timeline model="per-unit" active="20" per-unit="5" passive="0"/>
     </operation>
 
     <operation name="brush" min-inputs="2" min-outputs="1"
@@ -297,25 +300,25 @@
     <operation name="grease" min-inputs="1" max-inputs="1" min-outputs="1" requires-tools="true"
                attention="attended" divisible="none" preemptible="anywhere" resume-cost="20" soil="rinse" station="counter" tedium="1">
         <title>Grease</title>
-        <timeline model="per-unit" active="0" per-unit="120" passive="0"/>
+        <timeline model="per-unit" active="90" per-unit="5" passive="0"/>
     </operation>
 
     <operation name="line" min-inputs="1" min-outputs="1"
                attention="attended" divisible="none" preemptible="anywhere" resume-cost="20" soil="none" station="counter" tedium="1">
         <title>Line</title>
-        <timeline model="per-unit" active="0" per-unit="120" passive="0"/>
+        <timeline model="per-unit" active="30" per-unit="40" passive="0"/>
     </operation>
 
     <operation name="pour" min-inputs="1" max-inputs="2" min-outputs="1"
                attention="attended" divisible="none" preemptible="never" soil="rinse" station="counter" tedium="1">
         <title>Pour</title>
-        <timeline model="per-unit" active="0" per-unit="30" passive="0"/>
+        <timeline model="per-unit" active="20" per-unit="8" passive="0"/>
     </operation>
 
     <operation name="transfer" min-inputs="1" min-outputs="1" requires-tools="true"
                attention="attended" divisible="none" preemptible="never" soil="rinse" station="counter" tedium="1">
         <title>Transfer</title>
-        <timeline model="per-unit" active="0" per-unit="120" passive="0"/>
+        <timeline model="per-unit" active="60" per-unit="2" passive="0"/>
     </operation>
 
     <operation name="spread" min-inputs="2" min-outputs="1"
@@ -333,7 +336,7 @@
     <operation name="cover" min-inputs="2" min-outputs="1"
                attention="attended" divisible="none" preemptible="never" soil="none" station="counter" tedium="1">
         <title>Cover</title>
-        <timeline model="per-unit" active="0" per-unit="60" passive="0"/>
+        <timeline model="per-unit" active="45" per-unit="2" passive="0"/>
     </operation>
 
     <operation name="level" min-inputs="1" max-inputs="1" min-outputs="1"
@@ -357,7 +360,7 @@
     <operation name="stack" min-inputs="2" min-outputs="1"
                attention="attended" divisible="none" preemptible="never" soil="rinse" station="counter" tedium="1">
         <title>Stack</title>
-        <timeline model="per-unit" active="0" per-unit="60" passive="0"/>
+        <timeline model="per-unit" active="30" per-unit="5" passive="0"/>
     </operation>
 
     <operation name="decorate" min-inputs="2" min-outputs="1"
@@ -372,13 +375,13 @@
     <operation name="fill" min-inputs="1" max-inputs="1" min-outputs="1"
                attention="attended" divisible="units" min-chunk="180" preemptible="anywhere" resume-cost="20" soil="rinse" station="bar" tedium="1">
         <title>Fill</title>
-        <timeline model="per-unit" active="0" per-unit="240" passive="0"/>
+        <timeline model="per-unit" active="30" per-unit="10" passive="0"/>
     </operation>
 
     <operation name="strain" min-inputs="1" max-inputs="2" min-outputs="1" requires-tools="true"
                attention="attended" divisible="none" preemptible="never" soil="rinse" station="bar" tedium="1">
         <title>Strain</title>
-        <timeline model="per-unit" active="0" per-unit="60" passive="0"/>
+        <timeline model="per-unit" active="20" per-unit="10" passive="0"/>
     </operation>
 
     <operation name="express" min-inputs="1" min-outputs="1"

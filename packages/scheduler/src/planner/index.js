@@ -26,7 +26,10 @@ function slackSeconds(graph, policy) {
 /**
  * @param {object} graph Graph from buildGraph
  * @param {object} session Session
- * @param {object} options { previousPlan, frozen, now, mode, status, budgetMs }
+ * @param {object} options { previousPlan, frozen, now, mode, status, budgetMs, preferAssignments }
+ *   frozen: { done: [{ taskId, participantId, start, end }], running: [{ taskId, participantId, start, remainingActive }] }
+ *     (epoch ms; `end` of a done task = after its passive phase; remainingActive in seconds)
+ *   preferAssignments: { [uuid|taskId]: participantId } the previous plan had within the stability horizon
  */
 export function plan(graph, session, options = {}) {
   const t0wall = Date.now()
@@ -45,7 +48,8 @@ export function plan(graph, session, options = {}) {
     const suggested = probe + (win.suggestedStart - slack) * 1000
     t0 = Math.floor(suggested / 1000) * 1000
   }
-  win = computeWindows(graph, t0, { slackBuffer: slack })
+  const frozen = options.frozen ? relFrozen(options.frozen, t0) : undefined
+  win = computeWindows(graph, t0, { slackBuffer: slack, frozen: frozen ? frozenWindows(frozen, graph) : undefined })
   s.t0 = t0
 
   // availability relative seconds
@@ -53,10 +57,30 @@ export function plan(graph, session, options = {}) {
     p.availabilityRel = p.availability ? p.availability.map(([a, b]) => [a === null ? -INF : (a - t0) / 1000, b === null ? INF : (b - t0) / 1000]) : null
   }
 
-  const frozen = options.frozen ? relFrozen(options.frozen, t0) : undefined
-  const d = dispatch(graph, s, win.windows, { frozen, now: 0 })
+  const dispatchOpts = { frozen, now: 0, preferAssignments: options.preferAssignments }
+  let d = dispatch(graph, s, win.windows, dispatchOpts)
+  // Repair ladder, rung 1 (spec §5.7): a late dish may be rescued by letting floating work start earlier.
+  const lateness = (res) => res.dishes.reduce((a, x) => {
+    const gd = graph.dishes.find((g) => g.id === x.dishId)
+    if (!gd || x.plannedServeRel === null || x.plannedServeRel === undefined) return a + 3600
+    return a + Math.max(0, x.plannedServeRel - (gd.serveTime + (gd.lateTolerance || 0) - t0) / 1000)
+  }, 0)
+  let bestLate = lateness(d)
+  const repairs = []
+  if (bestLate > 0 && !policy.miseEnPlace) {
+    for (const factor of [3, Infinity]) {
+      const wider = { ...s, policy: { ...policy, floatWindowSeconds: factor === Infinity ? 1e9 : policy.floatWindowSeconds * factor } }
+      const alt = dispatch(graph, wider, win.windows, dispatchOpts)
+      const altLate = lateness(alt)
+      if (altLate < bestLate - 1e-9) {
+        d = alt; bestLate = altLate
+        repairs.push({ code: 'REPAIR_FLOAT', message: `Floating preparation was allowed to start ${factor === Infinity ? 'any time' : `${factor}× earlier`} to reduce lateness.` })
+      }
+      if (bestLate <= 0) break
+    }
+  }
 
-  const diagnostics = [...(graph.diagnostics || []), ...d.diagnostics]
+  const diagnostics = [...(graph.diagnostics || []), ...d.diagnostics, ...repairs]
   if (win.criticalPathInfeasible) {
     diagnostics.push({ code: 'CRITICAL_PATH', message: 'Even with unlimited people the dishes cannot all finish on time from this start. Start earlier or move a serve time.' })
   }
@@ -122,9 +146,20 @@ export function plan(graph, session, options = {}) {
     },
     shoppingList: shoppingList(s),
   }
-  const violations = checkPlan(result, graph)
+  const violations = checkPlan(result, graph, { minPassive: policy.minAppointmentPassiveSeconds })
   if (violations.length) result.diagnostics.push({ code: 'INVARIANT', message: violations.slice(0, 5).join('; '), count: violations.length })
   return result
+}
+
+/** Frozen tasks as { [taskId]: { start, end } } (relative seconds) for computeWindows' forward pass. */
+function frozenWindows(frozen, graph) {
+  const out = {}
+  for (const d of frozen.done) if (graph.tasks[d.taskId]) out[d.taskId] = { start: d.start, end: d.end }
+  for (const d of frozen.running) {
+    const t = graph.tasks[d.taskId]
+    if (t) out[d.taskId] = { start: d.start, end: Math.max(0, d.remainingActive || 0) + (t.passive || 0) }
+  }
+  return out
 }
 
 function relFrozen(frozen, t0) {

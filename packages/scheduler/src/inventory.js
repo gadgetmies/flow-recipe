@@ -14,6 +14,8 @@ export const TOOL_TYPES = [
   { type: 'square-dish', count: 1, capacity: null },
   { type: 'shallow-dish', count: 1, capacity: null },
   { type: 'cooling-rack', count: 2, capacity: { number: 32, unit: 'bun' } },
+  { type: 'pot', count: 2, capacity: { number: 4, unit: 'l' } },
+  { type: 'pan', count: 2, capacity: null },
   { type: 'mixing-glass', count: 1, capacity: { number: 2, unit: 'drink' } },
   { type: 'rocks-glass', count: 6, capacity: { number: 1, unit: 'drink' } },
   // hand tools
@@ -30,6 +32,8 @@ export const TOOL_TYPES = [
   { type: 'strainer', count: 1, capacity: null },
   { type: 'bar-spoon', count: 1, capacity: null },
   { type: 'fruit-baller', count: 1, capacity: null },
+  { type: 'blender', count: 1, capacity: null },
+  { type: 'ladle', count: 1, capacity: null },
   { type: 'kitchen-scale', count: 1, capacity: null },
   { type: 'precision-scale', count: 1, capacity: null },
   { type: 'towel', count: 3, capacity: null },
