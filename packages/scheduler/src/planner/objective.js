@@ -50,6 +50,17 @@ export function objectiveOf(d, graph, session, policy, opts = {}) {
   for (const it of items) if (byP.has(it.participantId) && LOAD_KINDS.has(it.kind)) byP.get(it.participantId).push(it)
   for (const list of byP.values()) list.sort((a, b) => a.start - b.start || a.end - b.end)
   const tedium = (it) => (it.kind === 'cleaning' ? 1.5 : graph.tasks[it.taskId]?.tedium ?? 1)
+  const speedOf = new Map(parts.map((p) => [p.id, p.speed || 1]))
+  // a_j: the hands-on time; a streaming consumer's item may be stretched to its producer's finish (starvation), so
+  // the load is the catalogue active time of the units handled, never more than the item itself
+  const activeOf = (it) => {
+    const len = it.end - it.start
+    const t = graph.tasks[it.taskId]
+    if (!t || it.kind === 'cleaning' || it.kind === 'appointment' || it.kind === 'check') return len
+    let a = t.active || 0
+    if (it.units && t.units > 0) a = t.timeModel === 'per-unit' && t.perUnit ? t.perUnit * (it.units.to - it.units.from + 1) : a * (it.units.to - it.units.from + 1) / t.units
+    return Math.min(len, a / (speedOf.get(it.participantId) || 1))
+  }
 
   const starts = items.filter((it) => it.kind !== 'blocked').map((it) => it.start)
   const ends = items.filter((it) => it.kind !== 'blocked').map((it) => it.end)
@@ -61,7 +72,7 @@ export function objectiveOf(d, graph, session, policy, opts = {}) {
   let sumL = 0
   for (const p of parts) {
     let L = 0
-    for (const it of byP.get(p.id)) L += (it.end - it.start) * tedium(it) + (it.setupSeconds || 0)
+    for (const it of byP.get(p.id)) L += activeOf(it) * tedium(it) + (it.setupSeconds || 0)
     loads[p.id] = L / 60
     sumL += L / 60
   }

@@ -1,7 +1,7 @@
 // Session policy defaults (spec §11) and merge helper.
 
 export const DEFAULT_POLICY = Object.freeze({
-  weights: { fair: 10, idle: 8, switch: 3, interrupt: 5, robust: 2, span: 1, stable: 4 },
+  weights: { fair: 10, idle: 8, switch: 3, interrupt: 5, robust: 2, span: 1, stable: 4, late: 10, violation: 1000 }, // late: per second past the serve window; violation: per hard-constraint violation (spec §5.6)
   switchMatrix: { sameContext: 0, sameDishSameStation: 15, sameDishOtherStation: 30, otherDish: 60, afterCleaning: 30, any: 10 },
   minChunkSeconds: 180,
   maxIdleStretchSeconds: 480,
@@ -22,6 +22,8 @@ export const DEFAULT_POLICY = Object.freeze({
   stabilityHorizonSeconds: 900,
   searchBudgetMs: 400,
   replanBudgetMs: 120,
+  searchIterations: 100, // Phase F stops at this many moves or at the wall-clock budget, whichever comes first (the plan is deterministic when the cap is what stops it)
+  replanIterations: 30,
   seed: 1,
 })
 

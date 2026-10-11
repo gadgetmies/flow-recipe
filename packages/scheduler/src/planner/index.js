@@ -5,8 +5,12 @@ import { computeWindows } from './windows.js'
 import { dispatch } from './dispatch.js'
 import { laneReports, fairnessIndex, shoppingList } from './report.js'
 import { checkPlan } from './check.js'
+import { objectiveOf, objective } from './objective.js'
+import { detectChains, balanceChain, applyChainHints, sinkRate } from './pipeline.js'
+import { improve, initialState } from './search.js'
+import { repair, lateness as latenessOf } from './repair.js'
 
-export { mergePolicy, normaliseParticipant, computeWindows, dispatch, checkPlan, shoppingList }
+export { mergePolicy, normaliseParticipant, computeWindows, dispatch, checkPlan, shoppingList, objective, objectiveOf, detectChains, balanceChain, applyChainHints, sinkRate, improve, repair }
 
 const INF = Number.POSITIVE_INFINITY
 
@@ -26,7 +30,9 @@ function slackSeconds(graph, policy) {
 /**
  * @param {object} graph Graph from buildGraph
  * @param {object} session Session
- * @param {object} options { previousPlan, frozen, now, mode, status, budgetMs, preferAssignments }
+ * @param {object} options { previousPlan, frozen, now, mode, status, budgetMs, maxIterations, preferAssignments }
+ *   budgetMs: Phase F wall-clock budget (default policy.searchBudgetMs offline / replanBudgetMs online; 0 skips the search)
+ *   maxIterations: Phase F move cap (default policy.searchIterations / replanIterations)
  *   frozen: { done: [{ taskId, participantId, start, end }], running: [{ taskId, participantId, start, remainingActive }] }
  *     (epoch ms; `end` of a done task = after its passive phase; remainingActive in seconds)
  *   preferAssignments: { [uuid|taskId]: participantId } the previous plan had within the stability horizon
@@ -57,27 +63,54 @@ export function plan(graph, session, options = {}) {
     p.availabilityRel = p.availability ? p.availability.map(([a, b]) => [a === null ? -INF : (a - t0) / 1000, b === null ? INF : (b - t0) / 1000]) : null
   }
 
-  const dispatchOpts = { frozen, now: 0, preferAssignments: options.preferAssignments }
-  let d = dispatch(graph, s, win.windows, dispatchOpts)
-  // Repair ladder, rung 1 (spec §5.7): a late dish may be rescued by letting floating work start earlier.
-  const lateness = (res) => res.dishes.reduce((a, x) => {
-    const gd = graph.dishes.find((g) => g.id === x.dishId)
-    if (!gd || x.plannedServeRel === null || x.plannedServeRel === undefined) return a + 3600
-    return a + Math.max(0, x.plannedServeRel - (gd.serveTime + (gd.lateTolerance || 0) - t0) / 1000)
-  }, 0)
-  let bestLate = lateness(d)
-  const repairs = []
-  if (bestLate > 0 && !policy.miseEnPlace) {
-    for (const factor of [3, Infinity]) {
-      const wider = { ...s, policy: { ...policy, floatWindowSeconds: factor === Infinity ? 1e9 : policy.floatWindowSeconds * factor } }
-      const alt = dispatch(graph, wider, win.windows, dispatchOpts)
-      const altLate = lateness(alt)
-      if (altLate < bestLate - 1e-9) {
-        d = alt; bestLate = altLate
-        repairs.push({ code: 'REPAIR_FLOAT', message: `Floating preparation was allowed to start ${factor === Infinity ? 'any time' : `${factor}× earlier`} to reduce lateness.` })
-      }
-      if (bestLate <= 0) break
+  // ---- Phase E: first forward dispatch -------------------------------------------------------------------
+  const dispatchOpts0 = { frozen, now: 0, preferAssignments: options.preferAssignments }
+  const evaluate = (res, g = graph, extra = {}) => objectiveOf(res, g, s, policy, { previousPlan: options.previousPlan, now: 0, ...extra })
+  let d = dispatch(graph, s, win.windows, dispatchOpts0)
+  let obj = evaluate(d)
+  let dispatchOpts = dispatchOpts0
+  let planGraph = graph
+
+  // ---- Phase D: pipeline construction → hints for a second dispatch (kept when the objective improves) ------
+  const cooks = s.participants.filter((p) => p.role !== 'spectator')
+  const participantIds = cooks.map((p) => p.id).sort((a, b) => (d.loads[a] || 0) - (d.loads[b] || 0) || (a < b ? -1 : a > b ? 1 : 0))
+  const balances = []
+  let useHints = false
+  if (cooks.length) {
+    for (const chain of detectChains(graph)) {
+      const started = chain.firstIds.map((id) => d.runtime.get(id)).filter((r) => r && r.start !== null && r.start !== undefined)
+      const start = started.length ? Math.min(...started.map((r) => r.start)) : undefined
+      balances.push(balanceChain(chain, cooks.length, graph, s, policy, { windows: win.windows, start }))
     }
+    if (balances.length) {
+      const hints = applyChainHints(graph, balances, participantIds)
+      const optsD = { ...dispatchOpts0, preferAssignments: { ...(options.preferAssignments || {}), ...hints.preferAssignments }, chunkPlan: hints.chunkPlan }
+      const dD = dispatch(graph, s, win.windows, optsD)
+      const objD = evaluate(dD)
+      if (objD.total < obj.total - 1e-9) { d = dD; obj = objD; dispatchOpts = optsD; useHints = true }
+    }
+  }
+
+  // ---- Phase F: bounded improvement search (budgetMs 0 skips it) --------------------------------------------
+  // The plan body stays deterministic for a seed: `report.search` carries the iteration count (deterministic when
+  // the iteration cap is reached before the wall-clock budget); the elapsed time is part of report.planningMs.
+  const budgetMs = options.budgetMs ?? (mode === 'online' ? policy.replanBudgetMs : policy.searchBudgetMs) ?? 0
+  const maxIterations = options.maxIterations ?? (mode === 'online' ? policy.replanIterations : policy.searchIterations) ?? Infinity
+  let search = { iterations: 0, improved: false, budgetMs, ms: 0 }
+  if (budgetMs > 0 && maxIterations > 0 && cooks.length) {
+    const r = improve(graph, s, win.windows, { dispatchOpts: dispatchOpts0, balances, participantIds, state: initialState(useHints) }, policy, { budgetMs, maxIterations, seed: policy.seed, previousPlan: options.previousPlan, now: 0 })
+    search = { iterations: r.iterations, improved: r.objective.total < obj.total - 1e-9, budgetMs }
+    if (search.improved) { d = r.result; obj = r.objective; dispatchOpts = r.opts }
+  }
+
+  // ---- Phase G: repair ladder, only when a dish is still late or the critical path does not fit -------------
+  const repairs = []
+  if (cooks.length && (latenessOf(d, graph, t0) > 0 || win.criticalPathInfeasible)) {
+    const rep = repair({ graph, session: s, windows: win.windows, dispatchOpts, result: d, policy, slack, frozenWindows: frozen ? frozenWindows(frozen, graph) : undefined, balances, participantIds, criticalPathInfeasible: win.criticalPathInfeasible, criticalShortfall: Math.max(0, -(win.suggestedStart || 0)) })
+    d = rep.result
+    planGraph = rep.graph || graph
+    repairs.push(...rep.diagnostics)
+    obj = evaluate(d, planGraph)
   }
 
   const diagnostics = [...(graph.diagnostics || []), ...d.diagnostics, ...repairs]
@@ -143,11 +176,19 @@ export function plan(graph, session, options = {}) {
       interruptsRisk: diagnostics.filter((x) => x.code === 'NO_APPOINTMENT_HOLDER').length,
       makespan: Math.round((endTime - t0) / 1000),
       planningMs: Date.now() - t0wall,
+      objective: { total: obj.total, terms: obj.terms, weighted: obj.weighted },
+      search: { ...search, hintsApplied: useHints },
+      chains: balances.map((b) => ({ chainId: b.chainId, dishId: b.dishId, stream: b.stream, units: b.units, organisation: b.organisation, groups: b.groups, replicas: b.replicas, workforce: b.workforce, cycle: b.cycle, sink: { binding: b.sink.binding, rate: Number.isFinite(b.sink.rate) ? b.sink.rate : null, bufferUnits: Number.isFinite(b.sink.bufferUnits) ? b.sink.bufferUnits : null, bindsChain: b.sink.bindsChain }, perBurst: b.perBurst.map((x) => ({ units: x.units, workforce: x.workforce, organisation: x.organisation, slack: Math.round(x.slack) })) })),
     },
     shoppingList: shoppingList(s),
   }
-  const violations = diagnostics.some((x) => x.code === 'NO_PARTICIPANTS') ? [] : checkPlan(result, graph, { minPassive: policy.minAppointmentPassiveSeconds })
-  if (violations.length) result.diagnostics.push({ code: 'INVARIANT', message: violations.slice(0, 5).join('; '), count: violations.length })
+  const violations = diagnostics.some((x) => x.code === 'NO_PARTICIPANTS') ? [] : checkPlan(result, planGraph, { minPassive: policy.minAppointmentPassiveSeconds })
+  if (violations.length) {
+    result.diagnostics.push({ code: 'INVARIANT', message: violations.slice(0, 5).join('; '), count: violations.length })
+    const o = evaluate(d, planGraph, { extraViolations: violations.length })
+    result.report.objective = { total: o.total, terms: o.terms, weighted: o.weighted }
+  }
+  result.report.planningMs = Date.now() - t0wall
   return result
 }
 

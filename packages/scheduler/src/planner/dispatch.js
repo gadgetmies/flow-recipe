@@ -19,7 +19,15 @@ function byId(a, b) { return a < b ? -1 : a > b ? 1 : 0 }
  * @param {object} graph
  * @param {object} session normalised session (participants normalised, policy merged)
  * @param {object} windows from computeWindows (relative seconds)
- * @param {object} opts { frozen?: { done: [...], running: [...] }, now: relative seconds (default 0), horizon }
+ * @param {object} opts { frozen?: { done: [...], running: [...] }, now: relative seconds (default 0), horizon,
+ *   preferAssignments?: { [uuid|taskId]: participantId }   soft preference (stability bonus), see below
+ *   stageGroups?: { [participantId]: [taskId] }            Phase D hint: the participant owns these chain tasks;
+ *                                                          folded into preferAssignments (same bonus)
+ *   chunkPlan?: { [taskId]: [{ from, to, participantId? }] } Phase D / F hint: split a divisible per-unit task into
+ *                                                          exactly these unit ranges instead of the greedy rule
+ *                                                          (a single range = never split); the chunk goes to its
+ *                                                          owner when free, else to the cheapest free candidate
+ *   priorityOffsets?: { [taskId]: seconds }                Phase F: added to LS in the ready-sort key }
  */
 export function dispatch(graph, session, windows, opts = {}) {
   const policy = session.policy
@@ -126,8 +134,11 @@ export function dispatch(graph, session, windows, opts = {}) {
   // Stability (spec §4.2 term C, §6.2): uuid/taskId → participantId the previous plan had within the stability
   // horizon. The dispatcher subtracts W_stable × 60 from that participant's assignment cost (and from the
   // appointment-holder cost), so small drifts keep near-future work with the same person.
-  const preferAssignments = opts.preferAssignments instanceof Map ? opts.preferAssignments : new Map(Object.entries(opts.preferAssignments || {}))
+  const preferAssignments = opts.preferAssignments instanceof Map ? new Map(opts.preferAssignments) : new Map(Object.entries(opts.preferAssignments || {}))
+  for (const [pid, taskIds] of Object.entries(opts.stageGroups || {})) for (const id of taskIds || []) if (!preferAssignments.has(id)) preferAssignments.set(id, pid)
   const stableBonus = (policy.weights.stable || 0) * 60
+  const chunkPlan = opts.chunkPlan || {}
+  const priorityOffsets = opts.priorityOffsets || {}
 
   function contextOf(task) {
     const c = task.context || {}
@@ -163,7 +174,7 @@ export function dispatch(graph, session, windows, opts = {}) {
   function priorityKey(r) {
     const u = r.task.completion ? URGENCY_RANK[r.task.completion.urgency] ?? 2 : 2
     const anchoredBoost = r.window.anchored ? 0 : 1
-    return [r.fixedStart !== null ? 0 : r.isCleaning ? 1 : 2, u, r.window.LS, anchoredBoost, -(r.task.tedium || 1), r.id]
+    return [r.fixedStart !== null ? 0 : r.isCleaning ? 1 : 2, u, r.window.LS + (priorityOffsets[r.id] || 0), anchoredBoost, -(r.task.tedium || 1), r.id]
   }
   function cmpKey(a, b) {
     for (let i = 0; i < a.length; i++) {
@@ -633,7 +644,25 @@ export function dispatch(graph, session, windows, opts = {}) {
 
       // chunking of divisible per-unit work
       const canChunk = task.divisible === 'units' && task.units > 1 && cands.length > 1 && (task.perUnit || 0) > 0
-      if (canChunk) {
+      const planned = canChunk && Array.isArray(chunkPlan[r.id]) && chunkPlan[r.id].length ? chunkPlan[r.id] : null
+      let chunks = null // [{ from, to, cand }]
+      if (planned) {
+        // Phase D / F hook: honour the planned unit ranges; a chunk goes to its owner when free at t, else to the
+        // cheapest free candidate; consecutive chunks that end up with the same participant are merged.
+        const free = new Map(cands.map((c) => [c.p.id, c]))
+        chunks = []
+        for (const ch of planned) {
+          const from = Math.max(1, Math.floor(ch.from)), to = Math.min(task.units, Math.floor(ch.to))
+          if (to < from) continue
+          const cand = free.get(ch.participantId) || cands[Math.min(cands.length - 1, chunks.length)]
+          const last = chunks[chunks.length - 1]
+          if (last && last.cand === cand && last.to + 1 === from) last.to = to
+          else chunks.push({ from, to, cand })
+        }
+        if (chunks.length) { chunks[0].from = 1; chunks[chunks.length - 1].to = task.units }
+        if (chunks.length < 2 || new Set(chunks.map((c) => c.cand)).size !== chunks.length) chunks = null
+      }
+      if (canChunk && !planned) {
         const best = cands[0]
         const needParallel = Number.isFinite(r.window.LS) && t + best.a > r.window.LS + 1e-9
         const othersIdle = ready.filter((x) => x !== r && x.status === 'pending').length < cands.length - 1
@@ -644,29 +673,32 @@ export function dispatch(graph, session, windows, opts = {}) {
         if (k > 1) {
           const per = Math.floor(task.units / k)
           let from = 1
-          r.chunks = []
+          chunks = []
           for (let i = 0; i < k; i++) {
             const n = i === k - 1 ? task.units - per * (k - 1) : per
-            const c = cands[i]
-            const sub = { ...r, id: r.id, boundTools: [] }
-            const u = { from, to: from + n - 1 }
-            // place each chunk as part of the same runtime; emulate by placing and then merging times
-            const saveStart = r.start, saveEnd = r.end, saveActiveEnd = r.activeEnd
-            const item = place(r, c.p, t, { units: n, chunkIndex: i + 1, chunkOf: u })
-            r.chunks.push({ participant: c.p.id, start: r.start, activeEnd: r.activeEnd, end: r.end, item })
-            if (i > 0) {
-              r.start = Math.min(saveStart, r.start)
-              r.activeEnd = Math.max(saveActiveEnd, r.activeEnd)
-              r.end = Math.max(saveEnd, r.end)
-            }
+            chunks.push({ from, to: from + n - 1, cand: cands[i] })
             from += n
-            void sub
           }
-          r.participant = r.chunks[0].participant
-          placedAny = true
-          if (task.passive > 0) placeAppointment(r)
-          continue
         }
+      }
+      if (chunks) {
+        r.chunks = []
+        for (let i = 0; i < chunks.length; i++) {
+          const { from, to, cand } = chunks[i]
+          // place each chunk as part of the same runtime; emulate by placing and then merging times
+          const saveStart = r.start, saveEnd = r.end, saveActiveEnd = r.activeEnd
+          const item = place(r, cand.p, t, { units: to - from + 1, chunkIndex: i + 1, chunkOf: { from, to } })
+          r.chunks.push({ participant: cand.p.id, start: r.start, activeEnd: r.activeEnd, end: r.end, item })
+          if (i > 0) {
+            r.start = Math.min(saveStart, r.start)
+            r.activeEnd = Math.max(saveActiveEnd, r.activeEnd)
+            r.end = Math.max(saveEnd, r.end)
+          }
+        }
+        r.participant = r.chunks[0].participant
+        placedAny = true
+        if (task.passive > 0) placeAppointment(r)
+        continue
       }
       const best = cands[0]
       if (best.block && task.preemptible && task.preemptible !== 'never') {
