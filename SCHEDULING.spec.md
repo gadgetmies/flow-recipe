@@ -29,7 +29,10 @@ extended (see §9), so the UI can migrate incrementally.
    uses. Cleaning is either a dedicated role or shared work, by configuration.
 7. Time-critical events (take the sheet out of the oven) are planned so that somebody is free exactly then. When
    reality drifts, an interrupt mechanism pulls the cheapest-to-interrupt participant away from their current task.
-8. The plan is recomputed live as tasks finish early or late, people join or leave, and timers fire.
+8. The scheduler runs in two modes with one engine. **Offline**, it produces the complete plan before anyone
+   starts, from the recipes, the serve times and the expected participants and inventory, so the host can review
+   it, change inputs and re-plan. **Online**, once the session is started, it keeps that plan current as tasks are
+   started and finished early or late, people join or leave, and timers fire, changing as little as possible.
 
 ### 1.2 Non-goals
 
@@ -307,8 +310,9 @@ G. Repair                   if E/F cannot satisfy windows: controlled relaxation
 H. Emit                     lanes, timers, appointments, handoffs, diagnostics
 ```
 
-A–C are deterministic preprocessing. D–F form the search; E is the schedule generation scheme that both the initial
-plan and every runtime re-plan use. The runtime loop (§6) re-enters at C with a frozen prefix.
+A–C are deterministic preprocessing. D–F form the search; E is the schedule generation scheme that both the offline
+plan and every online re-plan use. Offline mode runs the full pipeline with nothing frozen; online mode (§6) re-enters
+at C with the past and the present frozen.
 
 ### 5.1 Phase A: normalise and expand
 
@@ -488,7 +492,69 @@ idle stretch, number of switches), and diagnostics from Phase G.
 
 ---
 
-## 6. Runtime: execution, re-planning and interrupts
+## 6. Operating modes, execution, re-planning and interrupts
+
+### 6.0 Offline and online mode
+
+The same engine (Phases C–H) serves both modes. What differs is the clock, the frozen set and what is reported.
+
+| | Offline (before start) | Online (after start) |
+|---|---|---|
+| `now` | the planned `startTime` (given, or proposed by Phase C) | wall-clock time of the triggering event |
+| Frozen | nothing | completed tasks, in-progress tasks and their holders, near-future appointments |
+| Participants | the expected roster; names may be placeholders ("Cook 2") | the connected roster; a placeholder lane is remapped to the person who joins (§6.0.3) |
+| Actuals | none; every duration is the catalogue estimate | reported starts/finishes replace estimates; remaining work is re-estimated |
+| Objective | §4.2 without the stability term | §4.2 with `W_stable` |
+| Output | the full plan plus diagnostics and the fairness report | a plan diff per participant plus the full plan |
+| Trigger | any input change, with a small debounce | the events in §6.1, debounced (§6.2) |
+
+#### 6.0.1 Plan lifecycle
+
+```
+draft ──(host presses Start)──▶ running ──(all serve_d reached)──▶ done
+  ▲  └── inputs change: re-plan, stays draft        │
+  └──────────── host presses Reset ◀────────────────┘
+```
+
+- **Draft.** Offline mode. The host (and anyone with the link) sees the complete plan: every lane end to end, every
+  appointment, timers, hand-offs, the projected serve time per dish and the fairness report. Changing a serve time,
+  adding a participant, toggling a policy or editing the inventory re-runs the plan from scratch (no frozen set) with
+  the same seed, so edits are comparable. The draft is also the "what-if" tool: plan with four people before
+  anyone has arrived, or compare dedicated versus shared cleaning.
+- **Running.** Online mode. Pressing Start records `startTime = now` and, if that differs from the planned start by
+  more than `policy.replanThreshold`, triggers the first online re-plan. From then on §6.1 events drive updates. The
+  full plan stays visible; each participant additionally sees a diff on every update.
+- **Done.** All dish sinks reached or the host ends the session. Metrics (§12) are flushed for calibration.
+
+A late start is handled like any other drift: the planned start passes, `now` moves, floating tasks lose slack first,
+and only when the critical path no longer fits does Phase G report a serve-time delay.
+
+#### 6.0.2 What a task event changes
+
+`taskStarted(p, j, t)` and `taskDone(p, j, t)` are the primary online inputs. Each is applied to the plan state before
+the re-plan decides whether anything needs to move:
+
+| Event | State change | Then |
+|---|---|---|
+| started on time (± threshold) | `j.status = started`, `actualStart = t` | no re-plan |
+| started late | as above; the lane's later items shift by the delay | re-plan if the shift crosses an appointment, a release time or the threshold |
+| started early | as above; later items pull forward only if their predecessors and `r_j` allow | re-plan (usually a small gain for fairness fillers) |
+| done, duration ≈ planned | `status = done`, `actualEnd = t`; successors' edges satisfied at `t` | no re-plan |
+| done early/late | as above; `p` is free from `t`; successors' earliest start moves | re-plan from `t` |
+| started by someone other than planned | `j.participant = p'`; the planned holder's lane loses the item | re-plan, with `W_stable` keeping the rest put |
+| done without started | infer `actualStart = t − a_j` and apply both rules | as for done |
+| paused (interrupt, §6.3) | `status = paused`, remaining units recorded; a `resume` item is created | re-plan |
+
+In-progress tasks are never reassigned by a re-plan; their remaining duration is `max(0, a_j − (now − actualStart))`
+for fixed tasks and `(units left) × perUnit` for per-unit tasks with reported progress. A task overdue by more than
+`2 × a_j` is flagged in the holder's UI ("still rolling?") but not reassigned; only an explicit pause or done changes it.
+
+#### 6.0.3 Reconciling placeholder lanes
+
+An offline plan may have lanes for people who have not joined. When a participant connects, they take the placeholder
+lane with the closest matching profile (speed, capabilities, role); if none matches, the cheapest lane by `W_stable`.
+Lanes for people who never arrive are removed at Start and their work redistributed by the first online re-plan, which
+is reported as a Phase G diagnostic if the serve window no longer fits.
 
 ### 6.1 Events
 
@@ -505,7 +571,7 @@ The plan is a forecast. The host session collects events:
 Trigger: any event that moves a planned time by more than `policy.replanThreshold` (default 90 s) or changes
 resources/participants/deadlines. Debounced to at most one re-plan per `policy.replanDebounce` (10 s).
 
-Procedure: freeze the past and the present, re-run C–F from `now`:
+Procedure (online mode): freeze the past and the present, re-run C–F from `now`:
 
 - Completed tasks are removed; in-progress tasks keep their participant and get `a_j` = remaining estimate (reported
   progress for divisible tasks, else elapsed-based).
@@ -609,13 +675,17 @@ loads within 6 % of each other, longest lopsided idle 3 min, 4 switches in total
 
 ```
 Plan {
-  seed, computedAt, startTime, diagnostics: [ { code, message, dish?, task?, delta? } ],
+  mode: "offline" | "online", status: "draft" | "running" | "done",
+  seed, computedAt, now, startTime, diagnostics: [ { code, message, dish?, task?, delta? } ],
+  diff?: [{ participantId, changes: [{ uuid, field, from, to, reason }] }],   // online only, vs. the previous plan
   lanes: [{                                    // one per participant, same order as session.participants
     participantId,
     items: [{
       uuid,                                    // task instance id (recipe#task#batch#chunk)
       kind: "work" | "cleaning" | "appointment" | "check" | "setup" | "resume" | "idle",
-      start, end,                              // absolute times (UI may still render relative to serve time)
+      start, end,                              // planned, absolute (UI may still render relative to serve time)
+      status: "planned" | "started" | "paused" | "done",
+      actualStart?, actualEnd?, progress?,     // online only; progress = units done for per-unit tasks
       title, instructions,                     // as today
       task,                                    // XML node reference for the UI helpers
       context: { dish, station, tool },
@@ -736,13 +806,14 @@ participant, number of re-plans, number of interrupts, final lateness per dish, 
 
 ## 13. Implementation roadmap
 
-1. **Core (replaces `timelineScheduler.js`).** Phases A, B, C, E, H with FS edges, anchored/floating classes, fairness
-   and switching costs, appointments for `critical`/`timed` completions, absolute times. Existing recipes work with
-   catalogue defaults. The UI reads `lanes[].items[]`.
+1. **Core, offline mode (replaces `timelineScheduler.js`).** Phases A, B, C, E, H with FS edges, anchored/floating
+   classes, fairness and switching costs, appointments for `critical`/`timed` completions, absolute times. Existing
+   recipes work with catalogue defaults. The UI reads `lanes[].items[]` and shows the full draft plan before Start.
 2. **Resources and cleaning.** Tool instances, capacities, batch instantiation, cleaning insertion and policies,
    appliance modes.
 3. **Pipelines.** Streaming edges, Phase D, chunked per-unit tasks, hand-off display.
-4. **Search and runtime.** Phase F in a Web Worker, re-planning with frozen prefix, the interrupt flow and its UI.
+4. **Search and online mode.** Phase F in a Web Worker; Start, task start/done events, frozen-prefix re-planning
+   with the stability term, placeholder-lane reconciliation, the per-participant diff, the interrupt flow and its UI.
 5. **Calibration.** Session metrics, fitted durations, tuned default weights.
 
 ---
