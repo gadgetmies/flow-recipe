@@ -20,8 +20,8 @@ export const DEFAULT_POLICY = Object.freeze({
   replanThresholdSeconds: 90,
   replanDebounceSeconds: 10,
   stabilityHorizonSeconds: 900,
-  searchBudgetMs: 400,
-  replanBudgetMs: 120,
+  searchBudgetMs: 1500, // safety cap only: searchIterations normally ends the search, which keeps plans deterministic per seed
+  replanBudgetMs: 600,
   searchIterations: 100, // Phase F stops at this many moves or at the wall-clock budget, whichever comes first (the plan is deterministic when the cap is what stops it)
   replanIterations: 30,
   seed: 1,

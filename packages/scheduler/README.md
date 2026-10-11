@@ -195,7 +195,10 @@ buffers derived from carrier tools and their release tasks; `appliance.mode` fro
 
 ## 6. Plan (planner/index.js) — Phases C–H
 
-`plan(graph, session, { previousPlan, frozen, budgetMs })` → `Plan`.
+`plan(graph, session, { previousPlan, frozen, now, mode, status, preferAssignments, budgetMs, maxIterations })` → `Plan`.
+Pipeline inside: Phase C windows → Phase E dispatch → Phase D chain hints (kept only when the objective improves) →
+Phase F seeded annealing (`policy.searchIterations` moves, `searchBudgetMs` as a safety cap; 0 skips it) → Phase G
+repair ladder when a dish is late. Deterministic for a given seed.
 
 ```js
 Plan = {
@@ -205,7 +208,10 @@ Plan = {
   diff: [{ participantId, changes: [{ uuid, field, from, to, reason }] }] | null,
   lanes: [Lane],
   dishes: [{ dishId, serveTarget, plannedServe, spread, holdUsed, late: seconds }],
-  report: { fairness: number, loads: { [participantId]: { load, expected } }, switches, interruptsRisk, makespan },
+  report: { fairness: number, loads: { [participantId]: { load, expected } }, switches, interruptsRisk, makespan, planningMs,
+            objective: { total, terms, weighted },                 // spec §4.2, lower is better
+            search: { iterations, improved, budgetMs, hintsApplied },
+            chains: [ Phase D analysis per per-unit chain, incl. perBurst workforce ] },
   shoppingList: [{ name, amount, unit }],
 }
 Lane = { participantId, items: [Item], report: { load, expectedLoad, switches, longestLopsidedIdle, timersHeld } }
