@@ -156,8 +156,9 @@ Three kinds of edges, all derived from input/output references:
 1. **Finish-to-start (FS).** Default. `s_k ≥ f_j` when `k` consumes an output of `j`.
 2. **Streaming (SS + FF with lags).** When both `j` and `k` are per-unit over the same unit stream (bun 1..64), `k` may
    start after the first unit is through `j`: `s_k ≥ s_j + perUnit_j + handoff`, and `f_k ≥ f_j + perUnit_k`. This is
-   what makes pipelines possible. A work-in-progress limit `B` (counter space) bounds how far `j` may run ahead:
-   `f_j(unit i) ≤ s_k(unit i − B)`, approximated as an FF lag.
+   what makes pipelines possible. How far `j` may run ahead of `k` is bounded by the **buffer** between them, which is
+   physical: the sheets, plates, bowls or counter space that hold units in between (§3.9). `j` may not start unit `i`
+   until the carrier that held unit `i − B` has been released, where `B` is the buffer's capacity in units.
 3. **Maximum lag (freshness).** `s_k ≤ f_j + hold_j`. The consumer must start before the output degrades. Whipped
    cream, beaten egg white, hot caramel, anything "serve immediately".
 
@@ -255,6 +256,28 @@ of the model: the spread between the first and last portion is bounded by `hold`
 batches whose spread exceeds `hold`, the scheduler first tries a holding resource (warming drawer, oven on low after
 the last batch), then reports a soft violation with the actual spread so the host can decide (§5.7).
 
+### 3.9 Buffers, carriers and blocking
+
+Units between two stages have to sit somewhere. That somewhere is a **carrier** (a baking sheet, a plate, a bowl, a
+rack) or a **station area** (counter space). Both are finite, and a carrier is not free again when the next stage
+starts on it but when a later task hands it back: a sheet holding buns is occupied from "place on sheet" through
+brushing, waiting for the oven, baking and taking out, until "transfer to rack" releases it. The recipe already
+expresses release points: a `<tool ref>` listed in a task's `<outputs>` means that task returns the tool.
+
+- **Buffer** `buf(j → k)` for a streaming edge: carrier type `c` (or station), capacity per carrier `cap_c` in units,
+  and the number of carriers `C` the inventory provides, so `B = C × cap_c`. If no carrier is declared the counter
+  station's area is the buffer.
+- **Carrier cycle.** `T_c` = time from the first unit placed on a carrier to its release task finishing, including
+  every wait in between. Carriers circulate; their throughput is `C × cap_c / T_c` units per second and bounds the
+  chain's throughput no matter how many people roll buns.
+- **Blocking.** When the buffer is full, the producing stage **pauses**. In the plan this is a `blocked` interval on
+  the producer's lane ("waiting for a free sheet"); the participant is released to another ready task if the block is
+  longer than the switch would cost, otherwise they wait. **Starvation** is the mirror case (consumer waits for
+  units) and is already covered by the start-to-start lag.
+- **Where the limit shows up.** Blocked time is lopsided idle and counts in `I` (§4.2); more importantly, Phase D
+  sizes the workforce so that no stage produces faster than the slowest sink downstream can take, and Phase E
+  simulates the buffer counts so the plan never shows two people rolling buns while every sheet is in the oven.
+
 ---
 
 ## 4. Constraints and objective
@@ -264,7 +287,8 @@ the last batch), then reports a soft violation with the actual spread so the hos
 1. Precedence (FS, streaming lags, maximum lags) as in §3.3.
 2. A participant works on at most one task at a time (team tasks count once per member) and only within availability.
 3. Tool instances, appliance slots, stations and holding slots are never over-allocated; an appliance in mode `m`
-   serves only tasks needing `m`.
+   serves only tasks needing `m`. Carrier buffers are never over-filled: a per-unit producer blocks when its buffer
+   is full (§3.9).
 4. A tool is used only when clean enough for the task (`soil` state ≤ required).
 5. Every task starts at or after its release time and finishes at or before its latest finish (`LF_j`, §5.3).
 6. Every dish's `serve_d` falls within its window.
@@ -283,7 +307,7 @@ chosen so the terms rank as: feasibility ≫ fairness and idle ≫ switching ≫
 | Term | Definition |
 |---|---|
 | `F` fairness | Let `L_p = Σ tedium_j·a_j` over tasks (incl. cleaning, appointments and setup time) assigned to `p`, and `E_p = targetShare_p × availability_p / Σ(targetShare × availability) × Σ L`. `F = Σ_p max(0, L_p/E_p − 1)² + Σ_p max(0, 1 − L_p/E_p)²`. Overload and underload both count. Optionally add a variety term so nobody gets only one operation type. |
-| `I` idle | Σ over every idle interval of a participant that exceeds `policy.maxIdleStretch` (default 8 min) **while at least one other participant is busy**: `(length − maxIdleStretch)²`. Everybody waiting for the oven together is not penalised. |
+| `I` idle | Σ over every idle interval of a participant that exceeds `policy.maxIdleStretch` (default 8 min) **while at least one other participant is busy**: `(length − maxIdleStretch)²`. Blocked intervals (§3.9) count as idle. Everybody waiting for the oven together is not penalised. |
 | `S` switching | number of context switches, plus `Σ switch(c1,c2)` setup time already paid in the lanes. |
 | `N` interrupts | number of appointments whose holder had to be given a split task, plus number of appointments with less than `lead` free time before them. A proxy for runtime interrupt risk. |
 | `R` robustness | negative slack: `Σ_j max(0, buffer − (LF_j − f_j))` for critical-chain tasks, so the plan keeps `policy.slackBuffer` (default 10 % of active time, min 2 min) before hard deadlines. |
@@ -328,10 +352,14 @@ at C with the past and the present frozen.
 ### 5.2 Phase B: quantities and batch counts
 
 1. Propagate amounts backward from each sink as the current `calculateDependencies` does, producing `n_j`.
-2. For each task with a capacity-bearing tool or appliance: `batches_j = ceil(n_j / capacity)`. Instantiate one task
+2. For each streaming edge, derive its buffer (§3.9): the carrier type from the producer's tool reference, the release
+   task from the `<tool>` in some downstream task's `<outputs>`, `cap_c` from the tool's `capacity` property and `C`
+   from the inventory. Without a carrier, use the counter station's area. Record the carrier cycle path (producer →
+   release task) so Phase D can estimate `T_c`.
+3. For each task with a capacity-bearing tool or appliance: `batches_j = ceil(n_j / capacity)`. Instantiate one task
    per batch; streaming edges connect batch `b` of stage `k` to batch `b` of stage `j`.
-3. Compute `a_j`, `p_j` from the time model at `speed = 1`; participant speed is applied at assignment time.
-4. Derive `context_j`.
+4. Compute `a_j`, `p_j` from the time model at `speed = 1`; participant speed is applied at assignment time.
+5. Derive `context_j`.
 
 ### 5.3 Phase C: backward pass (ALAP windows)
 
@@ -379,11 +407,28 @@ Three organisations are considered:
 3. **Hybrid.** Any stage `s` may be replicated `d_s ≤ q_s` times across participants, and stages may be grouped. The
    search enumerates `(grouping, replication)` combinations; cell and pipeline are its two extremes.
 
-Scoring per candidate, in order: (a) the chain's finish `≤ LF` of its last stage; (b) throughput (cycle time);
-(c) balance `max_g − min_g` of per-person per-unit load, which directly feeds `F`; (d) hand-offs and switches, which
-feed `S`; (e) fill latency, which matters when the window is tight. The best candidate is materialised as chunked
-tasks (cell slices or stage groups) with streaming edges and a WIP limit, and handed to Phase E. Phase F may revisit
-the choice as one of its moves.
+**Sinks and buffers bound the useful rate.** Before scoring, compute the chain's **sink rate** `r*`: the slowest of
+(a) every downstream resource the units flow into, e.g. an oven with `slots × cap_c` units per bake duration,
+(b) every carrier buffer's circulation rate `C × cap_c / T_c` (§3.9), and (c) the rate the serve window requires.
+`T_c` is estimated from the carrier cycle path: the stage times on the carrier, the expected wait for the sink, the
+sink's own duration, and the release task. Any stage group producing faster than `r*` blocks; the surplus people
+are wasted on this chain and are better used elsewhere.
+
+Scoring per candidate, in order: (a) the chain's finish `≤ LF` of its last stage; (b) effective cycle time
+`max(max_g Σ_{s∈g} u_s / d_s, 1 / r*)`, simulated against the buffers so that blocked time is included;
+(c) **workforce**: among candidates that satisfy (a), the smallest `k' ≤ k` that still does, found by removing
+replicas one at a time while the chain's finish stays inside its window, so that `k − k'` people are returned to the
+dispatcher for other work; (d) balance `max_g − min_g` of per-person per-unit load among the `k'` kept, which directly
+feeds `F`; (e) hand-offs and switches, which feed `S`; (f) fill latency, which matters when the window is tight. The
+best candidate is materialised as chunked tasks (cell slices or stage groups) with streaming edges and their buffers,
+and handed to Phase E. Phase F may revisit the choice as one of its moves.
+
+Buffers make the chain bursty: it fills `B` units, blocks until carriers return, then fills again. Workforce is
+therefore sized **per burst**, not once. A burst that is off the critical path (the first sheets, filled during the
+rise with time to spare) gets the minimum staff; a burst that is on it (the sheets that come back 15 minutes before
+serving) gets everyone free, because every minute of filling there delays the last bake. Phase D emits one chunk per
+burst with its own window, and the dispatcher's blocking rule (§5.5 step 4f) does the interleaving with other work.
+Phase D's job is to stop over-staffing the bursts that have slack.
 
 Worked numbers are in §8.
 
@@ -401,6 +446,7 @@ unscheduled = all tasks
 while unscheduled not empty:
   1. Release: for every task finishing at t, free its participant(s), release tools (→ dirty(soilAfter) or clean),
      release appliance/station slots, mark successors' edges satisfied (FS at finish; SS at start + lag; FF at finish + lag).
+     A released carrier decrements every buffer it served and wakes producers blocked on it (step 4f).
   2. Ready set = tasks with all incoming edges satisfied and r_j ≤ t and ES_j ≤ t.
      Appointments whose window opens at t join the ready set at the front with their fixed holder.
      Freshness: once a producer j with finite hold_j is placed, each consumer k gets
@@ -427,6 +473,13 @@ while unscheduled not empty:
         resumeCost; otherwise reject this candidate and try the next.
      e. Feasibility: if f_j > LF_j, record a violation (Phase G) but keep placing; the search needs a complete
         schedule to score.
+     f. Buffers: a per-unit task advances unit by unit against its outgoing buffer count (units placed minus
+        carriers released × cap_c). When the count reaches B the task enters `blocked` at that unit: its lane shows
+        a blocked interval until the next carrier release event. If the predicted block exceeds
+        switch(context_j, next ready task) + minChunk, the participant is released to the dispatcher with the task
+        left `paused` at a unit boundary and a `resume` item queued on the release event; otherwise they wait.
+        Carrier release tasks (the ones listing the carrier in <outputs>) get a priority boost proportional to the
+        number of producers blocked on that carrier, so sheets come back as early as possible.
   5. Completion events: for each task placed in 4 with p_j > 0 and urgency ∈ {critical, timed}:
         holder = argmin over participants of
                    λ_fair × (L[p] − mean L)/mean L
@@ -461,6 +514,7 @@ vectors, so search over them. Moves:
 4. Change a chain's organisation (Phase D candidate rank 2, 3, …).
 5. Change an appointment holder.
 6. Swap the order of two adjacent tasks on one lane with no precedence between them.
+7. Change a chain's workforce by one (add or remove a replica) when its lanes show blocked time or starvation.
 
 Simulated annealing (or late acceptance) with a seeded PRNG, evaluated by the objective in §4.2 plus a large penalty
 per hard-constraint violation. Time budget `policy.searchBudgetMs` (default 400 ms initial plan, 120 ms re-plan),
@@ -544,6 +598,9 @@ the re-plan decides whether anything needs to move:
 | started by someone other than planned | `j.participant = p'`; the planned holder's lane loses the item | re-plan, with `W_stable` keeping the rest put |
 | done without started | infer `actualStart = t − a_j` and apply both rules | as for done |
 | paused (interrupt, §6.3) | `status = paused`, remaining units recorded; a `resume` item is created | re-plan |
+
+Per-unit progress reports also update buffer occupancy, so a producer that is about to block in reality is shown
+"waiting for a free sheet" live, and a carrier release done early wakes it early.
 
 In-progress tasks are never reassigned by a re-plan; their remaining duration is `max(0, a_j − (now − actualStart))`
 for fixed tasks and `(units left) × perUnit` for per-unit tasks with reported progress. A task overdue by more than
@@ -659,6 +716,18 @@ tool-free or have ≥ 3 instances.
 The hybrid wins: it meets the cell's throughput while respecting the single brush, and A and B's load (20 s/unit on
 32 units = 10.7 min each) matches C's (10 s/unit on 64 units = 10.7 min). Fill latency is 20 s.
 
+**Buffers.** The sheet is the carrier between "place on sheet" and the oven; it is released by "transfer to rack"
+after take-out. With 4 sheets of 16 and a 2-slot oven the buffer is 64 units, the whole batch, so nothing blocks and
+the chain above runs at its people-limited rate. **With only 2 sheets** the buffer is 32 units and the carrier cycle
+is about 18 minutes (fill 3 min, wait, bake 15 min, take out, transfer), so carriers circulate at 32 / 18 ≈ 1.8 buns
+per minute while three people could roll 6. The chain becomes two bursts of 32. The first burst has slack (it only
+has to be ready when the oven is hot), so Phase D keeps one person on it in cell mode (16 minutes, 2 buns per minute)
+and returns two people to the dispatcher for the other dish's floating tasks and cleaning. The second burst starts
+when the sheets come back at about 17:40 and is on the critical path, so all three fill it in 5 minutes and the last
+bake still ends before 18:00. Without the per-burst sizing the plan would either show two people rolling for five
+minutes and standing still for thirteen, or one person filling the second burst for 16 minutes and the buns 11 minutes
+late.
+
 **Phase E, the big picture.** Measuring is spread over all three at the start (floating, filler). Mixing the dough is
 fixed-time and non-divisible: one person (A, least loaded after measuring) does it while B lines sheets and C beats the
 brushing egg and heats the milk earlier. During the 20-minute rise everyone is idle together (no `I` penalty); with
@@ -724,6 +793,7 @@ All additions are optional and have defaults. Nothing here tells the scheduler *
 | `<property name="capacity">` with a unit | `<tool>` definition | physical size | sheet: 16 buns; bowl: 4 l; tin: 1 cake |
 | `<property name="volume">` on outputs or `volume` option on mix tasks | `<output>` | lets the scheduler pick a bowl that fits a dough that doubles (the `buns.xml` TODO) | `<output id="dough" volume="2.5" volume-unit="liters">` |
 | `unit="bun"` on per-unit outputs | `<output>` | names the unit stream so streaming edges can be detected | `<output id="dough-sphere" unit="bun">` |
+| `<tool ref>` inside `<outputs>` (existing) | task | the task returns the carrier; defines the buffer's release point (§3.9) | `<outputs><output id="buns-on-rack"/><tool ref="baking-sheet"/></outputs>` |
 | `requires="knife|hot-pan|..."` | `<task>` | a safety fact about the step, used for capabilities | `<task operation="slice" requires="knife">` |
 | `<batch>` | keep, but semantics become "the contained tasks apply per unit of the input"; the scheduler decides parallelisation | the current element already means this; the TODOs in `buns.xml` about parallel processing move to the scheduler | — |
 | `<join>` | keep; flattened by Phase A | — | — |
@@ -795,6 +865,7 @@ Scenario suite (fixtures from `packages/server/src/recipes`):
 | buns + tiramisu, serve 18:00 and 18:30 | multi-dish, cold hold, fridge as holding | both windows met; tiramisu assembly not started before its `r_j` |
 | cheese-cake with one bowl | cleaning insertion | cleaning task appears between incompatible uses; `dedicated` policy routes it to the cleaner |
 | negroni ×6 | per-unit chain without an oven, tiny tasks | `minChunk` respected; few switches |
+| buns, 3 participants, 2 sheets | buffer blocking, workforce sizing (§3.9, §5.4) | one person on the chain; no lane shows more than `switch + minChunk` of blocked time; sheet-return tasks scheduled first after take-out |
 | late oven (runtime event) | re-plan stability | tasks within 15 min keep their holder; drift absorbed by floating tasks |
 | holder busy at take-out time (runtime event) | interrupt | cheapest preemptible participant chosen; paused task resumed |
 
