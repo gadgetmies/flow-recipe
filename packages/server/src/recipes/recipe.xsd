@@ -1,33 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Flow Recipe format, version 2.
+  A recipe states facts about the food, the steps and the tools: amounts, durations, temperatures, how long an
+  intermediate result stays good, which tool a step uses and how dirty it leaves it, how many units a carrier
+  holds. It never states who does what, how many people, or in what order beyond the data dependencies.
+  Scheduling behaviour per operation lives in operations.xml; people, inventory and policy are session input.
+-->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
-    
-    <!-- Root element: recipe -->
+
     <xs:element name="recipe">
         <xs:complexType>
             <xs:sequence>
                 <xs:element name="title" type="xs:string"/>
+                <!-- How the finished dish is served and how long it stays servable (spec §3.8). -->
+                <xs:element name="serving" minOccurs="0">
+                    <xs:complexType>
+                        <xs:attribute name="temperature" type="temperature-class" use="required"/>
+                        <xs:attribute name="hold" type="xs:decimal"/>
+                        <xs:attribute name="hold-unit" type="time-unit" default="minutes"/>
+                    </xs:complexType>
+                </xs:element>
                 <xs:element name="ingredients">
                     <xs:complexType>
                         <xs:sequence>
                             <xs:element name="ingredient" maxOccurs="unbounded">
                                 <xs:complexType mixed="true">
                                     <xs:sequence>
-                                        <xs:element name="properties" minOccurs="0">
-                                            <xs:complexType>
-                                                <xs:sequence>
-                                                    <xs:element name="property" maxOccurs="unbounded">
-                                                        <xs:complexType>
-                                                            <xs:choice>
-                                                                <xs:element name="numeric-value" type="numeric-value-type"/>
-                                                                <xs:element name="text-content" type="xs:string" minOccurs="0"/>
-                                                            </xs:choice>
-                                                            <xs:attribute name="name" type="xs:string" use="required"/>
-                                                            <xs:attribute name="value" type="xs:string"/>
-                                                        </xs:complexType>
-                                                    </xs:element>
-                                                </xs:sequence>
-                                            </xs:complexType>
-                                        </xs:element>
+                                        <xs:element name="properties" type="properties-type" minOccurs="0"/>
                                     </xs:sequence>
                                     <xs:attribute name="id" type="xs:string" use="required"/>
                                 </xs:complexType>
@@ -38,27 +37,19 @@
                 <xs:element name="tools">
                     <xs:complexType>
                         <xs:sequence>
+                            <!--
+                              A tool declaration names a tool TYPE the recipe uses, not an instance. Counts come from
+                              the kitchen inventory. `type` is the inventory key (defaults to the id). `capacity`
+                              is a property: how many units (of the unit stream named in `unit`) the tool holds, or
+                              its volume. A tool with a capacity used by a per-unit task is a carrier (spec §3.9).
+                            -->
                             <xs:element name="tool" maxOccurs="unbounded" minOccurs="0">
                                 <xs:complexType mixed="true">
                                     <xs:sequence>
-                                        <xs:element name="properties" minOccurs="0">
-                                            <xs:complexType>
-                                                <xs:sequence>
-                                                    <xs:element name="property" maxOccurs="unbounded">
-                                                        <xs:complexType>
-                                                            <xs:choice>
-                                                                <xs:element name="numeric-value" type="numeric-value-type"/>
-                                                                <xs:element name="text-content" type="xs:string" minOccurs="0"/>
-                                                            </xs:choice>
-                                                            <xs:attribute name="name" type="xs:string" use="required"/>
-                                                            <xs:attribute name="value" type="xs:string"/>
-                                                        </xs:complexType>
-                                                    </xs:element>
-                                                </xs:sequence>
-                                            </xs:complexType>
-                                        </xs:element>
+                                        <xs:element name="properties" type="properties-type" minOccurs="0"/>
                                     </xs:sequence>
                                     <xs:attribute name="id" type="xs:string" use="required"/>
+                                    <xs:attribute name="type" type="xs:string"/>
                                 </xs:complexType>
                             </xs:element>
                         </xs:sequence>
@@ -66,137 +57,139 @@
                 </xs:element>
                 <xs:element name="tasks">
                     <xs:complexType>
-                        <xs:sequence>
-                            <xs:element name="task" maxOccurs="unbounded">
-                                <xs:complexType mixed="true">
-                                    <xs:choice maxOccurs="unbounded">
-                                        <xs:element name="input">
-                                            <xs:complexType mixed="true">
-                                                <xs:attribute name="ref" type="xs:string" use="required"/>
-                                                <xs:attribute name="amount" type="xs:decimal"/>
-                                            </xs:complexType>
-                                        </xs:element>
-                                        <xs:element name="tool">
-                                            <xs:complexType mixed="true">
-                                                <xs:attribute name="ref" type="xs:string" use="required"/>
-                                            </xs:complexType>
-                                        </xs:element>
-                                        <xs:element name="output">
-                                            <xs:complexType mixed="true">
-                                                <xs:attribute name="id" type="xs:string" use="required"/>
-                                            </xs:complexType>
-                                        </xs:element>
-                                        <xs:element name="options">
-                                            <xs:complexType>
-                                                <xs:sequence>
-                                                    <xs:element name="option" maxOccurs="unbounded">
-                                                        <xs:complexType>
-                                                            <xs:choice>
-                                                                <xs:element name="numeric-value" type="numeric-value-type"/>
-                                                                <xs:element name="text-content" type="xs:string" minOccurs="0"/>
-                                                            </xs:choice>
-                                                            <xs:attribute name="name" type="xs:string" use="required"/>
-                                                        </xs:complexType>
-                                                    </xs:element>
-                                                </xs:sequence>
-                                            </xs:complexType>
-                                        </xs:element>
-                                        <xs:element name="tools">
-                                            <xs:complexType>
-                                                <xs:sequence>
-                                                    <xs:element name="tool" maxOccurs="unbounded">
-                                                        <xs:complexType>
-                                                            <xs:attribute name="ref" type="xs:string" use="required"/>
-                                                            <xs:attribute name="reserved" type="xs:boolean"/>
-                                                            <xs:attribute name="name" type="xs:string"/>
-                                                            <xs:attribute name="reusable" type="xs:boolean"/>
-                                                            <xs:attribute name="amount" type="xs:decimal" default="1"/>
-                                                        </xs:complexType>
-                                                    </xs:element>
-                                                </xs:sequence>
-                                            </xs:complexType>
-                                        </xs:element>
-                                        <xs:element name="inputs">
-                                            <xs:complexType>
-                                                <xs:sequence>
-                                                    <xs:element name="input" maxOccurs="unbounded">
-                                                        <xs:complexType mixed="true">
-                                                            <xs:attribute name="ref" type="xs:string" use="required"/>
-                                                            <xs:attribute name="amount" type="xs:decimal"/>
-                                                        </xs:complexType>
-                                                    </xs:element>
-                                                </xs:sequence>
-                                            </xs:complexType>
-                                        </xs:element>
-                                        <xs:element name="outputs">
-                                            <xs:complexType>
-                                                <xs:sequence>
-                                                    <xs:choice maxOccurs="unbounded">
-                                                        <xs:element name="output">
-                                                            <xs:complexType>
-                                                                <xs:simpleContent>
-                                                                    <xs:extension base="xs:string">
-                                                                        <xs:attribute name="id" type="xs:string" use="required"/>
-                                                                    </xs:extension>
-                                                                </xs:simpleContent>
-                                                            </xs:complexType>
-                                                        </xs:element>
-                                                        <xs:element name="tool">
-                                                            <xs:complexType>
-                                                                <xs:attribute name="ref" type="xs:string" use="required"/>
-                                                                <xs:attribute name="name" type="xs:string"/>
-                                                                <xs:attribute name="reusable" type="xs:boolean"/>
-                                                                <xs:attribute name="amount" type="xs:decimal" default="1"/>
-                                                            </xs:complexType>
-                                                        </xs:element>
-                                                    </xs:choice>
-                                                </xs:sequence>
-                                            </xs:complexType>
-                                        </xs:element>
-                                        <xs:element name="instructions">
-                                            <xs:complexType mixed="true">
-                                                <xs:choice maxOccurs="unbounded">
-                                                    <xs:element name="input">
-                                                        <xs:complexType mixed="true">
-                                                            <xs:attribute name="ref" type="xs:string" use="required"/>
-                                                            <xs:attribute name="amount" type="xs:decimal"/>
-                                                        </xs:complexType>
-                                                    </xs:element>
-                                                    <xs:element name="tool">
-                                                        <xs:complexType mixed="true">
-                                                            <xs:attribute name="ref" type="xs:string" use="required"/>
-                                                        </xs:complexType>
-                                                    </xs:element>
-                                                    <xs:element name="output">
-                                                        <xs:complexType mixed="true">
-                                                            <xs:attribute name="id" type="xs:string" use="required"/>
-                                                        </xs:complexType>
-                                                    </xs:element>
-                                                    <xs:element name="option">
-                                                        <xs:complexType>
-                                                            <xs:choice>
-                                                                <xs:element name="numeric-value" type="numeric-value-type"/>
-                                                                <xs:element name="text-content" type="xs:string" minOccurs="0"/>
-                                                            </xs:choice>
-                                                            <xs:attribute name="name" type="xs:string" use="required"/>
-                                                        </xs:complexType>
-                                                    </xs:element>
-                                                </xs:choice>
-                                            </xs:complexType>
-                                        </xs:element>
-                                    </xs:choice>
-                                    <xs:attribute name="operation" type="xs:string" use="required"/>
+                        <xs:choice maxOccurs="unbounded">
+                            <xs:element name="task" type="task-type"/>
+                            <!-- A join is a sequence of tasks done as one: crumble the yeast and stir it into the milk. -->
+                            <xs:element name="join">
+                                <xs:complexType>
+                                    <xs:sequence>
+                                        <xs:element name="task" type="task-type" minOccurs="2" maxOccurs="unbounded"/>
+                                    </xs:sequence>
+                                    <xs:attribute name="id" type="xs:string"/>
                                 </xs:complexType>
                             </xs:element>
-                        </xs:sequence>
+                        </xs:choice>
                     </xs:complexType>
                 </xs:element>
             </xs:sequence>
+            <xs:attribute name="id" type="xs:string"/>
             <xs:attribute name="ref" type="xs:string"/>
+            <xs:attribute name="version" type="xs:string"/>
         </xs:complexType>
     </xs:element>
-    
-    <!-- Numeric value type -->
+
+    <xs:complexType name="task-type" mixed="true">
+        <xs:choice maxOccurs="unbounded">
+            <xs:element name="input" type="input-ref-type"/>
+            <xs:element name="tool" type="tool-ref-type"/>
+            <xs:element name="output" type="output-type"/>
+            <xs:element name="options">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="option" type="option-type" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="tools">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="tool" type="tool-ref-type" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="inputs">
+                <xs:complexType>
+                    <xs:sequence>
+                        <xs:element name="input" type="input-ref-type" maxOccurs="unbounded"/>
+                    </xs:sequence>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="outputs">
+                <xs:complexType>
+                    <xs:choice maxOccurs="unbounded">
+                        <xs:element name="output" type="output-type"/>
+                        <!-- A tool listed among the outputs is RETURNED by this task: the carrier is free again (spec §3.9). -->
+                        <xs:element name="tool" type="tool-ref-type"/>
+                    </xs:choice>
+                </xs:complexType>
+            </xs:element>
+            <xs:element name="instructions">
+                <xs:complexType mixed="true">
+                    <xs:choice maxOccurs="unbounded">
+                        <xs:element name="input" type="input-ref-type"/>
+                        <xs:element name="tool" type="tool-ref-type"/>
+                        <xs:element name="output" type="output-type"/>
+                        <xs:element name="option" type="option-type"/>
+                    </xs:choice>
+                </xs:complexType>
+            </xs:element>
+        </xs:choice>
+        <xs:attribute name="operation" type="xs:string" use="required"/>
+        <!-- Stable identity across edits and expansion; recommended for every task. -->
+        <xs:attribute name="id" type="xs:string"/>
+        <!-- Capabilities a participant needs: "knife hot-pan oven". A safety fact about the step. -->
+        <xs:attribute name="requires" type="xs:string"/>
+    </xs:complexType>
+
+    <xs:complexType name="input-ref-type" mixed="true">
+        <xs:attribute name="ref" type="xs:string" use="required"/>
+        <xs:attribute name="amount" type="xs:decimal"/>
+    </xs:complexType>
+
+    <!-- One tool reference type for every place a tool can be referenced. -->
+    <xs:complexType name="tool-ref-type" mixed="true">
+        <xs:attribute name="ref" type="xs:string" use="required"/>
+        <!-- Held until the output it carries is consumed (bowl holding the dough), not only during the active part. -->
+        <xs:attribute name="reserved" type="xs:boolean" default="false"/>
+        <!-- How many instances this task needs at once (four sheets to line). -->
+        <xs:attribute name="qty" type="xs:positiveInteger" default="1"/>
+        <!-- Per-output scaling kept for compatibility with the shopping list (tools consumed per portion). -->
+        <xs:attribute name="amount" type="xs:decimal" default="1"/>
+        <!-- Overrides the operation's default soil when the ingredient makes it a fact (raw egg → wash). -->
+        <xs:attribute name="soil" type="soil-level"/>
+        <xs:attribute name="name" type="xs:string"/>
+        <!-- Deprecated, ignored: use soil="none" instead. -->
+        <xs:attribute name="reusable" type="xs:boolean"/>
+    </xs:complexType>
+
+    <xs:complexType name="output-type" mixed="true">
+        <xs:attribute name="id" type="xs:string" use="required"/>
+        <!-- Number of units produced (per scale 1). With `unit` it names the unit stream for per-unit tasks. -->
+        <xs:attribute name="amount" type="xs:decimal"/>
+        <xs:attribute name="unit" type="xs:string"/>
+        <!-- How long this result stays good before its consumer must start. Omit for stable results. -->
+        <xs:attribute name="hold" type="xs:decimal"/>
+        <xs:attribute name="hold-unit" type="time-unit" default="minutes"/>
+        <!-- Volume of the result, so a bowl that fits can be chosen (a dough that doubles needs room). -->
+        <xs:attribute name="volume" type="xs:decimal"/>
+        <xs:attribute name="volume-unit" type="xs:string" default="l"/>
+        <!-- Marks a result that is served. Default: an output nobody consumes. -->
+        <xs:attribute name="final" type="xs:boolean"/>
+    </xs:complexType>
+
+    <xs:complexType name="option-type">
+        <xs:choice>
+            <xs:element name="numeric-value" type="numeric-value-type"/>
+            <xs:element name="text-content" type="xs:string" minOccurs="0"/>
+        </xs:choice>
+        <xs:attribute name="name" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="properties-type">
+        <xs:sequence>
+            <xs:element name="property" maxOccurs="unbounded">
+                <xs:complexType>
+                    <xs:choice minOccurs="0">
+                        <xs:element name="numeric-value" type="numeric-value-type"/>
+                        <xs:element name="text-content" type="xs:string"/>
+                    </xs:choice>
+                    <xs:attribute name="name" type="xs:string" use="required"/>
+                    <xs:attribute name="value" type="xs:string"/>
+                </xs:complexType>
+            </xs:element>
+        </xs:sequence>
+    </xs:complexType>
+
     <xs:complexType name="numeric-value-type">
         <xs:simpleContent>
             <xs:extension base="xs:string">
@@ -205,5 +198,29 @@
             </xs:extension>
         </xs:simpleContent>
     </xs:complexType>
-    
+
+    <xs:simpleType name="temperature-class">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="hot"/>
+            <xs:enumeration value="cold"/>
+            <xs:enumeration value="ambient"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="soil-level">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="none"/>
+            <xs:enumeration value="rinse"/>
+            <xs:enumeration value="wash"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:simpleType name="time-unit">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="seconds"/>
+            <xs:enumeration value="minutes"/>
+            <xs:enumeration value="hours"/>
+        </xs:restriction>
+    </xs:simpleType>
+
 </xs:schema>

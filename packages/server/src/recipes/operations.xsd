@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Operation catalogue, version 2. One entry per operation a recipe may use. Holds everything the scheduler needs to
+  know about how an operation behaves, so recipes never repeat it (spec §10.2).
+-->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
-    
-    <!-- Root element: operations -->
+
     <xs:element name="operations">
         <xs:complexType>
             <xs:sequence>
@@ -22,19 +25,33 @@
                                                 <xs:attribute name="type" type="option-type" default="numeric"/>
                                                 <xs:attribute name="unit" type="xs:string"/>
                                                 <xs:attribute name="default-unit" type="xs:string"/>
-                                                <xs:attribute name="min-inputs" type="xs:nonNegativeInteger" default="0"/>
-                                                <xs:attribute name="max-inputs" type="xs:nonNegativeInteger"/>
-                                                <xs:attribute name="min-outputs" type="xs:nonNegativeInteger" default="1"/>
-                                                <xs:attribute name="max-outputs" type="xs:nonNegativeInteger"/>
                                             </xs:complexType>
                                         </xs:element>
                                     </xs:sequence>
                                 </xs:complexType>
                             </xs:element>
-                            <xs:element name="timeline" minOccurs="0">
+                            <!--
+                              Time model. active = fixed hands-on seconds; per-unit = hands-on seconds per unit
+                              (model per-unit: active + per-unit × units; sub-linear: active + per-unit × sqrt(units));
+                              passive = constant unattended seconds; passive-from derives the passive part from the
+                              task's options: "duration" (the duration option) or a named formula.
+                            -->
+                            <xs:element name="timeline">
                                 <xs:complexType>
+                                    <xs:attribute name="model" type="time-model" default="fixed"/>
                                     <xs:attribute name="active" type="xs:nonNegativeInteger" use="required"/>
+                                    <xs:attribute name="per-unit" type="xs:nonNegativeInteger" default="0"/>
                                     <xs:attribute name="passive" type="xs:nonNegativeInteger" default="0"/>
+                                    <xs:attribute name="passive-from" type="passive-source"/>
+                                </xs:complexType>
+                            </xs:element>
+                            <!-- What ends the passive phase and how urgent it is (spec §3.6). Only meaningful with a passive part. -->
+                            <xs:element name="completion" minOccurs="0">
+                                <xs:complexType>
+                                    <xs:attribute name="urgency" type="urgency" default="relaxed"/>
+                                    <xs:attribute name="early" type="xs:nonNegativeInteger" default="0"/>
+                                    <xs:attribute name="late" type="xs:nonNegativeInteger" default="300"/>
+                                    <xs:attribute name="duration" type="xs:nonNegativeInteger" default="30"/>
                                 </xs:complexType>
                             </xs:element>
                         </xs:sequence>
@@ -44,13 +61,27 @@
                         <xs:attribute name="min-outputs" type="xs:nonNegativeInteger" default="1"/>
                         <xs:attribute name="max-outputs" type="xs:nonNegativeInteger"/>
                         <xs:attribute name="requires-tools" type="xs:boolean" default="false"/>
+                        <xs:attribute name="attention" type="attention"/>
+                        <xs:attribute name="check-interval" type="xs:nonNegativeInteger"/>
+                        <xs:attribute name="check-duration" type="xs:nonNegativeInteger"/>
+                        <xs:attribute name="divisible" type="divisible"/>
+                        <xs:attribute name="min-chunk" type="xs:nonNegativeInteger" default="180"/>
+                        <xs:attribute name="max-people" type="xs:positiveInteger" default="1"/>
+                        <xs:attribute name="speedup" type="xs:decimal" default="1"/>
+                        <xs:attribute name="preemptible" type="preemptible"/>
+                        <xs:attribute name="resume-cost" type="xs:nonNegativeInteger" default="20"/>
+                        <xs:attribute name="soil" type="soil-level" default="rinse"/>
+                        <xs:attribute name="station" type="station" default="counter"/>
+                        <xs:attribute name="tedium" type="xs:decimal" default="1"/>
+                        <xs:attribute name="requires" type="xs:string"/>
+                        <!-- Expansion rule applied by the graph builder before scheduling. -->
+                        <xs:attribute name="expand" type="xs:string"/>
                     </xs:complexType>
                 </xs:element>
             </xs:sequence>
         </xs:complexType>
     </xs:element>
-    
-    <!-- Option type enumeration -->
+
     <xs:simpleType name="option-type">
         <xs:restriction base="xs:string">
             <xs:enumeration value="numeric"/>
@@ -58,5 +89,64 @@
             <xs:enumeration value="boolean"/>
         </xs:restriction>
     </xs:simpleType>
-    
+    <xs:simpleType name="time-model">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="fixed"/>
+            <xs:enumeration value="per-unit"/>
+            <xs:enumeration value="sub-linear"/>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="passive-source">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="duration"/>
+            <xs:enumeration value="formula:heat"/>
+            <xs:enumeration value="formula:preheat"/>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="urgency">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="critical"/>
+            <xs:enumeration value="timed"/>
+            <xs:enumeration value="relaxed"/>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="attention">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="attended"/>
+            <xs:enumeration value="monitored"/>
+            <xs:enumeration value="unattended"/>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="divisible">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="none"/>
+            <xs:enumeration value="units"/>
+            <xs:enumeration value="team"/>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="preemptible">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="never"/>
+            <xs:enumeration value="units"/>
+            <xs:enumeration value="anywhere"/>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="soil-level">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="none"/>
+            <xs:enumeration value="rinse"/>
+            <xs:enumeration value="wash"/>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="station">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="counter"/>
+            <xs:enumeration value="hob"/>
+            <xs:enumeration value="oven"/>
+            <xs:enumeration value="sink"/>
+            <xs:enumeration value="fridge"/>
+            <xs:enumeration value="bar"/>
+        </xs:restriction>
+    </xs:simpleType>
+
 </xs:schema>

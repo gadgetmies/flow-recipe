@@ -27,3 +27,6 @@ yarn-error.log*
 /server/database.sqlite-journal
 
 packages/client/node_modules
+
+# nested workspace node_modules
+packages/*/node_modules

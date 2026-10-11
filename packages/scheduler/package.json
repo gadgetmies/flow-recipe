@@ -1,0 +1,30 @@
+{
+  "name": "@flow-recipe/scheduler",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-chef meal scheduling: recipe model, operation catalogue, graph builder, planner, online mode and simulation. Pure JavaScript, no DOM or framework dependency.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./recipe": "./src/recipe/index.js",
+    "./catalogue": "./src/catalogue/index.js",
+    "./graph": "./src/graph/index.js",
+    "./planner": "./src/planner/index.js",
+    "./online": "./src/online/index.js",
+    "./sim": "./src/sim/index.js",
+    "./units": "./src/units.js",
+    "./inventory": "./src/inventory.js"
+  },
+  "bin": {
+    "flow-demo": "./bin/demo.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "validate": "node scripts/validate-recipes.js",
+    "demo": "node bin/demo.js"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.8.10"
+  }
+}
