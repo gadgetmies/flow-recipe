@@ -10,6 +10,8 @@ import { switchSeconds, assignmentCost } from './cost.js'
 import { tightenForHold } from './windows.js'
 
 const INF = Number.POSITIVE_INFINITY
+const MEASURING_OPS = new Set(['measure', 'gather'])
+function isMeasuringTask(task) { return !!task && MEASURING_OPS.has(task.operation) }
 const URGENCY_RANK = { critical: 0, timed: 1, relaxed: 2 }
 const APPOINTMENT_MAX_ACTIVE = 180
 
@@ -142,7 +144,56 @@ export function dispatch(graph, session, windows, opts = {}) {
 
   function contextOf(task) {
     const c = task.context || {}
-    return { dish: c.dish || task.dishId, station: c.station || 'counter', tool: c.tool || null, task: task.id, soil: task.tools?.some((x) => x.soil === 'wash') ? 'wash' : null }
+    return { dish: c.dish || task.dishId, station: c.station || 'counter', tool: c.tool || null, task: task.id, soil: task.tools?.some((x) => x.soil === 'wash') ? 'wash' : null, activity: isMeasuringTask(task) ? 'measure' : null }
+  }
+
+  // ---- measuring ownership (spec §5.5): one measurer; sharing only a whole dish, and only for fairness ----
+  const measuring = { owner: null, byDish: new Map() }
+  const measuringKey = (task) => task.dishId || '_mise'
+  // fairness is judged against the share of the whole session's work, not of the work handed out so far: measuring
+  // comes first, so the measurer is always "ahead" early on without the division of labour being unfair
+  function overShare(p) {
+    const fair = Math.max(1, fairTotal[p.id] || 1)
+    return (loads[p.id] || 0) > fair * (1 + (policy.measuringFairnessTolerance ?? 0.25))
+  }
+  /** Who should measure this: { cands } to choose from, or { wait } to wait for the measurer. */
+  function pendingMeasuringSeconds(key) {
+    let sum = 0
+    for (const x of rt.values()) if (x.status === 'pending' && isMeasuringTask(x.task) && measuringKey(x.task) === key) sum += x.task.active || 0
+    return sum
+  }
+  function measuringChoice(r, task, cands, t, ready) {
+    const key = measuringKey(task)
+    const started = measuring.byDish.has(key)
+    const ownerId = measuring.byDish.get(key) ?? measuring.owner
+    const owner = ownerId ? pById.get(ownerId) : null
+    if (!started) {
+      // whoever starts a dish's measuring should be able to finish it in one run: prefer lanes without an
+      // appointment in the way for the dish's remaining measuring time
+      const run = pendingMeasuringSeconds(key) + (policy.switchMatrix?.measuring ?? 10) * 4
+      const clear = cands.filter((c) => !laneBlockOverlap(c.p, t, t + run / c.p.speed))
+      const pool = clear.length ? clear : cands
+      if (!owner || overShare(owner)) return { cands: pool }
+      // a dish nobody has started may go to someone who would otherwise stand idle; never split a started dish
+      const others = pool.filter((c) => c.p.id !== owner.id)
+      const otherWork = ready.filter((x) => x !== r && x.status === 'pending' && x.task.kind !== 'sink' && !isMeasuringTask(x.task) && x.fixedStart === null).length
+      if (others.length > otherWork) return { cands: pool }
+      const own = pool.find((c) => c.p.id === owner.id)
+      if (own) return { cands: [own] }
+      const ownerClear = !laneBlockOverlap(owner, owner.freeAt, owner.freeAt + run / owner.speed)
+      const fits = !Number.isFinite(r.window.LS) || owner.freeAt <= r.window.LS + 1e-9
+      if (ownerClear && fits && owner.freeAt - t <= (policy.measuringHandoffWaitSeconds ?? 180)) return { wait: owner.freeAt }
+      return { cands: pool }
+    }
+    if (!owner || overShare(owner)) return { cands } // fairness: the cheapest candidate takes the rest over
+    const own = cands.find((c) => c.p.id === owner.id)
+    if (own) return { cands: [own] }
+    const fits = !Number.isFinite(r.window.LS) || owner.freeAt <= r.window.LS + 1e-9
+    if (owner.freeAt - t <= (policy.measuringHandoffWaitSeconds ?? 180) && fits) return { wait: owner.freeAt }
+    return { cands } // the measurer is busy for long or the deadline presses
+  }
+  function ownsPendingMeasuring(p, ready) {
+    return ready.some((x) => x.status === 'pending' && isMeasuringTask(x.task) && (measuring.byDish.get(measuringKey(x.task)) ?? measuring.owner) === p.id)
   }
 
   // ---- fairness bookkeeping ------------------------------------------------------------------------------
@@ -151,6 +202,7 @@ export function dispatch(graph, session, windows, opts = {}) {
   const totalActive = Object.values(graph.tasks).reduce((s, t) => s + (t.active || 0) * (t.tedium || 1), 0)
   const shareSum = participants.reduce((s, p) => s + p.targetShare, 0) || 1
   for (const p of participants) { loads[p.id] = p.load; expected[p.id] = totalActive * (p.targetShare / shareSum) }
+  const fairTotal = { ...expected }
   // fair share of the work assigned SO FAR (plus a floor so early decisions are not over-penalised)
   function refreshExpected() {
     const sum = participants.reduce((a, p) => a + (loads[p.id] || 0), 0)
@@ -174,7 +226,9 @@ export function dispatch(graph, session, windows, opts = {}) {
   function priorityKey(r) {
     const u = r.task.completion ? URGENCY_RANK[r.task.completion.urgency] ?? 2 : 2
     const anchoredBoost = r.window.anchored ? 0 : 1
-    return [r.fixedStart !== null ? 0 : r.isCleaning ? 1 : 2, u, r.window.LS + (priorityOffsets[r.id] || 0), anchoredBoost, -(r.task.tedium || 1), r.id]
+    // mise en place: gathering and measuring of shelf-stable ingredients comes first
+    const mise = policy.miseEnPlace && isMeasuringTask(r.task) && !r.window.anchored ? 0 : 1
+    return [r.fixedStart !== null ? 0 : r.isCleaning ? 1 : 2, mise, u, r.window.LS + (priorityOffsets[r.id] || 0), anchoredBoost, -(r.task.tedium || 1), r.id]
   }
   function cmpKey(a, b) {
     for (let i = 0; i < a.length; i++) {
@@ -408,7 +462,7 @@ export function dispatch(graph, session, windows, opts = {}) {
     return {
       uuid: x.uuid, taskId: x.taskId, kind: x.kind, participantId: x.participantId, start: x.start, end: x.end,
       status: 'planned', title: x.title, instructions: x.instructions, dishId: x.task ? x.task.dishId : null,
-      context: x.task ? { dish: x.task.dishId, station: x.task.context?.station || 'counter', tool: x.task.context?.tool || null } : null,
+      context: x.task ? { dish: x.task.dishId || x.task.context?.dish || null, station: x.task.context?.station || 'counter', tool: x.task.context?.tool || null, activity: isMeasuringTask(x.task) ? 'measure' : null } : null,
       units: x.units || null, inputsFrom: [], outputsTo: [], preemptible: x.task ? x.task.preemptible || 'never' : 'never',
       urgency: x.urgency || null, window: x.window || null, timer: x.timer || null, dependencies: x.dependencies || [],
       tools: x.tools || [], passiveUntil: x.passiveUntil || null, setupSeconds: x.setupSeconds || 0, waitedFor: x.waitedFor || null,
@@ -483,6 +537,7 @@ export function dispatch(graph, session, windows, opts = {}) {
 
     r.status = 'placed'; r.start = s; r.activeEnd = activeEnd; r.end = end; r.participant = p.id
     p.freeAt = Math.max(p.freeAt, activeEnd)
+    if (isMeasuringTask(task)) { measuring.owner = p.id; measuring.byDish.set(measuringKey(task), p.id) }
     p.lastContext = contextOf(task)
     p.load += (active * (task.tedium || 1)) + setup
     loads[p.id] = p.load
@@ -619,7 +674,7 @@ export function dispatch(graph, session, windows, opts = {}) {
       }
       // candidates
       refreshExpected()
-      const cands = []
+      let cands = []
       for (const p of participants) {
         if (p.freeAt > t + 1e-9) continue
         if (p.role === 'cleaner' && !r.isCleaning && policy.cleaning === 'dedicated' && participants.some((q) => q.role !== 'cleaner')) { /* still allowed, cost penalised */ }
@@ -637,10 +692,17 @@ export function dispatch(graph, session, windows, opts = {}) {
         let cost = assignmentCost({ p, task, setup, loads, expected, policy, isCleaning: !!r.isCleaning, continuesChain })
         // stability hook (online re-plan): the previous plan's assignee within the horizon gets W_stable × 60 off
         if (preferAssignments.size && preferAssignments.get(r.id) === p.id) cost -= stableBonus
+        // the measurer stays on measuring while some of it is waiting
+        if (!isMeasuringTask(task) && !r.isCleaning && ownsPendingMeasuring(p, ready)) cost += policy.measuringOwnerFocus ?? 90
         cands.push({ p, cost, setup, a, block })
       }
       if (cands.length === 0) continue
       cands.sort((x, y) => x.cost - y.cost || byId(x.p.id, y.p.id))
+      if (isMeasuringTask(task)) {
+        const choice = measuringChoice(r, task, cands, t, ready)
+        if (choice.wait !== undefined) { waitingTimes.push(choice.wait); continue }
+        cands = choice.cands
+      }
 
       // chunking of divisible per-unit work
       const canChunk = task.divisible === 'units' && task.units > 1 && cands.length > 1 && (task.perUnit || 0) > 0

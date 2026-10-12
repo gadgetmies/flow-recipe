@@ -1,10 +1,19 @@
 // Switching cost (spec §3.7) and assignment cost (spec §5.5 step 4c).
 
+/** True for the measuring activity (gathering and measuring ingredients, for any dish). */
+export function isMeasuringContext(c) {
+  return !!c && c.activity === 'measure'
+}
+
 /** Setup seconds for a participant moving from context a to context b. */
 export function switchSeconds(a, b, matrix) {
   if (!b) return 0
   if (!a) return matrix.any
-  if (a.dish === b.dish && a.station === b.station && (a.tool || null) === (b.tool || null) && a.task === b.task) return matrix.sameContext
+  if (a.task && a.task === b.task) return matrix.sameContext
+  // measuring for one dish after another is one continuous activity: no dish-switch penalty (spec §3.7)
+  if (isMeasuringContext(a) && isMeasuringContext(b)) return matrix.measuring ?? matrix.any
+  // same dish, station and tool: only reading the next instruction
+  if (a.dish === b.dish && a.station === b.station && (a.tool || null) === (b.tool || null)) return matrix.any
   let s = matrix.any
   if (a.dish === b.dish && a.station === b.station) s += matrix.sameDishSameStation
   else if (a.dish === b.dish) s += matrix.sameDishOtherStation
@@ -16,6 +25,7 @@ export function switchSeconds(a, b, matrix) {
 /** True when two contexts count as the same for the switch count in the objective. */
 export function sameContext(a, b) {
   if (!a || !b) return false
+  if (isMeasuringContext(a) && isMeasuringContext(b)) return true
   return a.dish === b.dish && a.station === b.station && (a.tool || null) === (b.tool || null)
 }
 

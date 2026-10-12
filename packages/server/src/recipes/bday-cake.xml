@@ -4,19 +4,19 @@
     <title>Birthday cake</title>
     <serving temperature="ambient"/>
     <ingredients>
-        <ingredient id="oat-milk">oat milk</ingredient>
+        <ingredient id="oat-milk">oat milk<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="white-chocolate-spread">white chocolate spread</ingredient>
         <ingredient id="instant-coffee">instant coffee</ingredient>
         <ingredient id="flour">flour</ingredient>
         <ingredient id="baking-powder">baking powder</ingredient>
         <ingredient id="caster-sugar">caster sugar</ingredient>
-        <ingredient id="vegan-cream">vegan cream</ingredient>
-        <ingredient id="vegan-yoghurt">vegan yoghurt</ingredient>
-        <ingredient id="margarine">margarine</ingredient>
+        <ingredient id="vegan-cream">vegan cream<properties><property name="storage" value="fridge"/></properties></ingredient>
+        <ingredient id="vegan-yoghurt">vegan yoghurt<properties><property name="storage" value="fridge"/></properties></ingredient>
+        <ingredient id="margarine">margarine<properties><property name="storage" value="fridge"/><property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property></properties></ingredient>
         <ingredient id="cucumber">cucumber</ingredient>
         <ingredient id="cream-of-tartar">cream of tartar</ingredient>
         <ingredient id="salt">salt</ingredient>
-        <ingredient id="raspberries">raspberries</ingredient>
+        <ingredient id="raspberries">raspberries<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="ground-coriander">ground coriander</ingredient>
         <ingredient id="gin">gin</ingredient>
         <ingredient id="xanthan">xanthan</ingredient>

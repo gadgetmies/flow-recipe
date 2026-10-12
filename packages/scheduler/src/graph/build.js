@@ -5,6 +5,7 @@ import { expandTasks } from './expand.js'
 import { propagateQuantities, streamUnit } from './quantities.js'
 import { computeTaskDurations, optionCelsius } from './timing.js'
 import { renderInstructions } from './instructions.js'
+import { applyIngredientHandling } from './mise.js'
 
 const APPLIANCE_STATIONS = new Set(['oven', 'microwave'])
 const HANDOFF_SECONDS = 10
@@ -487,6 +488,8 @@ export function buildGraph(session, catalogue) {
     ids.add(id)
     buildDish({ ...dish, id }, session, catalogue, inventory, policy, graph, seen)
   }
+  // storage freshness and, with mise en place, gathering steps (spec §3.10)
+  applyIngredientHandling(graph, { ...session, dishes: (session.dishes ?? []).map((d) => ({ ...d, id: d.id ?? d.recipe?.id })) }, policy, (name) => operationWithDefaults(name, catalogue?.[name]))
   graph.order = topologicalOrder(graph)
   return graph
 }

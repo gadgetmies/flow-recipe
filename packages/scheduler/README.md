@@ -187,6 +187,11 @@ Buffer = { from, to, carrier: string|null /* tool type */, capPerCarrier: number
 Diagnostic = { code, message, dish?, task?, delta? }
 ```
 
+Ingredient handling (spec §3.10, `graph/mise.js`): measuring steps of fridge/freezer ingredients get an
+out-of-storage hold; with `policy.miseEnPlace` the builder adds `gather` tasks (`mise:gather-pantry`, and
+`mise:gather-<fridge|freezer>:<dishId>[:<ingredientId>]`) with fs edges to the users and maxlag edges through measuring
+steps. Gather tasks have `dishId: null` (pantry) or the dish id, `operation: 'gather'`, `releaseLead` (seconds).
+
 Rules (spec §5.1–5.2): expansion to fixpoint; join → one instance (durations summed, instructions concatenated);
 quantities propagated backward from each dish's final outputs (scale applied); batch instantiation when a carrier or
 appliance capacity is smaller than `units`; streaming edges between consecutive per-unit tasks on the same

@@ -234,6 +234,8 @@ Interrupts are a runtime mechanism (§6.3) for when the plan drifts.
 | Transition | Default setup time |
 |---|---|
 | same context (next unit, next stage on the same output) | 0 |
+| same dish, station and tool, next step (flour, then sugar on the same scale) | +10 s (read the instruction only) |
+| measuring, then measuring again, for any dish | +10 s: gathering and measuring ingredients is one activity |
 | same dish, same station, different output | 15 s |
 | same dish, different station | 30 s |
 | different dish | 60 s |
@@ -277,6 +279,47 @@ expresses release points: a `<tool ref>` listed in a task's `<outputs>` means th
 - **Where the limit shows up.** Blocked time is lopsided idle and counts in `I` (§4.2); more importantly, Phase D
   sizes the workforce so that no stage produces faster than the slowest sink downstream can take, and Phase E
   simulates the buffer counts so the plan never shows two people rolling buns while every sheet is in the oven.
+
+### 3.10 Measuring and mise en place
+
+Measuring is best done by one person in one run: the scale, the containers and the counter space stay with them, and
+nobody waits for the scale or has to find what the other already weighed. The planner treats gathering and measuring
+as one activity, for any dish, and applies three rules:
+
+- **No dish-switch penalty inside measuring.** Measuring for the buns and then for the soup costs only the instruction
+  read (§3.7), so one person taking care of all the measuring is not penalised.
+- **One measurer per dish.** The first person to measure for a dish keeps it. When they are busy for a moment (up to
+  `policy.measuringHandoffWaitSeconds`), the next measurement waits for them instead of going to someone else. While
+  measuring they own is waiting, other work costs them `policy.measuringOwnerFocus` extra, so they stay on it.
+- **Sharing only for fairness, and only by whole dish.** Another person takes over measuring when (a) a dish nobody
+  has started would otherwise leave them idle, or (b) the measurer is over their share of the *whole session's* work by
+  more than `policy.measuringFairnessTolerance`. Fairness is judged against the session, not the work handed out so
+  far, because measuring comes first and would otherwise always look unfair early on. A deadline can still force a
+  split; the rule never delays a dish.
+
+**Storage facts.** Recipes say where a perishable ingredient is kept and, when it differs from the default, how long
+it may stay out:
+
+```xml
+<ingredient id="butter">butter<properties>
+    <property name="storage" value="fridge"/>
+    <property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property>
+</properties></ingredient>
+```
+
+Defaults are `policy.storageHoldSeconds` (fridge 60 min, freezer 10 min). A measuring step whose input is a fridge or
+freezer ingredient gets that hold, so it is anchored close to its use instead of floating to the start.
+
+**Mise en place** (`policy.miseEnPlace`, off by default) adds gathering steps and moves measuring to the start:
+
+- One pantry step fetches every shelf-stable ingredient of every dish and opens the session; every measurement of
+  those ingredients depends on it, and all of that measuring is prioritised before cooking.
+- Perishables are taken out per dish and storage place, just in time: no earlier than `policy.gatherLeadSeconds`
+  (15 min) before their latest start, with a freshness edge from taking them out to every task that uses them,
+  through the measuring step. Each ingredient keeps its own limit (butter may stay out longer than milk). Items that
+  keep for less than the lead, such as ice, get one step each, right before their use.
+- Because measuring everything first lengthens the start, a derived start time moves earlier when a dish would
+  otherwise be late (`START_EARLIER` diagnostic); a start fixed by the host is never moved.
 
 ---
 
@@ -830,7 +873,12 @@ them so a recipe author never has to repeat them.
 | `slackBuffer` | 10 %, min 2 min | robustness before hard deadlines |
 | `hotHold`, `coldHold` | 10 min, 20 min | serving windows when the recipe gives none |
 | `cleaning` | `shared` | `dedicated`, `shared`, `deferred`, plus `endOfSessionCleaning: true/false` |
-| `miseEnPlace` | `false` | bias floating measure tasks to the start |
+| `miseEnPlace` | `false` | gathering steps; all shelf-stable measuring first; perishables just in time (§3.10) |
+| `storageHoldSeconds` | fridge 3600, freezer 600 | how long a perishable may stay out unless the recipe says otherwise |
+| `gatherLeadSeconds` | 900 | with mise en place, perishables come out at most this long before their latest start |
+| `measuringHandoffWaitSeconds` | 180 | wait this long for the measurer before giving a measurement to someone else |
+| `measuringFairnessTolerance` | 0.25 | the measurer may exceed their session share by this much before measuring is shared |
+| `measuringOwnerFocus` | 90 | extra cost for the measurer taking other work while their measuring waits |
 | `lead`, `reactionTime`, `ackTimeout` | 30 s, 30 s, 15 s | appointments and interrupts |
 | `maxConcurrentTimers` | 2 per participant | cognitive load |
 | `replanThreshold`, `replanDebounce`, `stabilityHorizon` | 90 s, 10 s, 15 min | runtime |

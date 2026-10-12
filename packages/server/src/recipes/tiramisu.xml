@@ -6,8 +6,8 @@
     <ingredients>
         <ingredient id="ladyfingers">ladyfingers</ingredient>
         <ingredient id="coffee">strong coffee or espresso</ingredient>
-        <ingredient id="mascarpone">mascarpone</ingredient>
-        <ingredient id="whipped-cream">whipped cream</ingredient>
+        <ingredient id="mascarpone">mascarpone<properties><property name="storage" value="fridge"/></properties></ingredient>
+        <ingredient id="whipped-cream">whipped cream<properties><property name="storage" value="fridge"/><property name="out-of-storage"><numeric-value number="30" unit="minutes"/></property></properties></ingredient>
         <ingredient id="sugar">sugar</ingredient>
         <ingredient id="vanilla-extract">vanilla extract</ingredient>
         <ingredient id="cocoa-powder">cocoa powder</ingredient>

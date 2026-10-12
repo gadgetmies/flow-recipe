@@ -25,6 +25,8 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Typography,
+  Switch,
+  FormControlLabel,
 } from '@mui/material'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import PauseIcon from '@mui/icons-material/Pause'
@@ -152,6 +154,7 @@ export default function DemoPage() {
   const [names, setNames] = useState(NAMES)
   const [sheets, setSheets] = useState(4)
   const [cleaning, setCleaning] = useState('shared')
+  const [mise, setMise] = useState(false)
   const [seed, setSeed] = useState(7)
   const [noise, setNoise] = useState(0.25)
   const [error, setError] = useState(null)
@@ -235,7 +238,7 @@ export default function DemoPage() {
         inventory: mergeInventory(source.inventory || defaultInventory(), {
           tools: [{ type: 'baking-sheet', count: sheets }],
         }),
-        policy: { seed: Number(seed) || 0, cleaning },
+        policy: { seed: Number(seed) || 0, cleaning, miseEnPlace: mise },
       }
       const result = planSession({
         recipes,
@@ -457,6 +460,11 @@ export default function DemoPage() {
                         ))}
                       </Select>
                     </FormControl>
+                    <FormControlLabel
+                      control={<Switch checked={mise} onChange={(e) => setMise(e.target.checked)} />}
+                      label="Mise en place"
+                      title="Gather all ingredients and measure everything shelf-stable before cooking; fridge and freezer items are taken out just in time"
+                    />
                     <TextField
                       size="small"
                       label="Seed"

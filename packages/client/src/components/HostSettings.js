@@ -454,7 +454,7 @@ function PolicyEditor({ policy, onChange, readOnly }) {
       />
       <FormControlLabel
         control={<Switch checked={!!policy.miseEnPlace} onChange={(e) => onChange({ miseEnPlace: e.target.checked })} />}
-        label="Mise en place (measure everything first)"
+        label="Mise en place: gather all ingredients and measure first (fridge items just in time)"
       />
       <Typography variant="subtitle2">Weights</Typography>
       {WEIGHTS.map((w) => (

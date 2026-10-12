@@ -5,15 +5,15 @@
     <serving temperature="cold" hold="20" hold-unit="minutes"/>
     <ingredients>
         <ingredient id="cookies">cookies</ingredient>
-        <ingredient id="butter">butter</ingredient>
+        <ingredient id="butter">butter<properties><property name="storage" value="fridge"/><property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property></properties></ingredient>
         <ingredient id="gelatin">gelatin</ingredient>
         <ingredient id="cold-water">cold water</ingredient>
-        <ingredient id="cream">cream</ingredient>
+        <ingredient id="cream">cream<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="cinnamon">cinnamon<properties>
                 <property name="type" value="ground"/>
             </properties>
         </ingredient>
-        <ingredient id="cinnamon-plum-quark">cinnamon plum quark</ingredient>
+        <ingredient id="cinnamon-plum-quark">cinnamon plum quark<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="sugar">sugar</ingredient>
         <ingredient id="glogg">glogg</ingredient>
     </ingredients>

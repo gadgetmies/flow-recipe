@@ -4,7 +4,7 @@
     <title>Epic Microwave Chocolate Cake</title>
     <serving temperature="ambient"/>
     <ingredients>
-        <ingredient id="soya-milk">soya milk</ingredient>
+        <ingredient id="soya-milk">soya milk<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="dark-chocolate">dark chocolate</ingredient>
     </ingredients>
     <tools>

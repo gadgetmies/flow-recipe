@@ -4,7 +4,7 @@
     <title>Epic Microwave Chocolate Cake</title>
     <serving temperature="ambient"/>
     <ingredients>
-        <ingredient id="soya-milk">soya milk</ingredient>
+        <ingredient id="soya-milk">soya milk<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="cider-vinegar">cider vinegar</ingredient>
         <ingredient id="dark-chocolate">dark chocolate</ingredient>
         <ingredient id="instant-coffee">instant coffee</ingredient>
@@ -15,8 +15,8 @@
         <ingredient id="cocoa-powder">cocoa powder</ingredient>
         <ingredient id="caster-sugar">caster sugar</ingredient>
         <ingredient id="vanilla-extract">vanilla extract</ingredient>
-        <ingredient id="vegan-cream">vegan cream</ingredient>
-        <ingredient id="margarine">margarine</ingredient>
+        <ingredient id="vegan-cream">vegan cream<properties><property name="storage" value="fridge"/></properties></ingredient>
+        <ingredient id="margarine">margarine<properties><property name="storage" value="fridge"/><property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property></properties></ingredient>
         <ingredient id="vegetable-oil">vegetable oil</ingredient>
         <ingredient id="apple-cider-vinegar">apple cider vinegar</ingredient>
     </ingredients>

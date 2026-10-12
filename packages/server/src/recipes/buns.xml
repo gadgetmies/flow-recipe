@@ -5,16 +5,19 @@
     <serving temperature="hot" hold="10" hold-unit="minutes"/>
     <ingredients>
         <ingredient id="milk">milk<properties>
+                <property name="storage" value="fridge"/>
                 <property name="fat-content">
                     <numeric-value number="3" unit="percent"/>
                 </property>
             </properties>
         </ingredient>
         <ingredient id="yeast">yeast<properties>
+                <property name="storage" value="fridge"/>
                 <property name="type" value="dry"/>
             </properties>
         </ingredient>
         <ingredient id="egg">egg<properties>
+                <property name="storage" value="fridge"/>
                 <property name="size" value="medium"/>
             </properties>
         </ingredient>
@@ -36,6 +39,8 @@
         </ingredient>
         <ingredient id="flour">white bread flour</ingredient>
         <ingredient id="butter">butter<properties>
+                <property name="storage" value="fridge"/>
+                <property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property>
                 <property name="salt-content">
                     <numeric-value number="11" unit="milligram"/>
                 </property>

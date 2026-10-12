@@ -2,7 +2,7 @@
 
 export const DEFAULT_POLICY = Object.freeze({
   weights: { fair: 10, idle: 8, switch: 3, interrupt: 5, robust: 2, span: 1, stable: 4, late: 10, violation: 1000 }, // late: per second past the serve window; violation: per hard-constraint violation (spec §5.6)
-  switchMatrix: { sameContext: 0, sameDishSameStation: 15, sameDishOtherStation: 30, otherDish: 60, afterCleaning: 30, any: 10 },
+  switchMatrix: { sameContext: 0, sameDishSameStation: 15, sameDishOtherStation: 30, otherDish: 60, afterCleaning: 30, any: 10, measuring: 10 },
   minChunkSeconds: 180,
   maxIdleStretchSeconds: 480,
   slackBufferFraction: 0.1,
@@ -13,6 +13,17 @@ export const DEFAULT_POLICY = Object.freeze({
   endOfSessionCleaning: true,
   miseEnPlace: false,
   floatWindowSeconds: 3600,
+  // Measuring (spec §3.7, §5.5): one person measures, for any number of dishes. Another person takes over only a whole
+  // dish nobody has started (when they would otherwise be idle) or when the measurer is over their fair share by more
+  // than the tolerance. The measurer is waited for when free within the handoff wait, and is nudged away from other
+  // work while measuring is pending.
+  measuringHandoffWaitSeconds: 180,
+  measuringFairnessTolerance: 0.25,
+  measuringOwnerFocus: 90,
+  // Default time an ingredient may stay out of the fridge / freezer (recipes override per ingredient).
+  storageHoldSeconds: { fridge: 3600, freezer: 600 },
+  // With mise en place, fridge and freezer items are taken out at most this long before their latest start.
+  gatherLeadSeconds: 900,
   minAppointmentPassiveSeconds: 180,
   leadSeconds: 30,
   reactionSeconds: 30,
@@ -29,10 +40,10 @@ export const DEFAULT_POLICY = Object.freeze({
 
 /** Deep-merge a partial policy over the defaults. */
 export function mergePolicy(partial = {}) {
-  const out = { ...DEFAULT_POLICY, weights: { ...DEFAULT_POLICY.weights }, switchMatrix: { ...DEFAULT_POLICY.switchMatrix } }
+  const out = { ...DEFAULT_POLICY, weights: { ...DEFAULT_POLICY.weights }, switchMatrix: { ...DEFAULT_POLICY.switchMatrix }, storageHoldSeconds: { ...DEFAULT_POLICY.storageHoldSeconds } }
   for (const [k, v] of Object.entries(partial || {})) {
     if (v === undefined || v === null) continue
-    if (k === 'weights' || k === 'switchMatrix') out[k] = { ...out[k], ...v }
+    if (k === 'weights' || k === 'switchMatrix' || k === 'storageHoldSeconds') out[k] = { ...out[k], ...v }
     else out[k] = v
   }
   return out

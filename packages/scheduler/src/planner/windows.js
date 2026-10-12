@@ -83,7 +83,10 @@ export function computeWindows(graph, t0, opts = {}) {
     const t = tasks[id]
     let r = -INF
     const hold = t.hold === undefined || t.hold === null ? INF : t.hold
-    if (Number.isFinite(hold) && Number.isFinite(LS[id])) r = LS[id] - hold
+    // release: a producer with a finite hold may not start more than `hold` before its latest start; a task can ask to
+    // be released even later (`releaseLead`, e.g. taking things out of the fridge just in time)
+    const lead = Number.isFinite(t.releaseLead) ? Math.min(t.releaseLead, hold) : hold
+    if (Number.isFinite(lead) && Number.isFinite(LS[id])) r = LS[id] - lead
     const anchored = Number.isFinite(r)
     const w = { ES: ES[id], LF: LF[id], LS: LS[id], r, anchored, duration: dur(id), slack: Number.isFinite(LS[id]) ? LS[id] - ES[id] : INF }
     windows[id] = w

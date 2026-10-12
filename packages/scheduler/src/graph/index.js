@@ -36,3 +36,4 @@ export function graphToDot(graph) {
   lines.push('}')
   return lines.join('\n')
 }
+export { applyIngredientHandling, ingredientStorage, DEFAULT_STORAGE_HOLD_SECONDS, MEASURING_OPERATIONS } from './mise.js'

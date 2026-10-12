@@ -45,6 +45,7 @@ export function plan(graph, session, options = {}) {
 
   // origin: online = now; offline = startTime, else derived from the windows
   let t0 = options.now ?? s.now ?? s.startTime ?? null
+  const derivedStart = t0 === null
   const slack = slackSeconds(graph, policy)
   let win
   if (t0 === null) {
@@ -189,6 +190,27 @@ export function plan(graph, session, options = {}) {
     result.report.objective = { total: o.total, terms: o.terms, weighted: o.weighted }
   }
   result.report.planningMs = Date.now() - t0wall
+  // A derived start (nobody fixed it) is only a proposal: when a dish would be late, start earlier instead of serving
+  // late. This matters most with mise en place, where all measuring comes before the cooking (spec §5.7 rung 6).
+  if (derivedStart && !options.frozen && !options._startRetry) {
+    const worst = (p) => Math.max(0, ...p.dishes.map((x) => (x.late === null || x.late === undefined ? 0 : x.late)))
+    const late = worst(result)
+    if (late > 0) {
+      let best = result
+      let shift = Math.ceil(late / 60) * 60 + 60
+      for (let i = 0; i < 3 && worst(best) > 0; i++) {
+        const earlier = plan(graph, { ...session, startTime: t0 - shift * 1000 }, { ...options, _startRetry: true })
+        if (worst(earlier) < worst(best)) best = earlier
+        shift += Math.ceil(worst(earlier) / 60) * 60 + 60
+      }
+      if (best !== result) {
+        best.diagnostics = best.diagnostics.filter((x) => x.code !== 'REPAIR_START')
+        best.diagnostics.push({ code: 'START_EARLIER', message: `Start at ${new Date(best.startTime).toISOString().slice(11, 16)} UTC, ${Math.round((t0 - best.startTime) / 60000)} min earlier than the minimum, so ${worst(best) > 0 ? 'lateness is reduced' : 'every dish is on time'}.`, delta: Math.round((t0 - best.startTime) / 1000) })
+        best.status = result.status
+        return best
+      }
+    }
+  }
   return result
 }
 

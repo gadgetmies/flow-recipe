@@ -5,7 +5,7 @@
     <serving temperature="ambient"/>
     <ingredients>
         <ingredient id="bread">bread</ingredient>
-        <ingredient id="butter">butter</ingredient>
+        <ingredient id="butter">butter<properties><property name="storage" value="fridge"/><property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property></properties></ingredient>
         <ingredient id="cucumber">cucumber</ingredient>
         <ingredient id="tomato">tomato</ingredient>
     </ingredients>
