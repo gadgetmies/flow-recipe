@@ -5,6 +5,7 @@ import { DOMParser as XmldomParser } from '@xmldom/xmldom'
 import * as scheduler from '@flow-recipe/scheduler'
 import { checkWellFormed } from './wellformed.js'
 import { loadOperationsXml } from './guide.js'
+import { recipeVocabularyErrors } from './vocabulary.js'
 
 /** xmldom DOMParser that does not print warnings to the console (problems are collected by checkWellFormed). */
 export class QuietDOMParser extends XmldomParser {
@@ -14,6 +15,10 @@ export class QuietDOMParser extends XmldomParser {
 }
 
 export const DRY_RUN_PARTICIPANTS = [1, 3]
+/** Limits that bound the work of one check (the largest built-in recipe has 46 tasks, 17 ingredients, 31 kB). */
+export const MAX_TASKS = 150
+export const MAX_INGREDIENTS = 100
+export const MAX_XML_CHARS = 500000
 const DRY_RUN_START = Date.UTC(2026, 0, 10, 9, 0, 0)
 const SERIOUS_PLAN_CODES = new Set(['INVARIANT', 'DEADLOCK', 'INCOMPLETE'])
 const BUSY_KINDS = new Set(['work', 'cleaning', 'appointment', 'check', 'setup', 'resume'])
@@ -50,9 +55,9 @@ function leafTasks(model) {
 function rootAttributes(xml) {
   const doc = new QuietDOMParser().parseFromString(xml, 'text/xml')
   const root = doc && doc.documentElement
-  if (!root) return {}
+  if (!root) return { doc }
   const get = (n) => (root.hasAttribute(n) ? root.getAttribute(n) : null)
-  return { name: root.nodeName, version: get('version'), id: get('id'), ref: get('ref') }
+  return { doc, name: root.nodeName, version: get('version'), id: get('id'), ref: get('ref') }
 }
 
 function summarise(model, catalogue) {
@@ -203,6 +208,10 @@ export function checkRecipeXml(xml, { precisionScale = false, id, planCheck = tr
       result.errors.push('No XML given')
       return result
     }
+    if (xml.length > MAX_XML_CHARS) {
+      result.errors.push(`The XML is too large (${xml.length} characters; at most ${MAX_XML_CHARS})`)
+      return result
+    }
     const problems = checkWellFormed(xml)
     if (problems.length) {
       for (const p of problems) result.errors.push(`XML is not well-formed at line ${p.line}, column ${p.column}: ${p.message}`)
@@ -211,6 +220,12 @@ export function checkRecipeXml(xml, { precisionScale = false, id, planCheck = tr
     const root = rootAttributes(xml)
     if (root.name !== 'recipe') {
       result.errors.push(`The root element must be <recipe>, got <${root.name || '?'}>`)
+      return result
+    }
+    // Only the recipe vocabulary: no foreign namespaces (XHTML <script>), no <?xml-stylesheet?>, no DOCTYPE.
+    const foreign = recipeVocabularyErrors(root.doc)
+    if (foreign.length) {
+      result.errors.push(...foreign)
       return result
     }
     if (root.version !== '2') result.warnings.push(`<recipe> should have version="2"${root.version ? ` (has "${root.version}")` : ''}`)
@@ -235,6 +250,11 @@ export function checkRecipeXml(xml, { precisionScale = false, id, planCheck = tr
     result.title = model.title || null
     if (!model.title) result.errors.push('The recipe has no <title>')
     if (!model.tasks.length) result.errors.push('The recipe has no tasks')
+    // Planning budget: the dry run is synchronous and grows with the task count; real recipes stay far below.
+    const taskCount = leafTasks(model).length
+    if (taskCount > MAX_TASKS) result.errors.push(`The recipe has ${taskCount} tasks; at most ${MAX_TASKS} are supported`)
+    if (model.ingredients.length > MAX_INGREDIENTS) result.errors.push(`The recipe has ${model.ingredients.length} ingredients; at most ${MAX_INGREDIENTS} are supported`)
+    if (result.errors.length && (taskCount > MAX_TASKS || model.ingredients.length > MAX_INGREDIENTS)) return result
 
     const validation = scheduler.validateRecipe(model, catalogue || undefined)
     result.errors.push(...validation.errors)

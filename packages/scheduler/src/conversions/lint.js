@@ -3,9 +3,11 @@
 import { canonicalUnit, isImperial, isMass, isVolume, toMetricBase } from '../units.js'
 import { findDensity } from './match.js'
 import { isSpoonIngredient } from './densities.js'
-import { formatAmount, toMetricAmount } from './convert.js'
+import { canonicalAmountUnit, formatAmount, isKnownAmountUnit, toMetricAmount, unitKey } from './convert.js'
 
 const SPOON_UNITS = new Set(['tsp', 'tbsp'])
+/** Non-metric amount units the converter knows (any spelling resolves to one of these keys). */
+const US_AMOUNT_KEYS = new Set(['cup', 'fl oz', 'pint', 'quart', 'gallon', 'oz', 'lb', 'stick'])
 const TWO_TBSP_ML = 30
 
 function flatten(tasks) {
@@ -40,10 +42,25 @@ export function lintRecipeUnits(model, { precisionScale = false } = {}) {
       if (!value || value.number === undefined || value.number === null || !value.unit) continue
       const unit = value.unit
       const amount = formatAmount(value)
-      if (isImperial(unit)) {
+      if (isImperial(unit) || (name === 'amount' && US_AMOUNT_KEYS.has(unitKey(unit)))) {
         const what = name === 'temperature' ? 'temperature' : `option '${name}'`
         push('warning', task.id, `${what} uses non-metric unit '${unit}' (${amount}); convert with metricizeRecipeXml`)
         continue
+      }
+      if (name === 'amount') {
+        if (unit === 't') {
+          push('warning', task.id, `amount unit 't' (${amount}) is ambiguous (T = tablespoon, t = teaspoon); write tsp or tbsp`)
+          continue
+        }
+        if (!isKnownAmountUnit(unit)) {
+          push('warning', task.id, `amount unit '${unit}' (${amount}) is not recognised and was not converted; use g, kg, ml, dl, l, tsp, tbsp or pieces`)
+          continue
+        }
+        const canonical = canonicalAmountUnit(unit)
+        if (canonical && canonical !== unit) {
+          push('warning', task.id, `amount unit '${unit}' (${amount}) should be written '${canonical}'`)
+          continue
+        }
       }
       if (name !== 'amount' || !ingredient) continue
       const entry = findDensity(ingredient.name, ingredient.properties)

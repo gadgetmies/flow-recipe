@@ -74,19 +74,23 @@ export function catalogueSummary(catalogue) {
   return lines.join('\n')
 }
 
-/** The measurement rules, worded for the LLM (the importer enforces them again deterministically afterwards). */
+/**
+ * The measurement rules, worded for the LLM. The deterministic converter (metricizeRecipeXml) is the source of truth
+ * for every unit conversion, so the model copies the source's amounts and units and never does volume → weight or
+ * °F → °C arithmetic itself; the converter converts, rounds and leaves a <!-- converted from … --> note.
+ */
 export function unitsPolicy({ precisionScale = false } = {}) {
   return [
-    'MEASUREMENT RULES (metric only; amounts are converted and checked again by code after you answer, but get them right):',
-    '- Solids, powders, fats, sugars, grated cheese, chopped nuts/vegetables and viscous liquids (honey, syrup, oil, molasses, peanut butter) are measured by WEIGHT in g (kg ≥ 1000 g). Convert cups/spoons/ounces/pounds/sticks to grams with a realistic density (1 cup all-purpose flour ≈ 125 g, 1 cup sugar ≈ 200 g, 1 cup brown sugar packed ≈ 220 g, 1 stick butter = 113 g, 1 tbsp butter ≈ 14 g, 1 cup honey ≈ 340 g, 1 oz = 28.35 g, 1 lb = 454 g). Round to kitchen-friendly values (5 g steps above 100 g, 1 g steps below).',
-    '- Thin liquids (water, milk, stock, wine, cream, juice, spirits) stay as volume: ml, dl or l (1 cup = 240 ml, 1 fl oz = 30 ml).',
-    '- Countable things stay as pieces (unit "pieces"): eggs, garlic cloves, onions, lemons, gelatine sheets, tortillas. Put the size in the ingredient properties (size="large") if the source says so.',
+    'MEASUREMENT RULES (code converts units after you answer; do NOT convert them yourself):',
+    '- Copy every amount EXACTLY as the source states it, in the source\'s own units: 1 cup flour → number="1" unit="cup", 2 tbsp butter → unit="tbsp", ½ tsp salt → number="0.5" unit="tsp", 8 oz cream cheese → unit="oz", 1 stick butter → unit="stick", 1 lb potatoes → unit="lb", 200 g sugar → unit="g", 3 dl milk → unit="dl". Temperatures likewise: 350 °F → number="350" unit="fahrenheit", 180 °C → unit="celsius". Pan sizes: value="9x13 inch" or "23 cm" as written.',
+    '- Never convert volume to weight, ounces to grams or °F to °C, and never round: a converter with a density table does that deterministically and records what it changed. If the source gives both (e.g. "1 cup (125 g) flour"), use the metric figure.',
+    '- Use the standard unit spellings: g, kg, ml, dl, l, tsp, tbsp, cup, fl oz, oz, lb, stick, pint, quart, fahrenheit, celsius, inch. Write numbers as plain decimals (0.5, not 1/2 or ½).',
+    '- Countable things are pieces (unit "pieces"): eggs, garlic cloves, onions, lemons, gelatine sheets, tortillas. "3 large eggs" → number="3" unit="pieces"; put the size in the ingredient properties (size="large") if the source says so.',
+    '- Pinch/dash stay counts (unit "pieces" with the ingredient name saying pinch).',
     precisionScale
-      ? '- The cook HAS a precision scale (0.1 g): small amounts of spices, salt, baking powder/soda, yeast, extracts are in g with one decimal (1 tsp salt = 6 g, 1 tsp baking soda = 4.6 g, 1 tsp baking powder = 4 g, 1 tsp ground cinnamon = 2.6 g, 1 tsp dry yeast = 3.1 g, 1 tsp vanilla extract = 4.2 g); measure them with a precision-scale tool.'
-      : '- The cook has NO precision scale: small amounts (≤ 1 tbsp, under ~10 g) of spices, salt, baking powder/soda, yeast and extracts are metric spoons: unit "tsp" (5 ml) or "tbsp" (15 ml), quarter-teaspoon resolution (0.25 tsp). Larger amounts of anything weighable are in g.',
-    '- Pinch/dash stay counts (unit "pieces" with the ingredient name saying pinch) unless a precision scale is available.',
-    '- Temperatures are °C (unit "celsius"); convert °F with (F − 32) × 5/9 and round to 5 °C (350 °F → 175 °C, 375 °F → 190 °C, 400 °F → 200 °C, 425 °F → 220 °C). Fan/convection ovens: note it in the instructions.',
-    '- Lengths and pan sizes are cm (9 inch → 23 cm, 9×13 inch → 23×33 cm). Durations use minutes/hours/seconds.',
+      ? '- The cook HAS a precision scale (0.1 g): the converter will weigh small amounts of spices, salt, leavening and extracts; still write them as the source does (1 tsp), and give their measure tasks a precision-scale tool.'
+      : '- The cook has NO precision scale: small amounts of spices, salt, leavening and extracts stay teaspoons/tablespoons; the converter handles it.',
+    '- Durations use minutes/hours/seconds.',
   ].join('\n')
 }
 
@@ -95,7 +99,7 @@ const ROLE = `You convert recipes from the web into recipe XML (format version 2
 const SCHEDULER_THINKING = `HOW TO WRITE FOR THE SCHEDULER (think about each point before writing):
 1. Steps: one task per real action, in a valid order; use only operations from the catalogue below, with their required options. Use the durations and temperatures stated in the source (bake 12 min at 180 °C → duration 12 minutes, temperature 180 celsius; "chill at least 2 hours" → 2 hours). Do not invent steps the recipe does not need, but do not skip implicit ones (preheat oven, line the sheet, measure every ingredient, cool before frosting).
 2. Measuring: every ingredient is measured by a "measure" task with an amount option, once per use (an ingredient used twice gets two measure tasks with distinct ids). Measure into the bowl it goes into when it simply joins a mixture.
-3. Unit streams: when work is done per piece (cookies, buns, dumplings, burgers, crepes, portions), split the mass into units with the split operation (unit-size option) or produce outputs with amount + unit="cookie" etc., and keep the same unit name on every following per-unit output (shape → place on sheet → bake → cool). This is what lets several cooks work in a pipeline. Pick the count from the source yield.
+3. Unit streams: when work is done per piece (cookies, buns, dumplings, burgers, crepes, portions), split the mass into units with the split operation (parts option = the count) or produce outputs with amount + unit="cookie" etc., and keep the same unit name on every following per-unit output (shape → place on sheet → bake → cool). This is what lets several cooks work in a pipeline. Pick the count from the source yield.
 4. Carriers and capacities: declare tools that hold units with a capacity property in that unit (baking sheet capacity 12 cookie, cooling rack 24 cookie, pan 4 pancake), give per-unit oven work the sheet as a reserved tool (bake-in-oven expands into oven rounds), and return the carrier in <outputs> (<tool ref="baking-sheet"/>) on the task that frees it (usually moving units to the rack or plate) so the sheet can be reused for the next round.
 5. Reserved tools: a bowl or pot that holds a mixture across several tasks is reserved="true" on each of those tasks; set soil="wash"/"rinse"/"none" on tools so dish-washing is planned realistically (a scale or a towel is soil="none").
 6. Holds: put hold (minutes) on outputs that must be used soon (beaten egg whites 10, melted chocolate 15, whipped cream 30, cooked pasta 5, fried food 10, risen dough 15) and leave it off when things keep for long.

@@ -137,18 +137,18 @@ describe('toMetricAmount', () => {
     let r = conv(1, 'cup', 'all-purpose flour')
     assert.equal(r.method, 'density')
     assert.equal(r.unit, 'g')
-    assert.equal(r.number, 127)
+    assert.equal(r.number, 125, 'US cup: matches the 125 g per cup note')
     assert.equal(r.density.id, 'flour-all-purpose')
     assert.deepEqual(r.from, { number: 1, unit: 'cup' })
-    assert.deepEqual([conv(1, 'cup', 'granulated sugar').number, conv(1, 'cup', 'granulated sugar').unit], [204, 'g'])
-    assert.equal(conv(0.5, 'cup', 'unsalted butter').number, 115)
-    assert.equal(conv(1, 'cup', 'honey').number, 340)
+    assert.deepEqual([conv(1, 'cup', 'granulated sugar').number, conv(1, 'cup', 'granulated sugar').unit], [201, 'g'])
+    assert.equal(conv(0.5, 'cup', 'unsalted butter').number, 114)
+    assert.equal(conv(1, 'cup', 'honey').number, 335, '336 g per cup, rounded to 5 g')
     r = conv(2, 'dl', 'sugar')
     assert.deepEqual([r.number, r.unit, r.method], [170, 'g', 'density'])
     r = conv(1, 'tbsp', 'olive oil')
     assert.deepEqual([r.number, r.unit], [14, 'g'])
     r = conv(9, 'cups', 'flour')
-    assert.deepEqual([r.number, r.unit], [1.14, 'kg'])
+    assert.deepEqual([r.number, r.unit], [1.13, 'kg'])
   })
 
   test('thin liquids stay in ml / l', () => {
@@ -177,7 +177,7 @@ describe('toMetricAmount', () => {
     assert.deepEqual(pick(conv(1, 'tsp', 'vanilla extract')), [1, 'tsp', 'spoon'])
     // A sixteenth of a cup is one tablespoon; 1/48 cup one teaspoon.
     assert.deepEqual(pick(conv(1 / 16, 'cup', 'ground cinnamon')), [1, 'tbsp', 'spoon'])
-    assert.deepEqual(pick(conv(0.5, 'fl oz', 'vanilla extract')), [3, 'tsp', 'spoon'])
+    assert.deepEqual(pick(conv(0.5, 'fl oz', 'vanilla extract')), [1, 'tbsp', 'spoon'], 'half a fluid ounce is one US tablespoon')
     // Larger amounts are weighed.
     assert.deepEqual(pick(conv(0.25, 'cup', 'ground cinnamon')), [31, 'g', 'density'])
     assert.deepEqual(pick(conv(2, 'tbsp', 'table salt')), [36, 'g', 'density'])
@@ -214,9 +214,9 @@ describe('toMetricAmount', () => {
 
   test('accepts US unit spellings', () => {
     assert.equal(conv(2, 'T', 'sugar').number, 26)
-    assert.deepEqual(pick(conv(1, 't', 'salt')), [1, 't', 'spoon'])
+    assert.deepEqual(pick(conv(1, 't', 'salt')), [1, 'tsp', 'spoon'])
     assert.deepEqual(pick(conv(2, 'Fl. Oz.', 'milk')), [60, 'ml', 'metric'])
-    assert.deepEqual(pick(conv(1, 'Cups', 'flour')), [127, 'g', 'density'])
+    assert.deepEqual(pick(conv(1, 'Cups', 'flour')), [125, 'g', 'density'])
   })
 
   test('converting a converted amount changes nothing', () => {
@@ -392,8 +392,8 @@ describe('metricizeRecipeXml', () => {
   test('converts amounts, temperatures, lengths, capacities and output volumes', () => {
     const r = metricizeRecipeXml(usRecipe, xmlOpts)
     const m = parseRecipe(r.xml, { DOMParser })
-    assert.deepEqual(amountOf(m, 'm-flour').amount, { number: 285, unit: 'g' })
-    assert.deepEqual(amountOf(m, 'm-sugar').amount, { number: 162, unit: 'g' })
+    assert.deepEqual(amountOf(m, 'm-flour').amount, { number: 280, unit: 'g' })
+    assert.deepEqual(amountOf(m, 'm-sugar').amount, { number: 160, unit: 'g' })
     assert.deepEqual(amountOf(m, 'm-butter').amount, { number: 113, unit: 'g' })
     assert.deepEqual(amountOf(m, 'm-salt').amount, { number: 1, unit: 'tsp' })
     assert.deepEqual(amountOf(m, 'm-cinnamon').amount, { number: 2, unit: 'tsp' })
@@ -408,7 +408,7 @@ describe('metricizeRecipeXml', () => {
     const pot = m.tools.find((t) => t.id === 'pot')
     assert.deepEqual(pot.capacity, { number: 3.79, unit: 'l' })
     const dough = m.tasks[m.tasks.length - 1].steps[0].outputs[0]
-    assert.deepEqual(dough.volume, { number: 1.44, unit: 'l' })
+    assert.deepEqual(dough.volume, { number: 1.42, unit: 'l' })
 
     assert.ok(r.xml.includes('<!-- converted from 2.25 cups (all-purpose flour, sifted, 0.53 g/ml) -->'))
     assert.ok(r.xml.includes('<!-- converted from 350 fahrenheit -->'))
@@ -417,7 +417,7 @@ describe('metricizeRecipeXml', () => {
     assert.ok(r.warnings.some((w) => /mystery powder/.test(w)))
 
     const flour = r.changes.find((c) => c.taskId === 'm-flour')
-    assert.deepEqual(flour, { taskId: 'm-flour', ingredientId: 'flour', from: { number: 2.25, unit: 'cups' }, to: { number: 285, unit: 'g' }, method: 'density', note: flour.note })
+    assert.deepEqual(flour, { taskId: 'm-flour', ingredientId: 'flour', from: { number: 2.25, unit: 'cups' }, to: { number: 280, unit: 'g' }, method: 'density', note: flour.note })
     assert.ok(r.changes.some((c) => c.taskId === 'bake' && c.to.unit === 'celsius'))
     assert.ok(!r.changes.some((c) => c.taskId === 'm-salt' || c.taskId === 'm-eggs'))
   })
@@ -523,5 +523,68 @@ describe('lintRecipeUnits', () => {
     const m = parseRecipe(metricizeRecipeXml(usRecipe, xmlOpts).xml, { DOMParser })
     assert.ok(!lintRecipeUnits(m).some((l) => l.taskId === 'm-salt'))
     assert.ok(lintRecipeUnits(m, { precisionScale: true }).some((l) => l.taskId === 'm-salt' && l.level === 'info' && /precision scale/.test(l.message)))
+  })
+})
+
+describe('review 1 regressions: unit spellings, US cup, lint of leftovers', () => {
+  test('every spelling an LLM may copy converts like the canonical unit', () => {
+    const same = (a, b, ing) => {
+      const x = conv(1, a, ing)
+      const y = conv(1, b, ing)
+      assert.deepEqual([x.number, x.unit], [y.number, y.unit], `${a} vs ${b} (${ing})`)
+    }
+    for (const u of ['T', 'Tb', 'Tbs', 'TBS', 'Tbsp', 'tbs', 'tbsp.', 'Tbsp.', 'tbsps', 'tablespoons', 'Tablespoon']) same(u, 'tbsp', 'soy sauce')
+    for (const u of ['t', 'ts', 'tsps', 'tsp.', 'teaspoons', 'Teaspoon']) same(u, 'tsp', 'table salt')
+    for (const u of ['c', 'c.', 'C', 'cups', 'Cup']) same(u, 'cup', 'all-purpose flour')
+    for (const u of ['fl. oz', 'fl oz.', 'Fl. Oz.', 'fluid ounces', 'floz']) same(u, 'fl oz', 'milk')
+    for (const u of ['lb.', 'lbs', 'Pounds']) same(u, 'lb', 'potatoes')
+    for (const u of ['ounces', 'oz.', 'Ounce']) same(u, 'oz', 'cream cheese')
+    for (const u of ['g.', 'gr', 'gr.', 'grams', 'Grams', 'gramme']) same(u, 'g', 'flour')
+    for (const u of ['ml.', 'mL', 'mls', 'millilitres']) same(u, 'ml', 'milk')
+    for (const u of ['sticks', 'Stick']) same(u, 'stick', 'butter')
+  })
+
+  test('kept amounts are written with the canonical unit', () => {
+    assert.deepEqual(pick(conv(1, 'T', 'soy sauce')), [1, 'tbsp', 'unchanged'])
+    assert.deepEqual(pick(conv(1, 'Tbs', 'salt')), [1, 'tbsp', 'spoon'])
+    assert.deepEqual(pick(conv(0.5, 'tsps', 'baking soda')), [0.5, 'tsp', 'spoon'])
+    assert.deepEqual(pick(conv(200, 'grams', 'flour')), [200, 'g', 'unchanged'])
+    assert.deepEqual(pick(conv(3, 'large', 'eggs')), [3, 'pieces', 'count'])
+    assert.deepEqual(pick(conv(1, 'medium', 'onion')), [1, 'pieces', 'count'])
+  })
+
+  test('a converted cup agrees with the density note (US cup, 236.6 ml)', () => {
+    const grams = (note) => Number(/(\d+) g per cup/.exec(note)[1])
+    for (const name of ['all-purpose flour', 'granulated sugar', 'packed brown sugar', 'powdered sugar', 'honey']) {
+      const r = conv(1, 'cup', name)
+      const expected = grams(r.density.note)
+      assert.ok(Math.abs(r.number - expected) <= Math.max(2, expected * 0.015), `${name}: ${r.number} g vs note ${r.density.note}`)
+    }
+  })
+
+  test('metricize canonicalises T / t / Tbs and the lint flags anything left unconverted', () => {
+    const xml = usRecipe
+      .replace('<numeric-value number="1" unit="tsp"/>', '<numeric-value number="1" unit="Tbs"/>')
+      .replace('<numeric-value number="2" unit="tsp"/>', '<numeric-value number="2" unit="t"/>')
+    const r = metricizeRecipeXml(xml, xmlOpts)
+    const m = parseRecipe(r.xml, { DOMParser })
+    assert.deepEqual(amountOf(m, 'm-salt').amount, { number: 1, unit: 'tbsp' })
+    assert.deepEqual(amountOf(m, 'm-cinnamon').amount, { number: 2, unit: 'tsp' })
+    assert.ok(r.xml.includes('<!-- converted from 1 Tbs (kosher salt) -->'), r.xml)
+    assert.equal(metricizeRecipeXml(r.xml, xmlOpts).changes.length, 0, 'idempotent')
+
+    // Left as is (not converted): the parser lower-cases T to t, which the lint reports as ambiguous; unknown units
+    // and US units are flagged too.
+    const raw = usRecipe
+      .replace('<numeric-value number="1" unit="tsp"/>', '<numeric-value number="1" unit="T"/>')
+      .replace('<numeric-value number="2" unit="tsp"/>', '<numeric-value number="2" unit="smidgen"/>')
+      .replace('<numeric-value number="1" unit="stick"/>', '<numeric-value number="1" unit="sticks"/>')
+    const lint = lintRecipeUnits(parseRecipe(raw, { DOMParser }))
+    const at = (taskId) => lint.filter((l) => l.taskId === taskId && l.level === 'warning').map((l) => l.message).join('\n')
+    assert.match(at('m-salt'), /ambiguous/)
+    assert.match(at('m-cinnamon'), /'smidgen'.*not recognised/)
+    assert.match(at('m-butter'), /non-metric/)
+    const spelled = usRecipe.replace('<numeric-value number="1" unit="tsp"/>', '<numeric-value number="1" unit="tbs"/>')
+    assert.match(lintRecipeUnits(parseRecipe(spelled, { DOMParser })).filter((l) => l.taskId === 'm-salt').map((l) => l.message).join('\n'), /should be written 'tbsp'/)
   })
 })

@@ -36,10 +36,19 @@ function normaliseProvider(p) {
   return k
 }
 
-/** Readable message for an HTTP error from a provider. */
-async function httpError(res, provider) {
+/**
+ * Readable message for an HTTP error from a provider. With `withDetail` false (endpoints a user supplied, which
+ * may be internal services) the response body is never read into the message: only the status code.
+ */
+async function httpError(res, provider, withDetail = true) {
   let detail = ''
-  try {
+  if (!withDetail) {
+    try {
+      if (res.body && typeof res.body.cancel === 'function') await res.body.cancel()
+    } catch {
+      // ignore
+    }
+  } else try {
     const body = await res.text()
     try {
       const json = JSON.parse(body)
@@ -86,7 +95,7 @@ function combineSignals(signals) {
   return ctl.signal
 }
 
-async function postJson({ url, headers, body, timeoutMs, signal, fetchImpl, provider }) {
+async function postJson({ url, headers, body, timeoutMs, signal, fetchImpl, provider, errorDetail = true }) {
   if (signal && signal.aborted) throw new LlmError('aborted', 'LLM request was cancelled')
   const timeout = AbortSignal.timeout(timeoutMs)
   let res
@@ -100,22 +109,25 @@ async function postJson({ url, headers, body, timeoutMs, signal, fetchImpl, prov
   } catch (e) {
     if (signal && signal.aborted) throw new LlmError('aborted', 'LLM request was cancelled')
     if (timeout.aborted || e.name === 'TimeoutError') throw new LlmError('timeout', `LLM request timed out after ${Math.round(timeoutMs / 1000)} s`)
+    if (e && e.code === 'blocked-address') throw new LlmError('blocked-address', `Cannot reach ${new URL(url).host}: ${e.message}`)
     const cause = e.cause && (e.cause.code || e.cause.message)
-    throw new LlmError('network', `Cannot reach ${new URL(url).host}: ${cause || e.message}`)
+    const reason = errorDetail ? cause || e.message : (e.cause && e.cause.code) || e.code || 'connection failed'
+    throw new LlmError('network', `Cannot reach ${new URL(url).host}: ${String(reason).slice(0, 200)}`)
   }
-  if (!res.ok) throw await httpError(res, provider)
+  if (!res.ok) throw await httpError(res, provider, errorDetail)
   try {
     return await res.json()
   } catch (e) {
     if (signal && signal.aborted) throw new LlmError('aborted', 'LLM request was cancelled')
     if (timeout.aborted) throw new LlmError('timeout', `LLM request timed out after ${Math.round(timeoutMs / 1000)} s`)
-    throw new LlmError('http', `Invalid JSON from the LLM provider: ${e.message}`)
+    throw new LlmError('http', errorDetail ? `Invalid JSON from the LLM provider: ${e.message}` : 'Invalid JSON from the LLM provider')
   }
 }
 
 /**
  * Create an LLM client.
- * @param {object} config { provider, model?, apiKey?, baseUrl?, mockResponse?, timeoutMs?, fetch? }
+ * @param {object} config { provider, model?, apiKey?, baseUrl?, mockResponse?, timeoutMs?, fetch?, errorDetail? }
+ *   errorDetail: false keeps provider response bodies out of error messages (set it for user-supplied base URLs)
  * @returns {{ provider, model, baseUrl, complete: Function, lastStopReason: string|null, usage: object|null }}
  */
 export function createLlmClient(config) {
@@ -129,6 +141,7 @@ export function createLlmClient(config) {
   const apiKey = config.apiKey ? String(config.apiKey).trim() : ''
   const timeoutMs = Number(config.timeoutMs) > 0 ? Number(config.timeoutMs) : DEFAULT_TIMEOUT_MS
   const fetchImpl = config.fetch || globalThis.fetch
+  const errorDetail = config.errorDetail !== false
 
   const client = { provider, model, baseUrl: provider === 'mock' ? null : baseUrl, hasKey: !!apiKey, lastStopReason: null, usage: null, calls: 0 }
 
@@ -172,13 +185,14 @@ export function createLlmClient(config) {
         signal,
         fetchImpl,
         provider,
+        errorDetail,
       })
       client.calls++
       client.lastStopReason = json.stop_reason || null
       client.usage = json.usage || null
       if (json.stop_reason === 'refusal') {
         const d = json.stop_details || {}
-        throw new LlmError('refusal', `The model declined the request${d.explanation ? `: ${d.explanation}` : ''}`)
+        throw new LlmError('refusal', `The model declined the request${d.explanation && errorDetail ? `: ${d.explanation}` : ''}`)
       }
       const text = (json.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('')
       if (!text.trim()) throw new LlmError('empty', `The model returned no text (stop reason ${json.stop_reason || 'unknown'})`)
@@ -197,7 +211,7 @@ export function createLlmClient(config) {
     else body.max_tokens = maxTokens
     if (temperature !== undefined && temperature !== null && !/^(o\d|gpt-5)/i.test(model)) body.temperature = temperature
     const headers = apiKey ? { authorization: `Bearer ${apiKey}` } : {}
-    const json = await postJson({ url: `${baseUrl}/chat/completions`, headers, body, timeoutMs, signal, fetchImpl, provider })
+    const json = await postJson({ url: `${baseUrl}/chat/completions`, headers, body, timeoutMs, signal, fetchImpl, provider, errorDetail })
     client.calls++
     const choice = (json.choices || [])[0] || {}
     const finish = choice.finish_reason || null
@@ -206,7 +220,7 @@ export function createLlmClient(config) {
     let content = choice.message ? choice.message.content : choice.text
     if (Array.isArray(content)) content = content.map((p) => (typeof p === 'string' ? p : p.text || '')).join('')
     if (!content || !String(content).trim()) {
-      if (choice.message && choice.message.refusal) throw new LlmError('refusal', `The model declined the request: ${choice.message.refusal}`)
+      if (choice.message && choice.message.refusal) throw new LlmError('refusal', errorDetail ? `The model declined the request: ${choice.message.refusal}` : 'The model declined the request')
       throw new LlmError('empty', `The model returned no text (finish reason ${finish || 'unknown'})`)
     }
     return String(content)

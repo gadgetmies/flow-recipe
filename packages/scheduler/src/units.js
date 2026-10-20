@@ -86,10 +86,15 @@ export { MASS, VOLUME, TIME, COUNT }
 
 /** Grams per imperial mass unit (avoirdupois). */
 const IMPERIAL_MASS = { oz: 28.349523125, ounce: 28.349523125, ounces: 28.349523125, lb: 453.59237, lbs: 453.59237, pound: 453.59237, pounds: 453.59237 }
-/** Millilitres per US customary volume unit. `cup` is the same 240 ml (US legal cup) as in VOLUME. */
+/**
+ * Millilitres per US customary volume unit. `cup` here is the US customary cup (236.6 ml = 16 US tbsp), the cup the
+ * density table's "g per cup" figures refer to, so a converted cup agrees with its note (1 cup brown sugar → 213 g).
+ * VOLUME.cup stays 240 ml for the scheduler's own quantity arithmetic (toBase), which existing recipes rely on.
+ */
+const US_CUP_ML = 236.5882365
 const IMPERIAL_VOLUME = {
   'fl oz': 29.5735295625, floz: 29.5735295625, 'fluid ounce': 29.5735295625, 'fluid ounces': 29.5735295625,
-  cup: 240, cups: 240,
+  cup: US_CUP_ML, cups: US_CUP_ML,
   pint: 473.176473, pints: 473.176473, pt: 473.176473,
   quart: 946.352946, quarts: 946.352946, qt: 946.352946,
   gallon: 3785.411784, gallons: 3785.411784, gal: 3785.411784,
@@ -126,11 +131,12 @@ export function isImperial(unit) {
 export function toMetricBase({ number, unit }) {
   const n = Number(number)
   const k = key(unit)
-  if (k in MASS) return { number: n * MASS[k], unit: 'g' }
-  if (k in VOLUME) return { number: n * VOLUME[k], unit: 'ml' }
   const ik = imperialKey(unit)
+  // US units first: a cup converted from a source recipe is the US customary cup.
   if (ik in IMPERIAL_MASS) return { number: n * IMPERIAL_MASS[ik], unit: 'g' }
   if (ik in IMPERIAL_VOLUME) return { number: n * IMPERIAL_VOLUME[ik], unit: 'ml' }
+  if (k in MASS) return { number: n * MASS[k], unit: 'g' }
+  if (k in VOLUME) return { number: n * VOLUME[k], unit: 'ml' }
   if (ik in LENGTH) return { number: n * LENGTH[ik], unit: 'cm' }
   return null
 }
@@ -141,4 +147,4 @@ export function toCentimeters({ number, unit }) {
   return ik in LENGTH ? Number(number) * LENGTH[ik] : null
 }
 
-export { IMPERIAL_MASS, IMPERIAL_VOLUME, LENGTH, BUTTER_STICK_GRAMS, PINCH_GRAMS }
+export { IMPERIAL_MASS, IMPERIAL_VOLUME, LENGTH, BUTTER_STICK_GRAMS, PINCH_GRAMS, US_CUP_ML }

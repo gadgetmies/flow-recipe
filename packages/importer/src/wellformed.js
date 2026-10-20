@@ -3,6 +3,7 @@
 // reported with its line and column.
 
 const NAME = /^[A-Za-z_:][A-Za-z0-9_:.\-]*/
+const MAX_DEPTH = 256
 const XML_ENTITIES = new Set(['amp', 'lt', 'gt', 'quot', 'apos'])
 
 function position(src, index) {
@@ -194,6 +195,11 @@ export function checkWellFormed(xml, { maxErrors = 10 } = {}) {
       continue
     }
     if (stack.length === 0) rootSeen = true
+    if (!selfClosing && stack.length >= MAX_DEPTH) {
+      err(i, `Elements are nested more than ${MAX_DEPTH} levels deep`)
+      stack.length = 0
+      break
+    }
     if (!selfClosing) stack.push({ name, index: i })
     else if (stack.length === 0) rootClosed = true
     i = j

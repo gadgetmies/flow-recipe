@@ -66,7 +66,8 @@ function massAmount(grams, precisionScale) {
 
 /** Metric spoons: tbsp from 1 tbsp up (nearest 1/4), otherwise tsp to the nearest 1/4 (1/8 under 1/4 tsp). */
 function spoonAmount(ml) {
-  if (ml >= TBSP - 0.01) return { number: roundTo(ml / TBSP, 0.25), unit: 'tbsp' }
+  // A US tablespoon (1/16 US cup) is 14.8 ml: it still reads as 1 tbsp.
+  if (ml >= TBSP * 0.98) return { number: roundTo(ml / TBSP, 0.25), unit: 'tbsp' }
   const tsp = ml / TSP
   return { number: tsp < 0.25 ? Math.max(roundTo(tsp, 0.125), 0.125) : roundTo(tsp, 0.25), unit: 'tsp' }
 }
@@ -81,17 +82,69 @@ export function inchesToCm(n) {
   return roundTo(Number(n) * 2.54, 0.5)
 }
 
-function unitKey(unit) {
+/**
+ * Spellings an LLM or a web page may use for a unit → the key used by the tables (or 'stick' / 'pieces').
+ * Case matters only for the US shorthand: capital T (Tb, Tbs, TB) is a tablespoon, lower-case t (ts) a teaspoon.
+ */
+const UNIT_ALIASES = {
+  // spoons
+  tbsp: 'tbsp', tbsps: 'tbsp', tbs: 'tbsp', tbl: 'tbsp', tbls: 'tbsp', tblsp: 'tbsp', tblsps: 'tbsp', tblspn: 'tbsp',
+  tbspn: 'tbsp', tablespoon: 'tbsp', tablespoons: 'tbsp', 'tbsp s': 'tbsp', 'table spoon': 'tbsp', 'table spoons': 'tbsp',
+  tsp: 'tsp', tsps: 'tsp', tspn: 'tsp', tspns: 'tsp', teaspoon: 'tsp', teaspoons: 'tsp', 'tea spoon': 'tsp', 'tea spoons': 'tsp',
+  // cups and other US volumes
+  c: 'cup', cup: 'cup', cups: 'cup', cp: 'cup',
+  'fl oz': 'fl oz', 'fl ozs': 'fl oz', 'fl ounce': 'fl oz', 'fl ounces': 'fl oz', 'fluid oz': 'fl oz', 'fluid ounce': 'fl oz',
+  'fluid ounces': 'fl oz', floz: 'fl oz',
+  pt: 'pint', pts: 'pint', pint: 'pint', pints: 'pint',
+  qt: 'quart', qts: 'quart', quart: 'quart', quarts: 'quart',
+  gal: 'gallon', gals: 'gallon', gallon: 'gallon', gallons: 'gallon',
+  // US masses
+  oz: 'oz', ozs: 'oz', ounce: 'oz', ounces: 'oz',
+  lb: 'lb', lbs: 'lb', pound: 'lb', pounds: 'lb',
+  // metric spellings
+  g: 'g', gr: 'g', grs: 'g', gm: 'g', gms: 'g', gram: 'g', grams: 'g', gramme: 'g', grammes: 'g',
+  kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg', kilogram: 'kg', kilograms: 'kg', kilogramme: 'kg', kilogrammes: 'kg',
+  mg: 'mg', milligram: 'mg', milligrams: 'mg',
+  ml: 'ml', mls: 'ml', cc: 'ml', milliliter: 'ml', milliliters: 'ml', millilitre: 'ml', millilitres: 'ml',
+  cl: 'cl', centiliter: 'cl', centiliters: 'cl', centilitre: 'cl', centilitres: 'cl',
+  dl: 'dl', deciliter: 'dl', deciliters: 'dl', decilitre: 'dl', decilitres: 'dl',
+  l: 'l', ltr: 'l', ltrs: 'l', lt: 'l', liter: 'l', liters: 'l', litre: 'l', litres: 'l',
+  // butter sticks and pieces
+  stick: 'stick', sticks: 'stick',
+  piece: 'pieces', pieces: 'pieces', pc: 'pieces', pcs: 'pieces',
+  // "3 large eggs" → the size word is not a unit: pieces
+  large: 'pieces', medium: 'pieces', small: 'pieces', 'extra large': 'pieces', 'extra-large': 'pieces', xl: 'pieces',
+  jumbo: 'pieces', whole: 'pieces', each: 'pieces', ea: 'pieces',
+}
+
+/** Canonical spelling written back to the document for a unit key. */
+const CANONICAL = { cup: 'cup', 'fl oz': 'fl oz', pint: 'pint', quart: 'quart', gallon: 'gallon', oz: 'oz', lb: 'lb', stick: 'stick', pieces: 'pieces', g: 'g', kg: 'kg', mg: 'mg', ml: 'ml', cl: 'cl', dl: 'dl', l: 'l', tsp: 'tsp', tbsp: 'tbsp' }
+
+/** Unit → table key: aliases resolved, case and dots ignored except for the T / t spoon shorthand. */
+export function unitKey(unit) {
   if (unit === null || unit === undefined) return ''
-  const raw = String(unit).trim()
+  const raw = String(unit).trim().replace(/\.+$/, '')
+  if (raw === '') return ''
   // US shorthand: capital T is a tablespoon, lower-case t a teaspoon.
-  if (raw === 'T' || raw === 'Tbs' || raw === 'Tb') return 'tbsp'
-  if (raw === 't') return 'tsp'
-  const k = imperialKey(raw)
-  if (k === 'tbs' || k === 'tbl' || k === 'tbsps' || k === 'tblsp' || k === 'tbls') return 'tbsp'
-  if (k === 'tsps') return 'tsp'
-  if (k === 'stick' || k === 'sticks') return 'stick'
+  if (/^(T|Tb|TB|Tbs|TBS|Tbsp|TBSP|Tbl|Tbls)$/.test(raw)) return 'tbsp'
+  if (/^(t|ts|tsp)$/.test(raw)) return 'tsp'
+  const k = imperialKey(raw).replace(/\s*-\s*/g, '-')
+  if (k in UNIT_ALIASES) return UNIT_ALIASES[k]
+  if (k.replace(/-/g, ' ') in UNIT_ALIASES) return UNIT_ALIASES[k.replace(/-/g, ' ')]
   return k
+}
+
+/** True when a unit (any spelling) is one the converter knows: metric, US customary, counts, lengths. */
+export function isKnownAmountUnit(unit) {
+  const k = unitKey(unit)
+  return k === '' || k in CANONICAL || k in MASS || k in VOLUME || COUNT.has(k) || COUNTISH.has(k) || k in IMPERIAL_MASS || k in IMPERIAL_VOLUME || isLength(k)
+}
+
+/** The spelling metricizeRecipeXml writes for a unit it keeps: 'Tbs' → 'tbsp', 'g.' → 'g', 'grams' → 'g'. */
+export function canonicalAmountUnit(unit) {
+  const k = unitKey(unit)
+  if (k in CANONICAL) return CANONICAL[k]
+  return unit === undefined ? null : unit
 }
 
 function label(entry) {
@@ -113,7 +166,8 @@ export function toMetricAmount({ number, unit }, { ingredient = null, properties
   const entry = density !== undefined ? density : ingredient ? findDensity(ingredient, properties) : null
   const k = unitKey(unit)
   const result = (to, method, note = null) => ({ number: tidy(to.number), unit: to.unit, from, method, density: entry, note })
-  const unchanged = (method = 'unchanged', note = null) => ({ number: n, unit: from.unit, from, method, density: entry, note })
+  // Kept amounts are still written with the canonical spelling ('T' → 'tbsp', 'grams' → 'g', '3 large' → pieces).
+  const unchanged = (method = 'unchanged', note = null) => ({ number: n, unit: from.unit === null ? null : canonicalAmountUnit(from.unit), from, method, density: entry, note })
   const entryNote = entry && entry.note ? `${label(entry)}: ${entry.note}` : null
 
   if (!Number.isFinite(n)) return unchanged('unchanged', 'not a number')
@@ -129,7 +183,8 @@ export function toMetricAmount({ number, unit }, { ingredient = null, properties
     if (entry && entry.kind === 'fat') {
       return result(massAmount(Math.round(n * BUTTER_STICK_GRAMS), precisionScale), 'metric', `one stick of ${label(entry)} = ${BUTTER_STICK_GRAMS} g`)
     }
-    return unchanged('count')
+    // Cinnamon sticks and the like stay counts, as written.
+    return { ...unchanged('count'), unit: from.unit }
   }
 
   // Mass.

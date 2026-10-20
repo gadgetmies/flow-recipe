@@ -37,6 +37,16 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '2mb' }));
 
+// Behind a reverse proxy (Railway, nginx) set FLOW_TRUST_PROXY (e.g. 1 = one hop) so per-IP limits see the client.
+if (process.env.FLOW_TRUST_PROXY) {
+  const v = process.env.FLOW_TRUST_PROXY;
+  app.set('trust proxy', /^\d+$/.test(v) ? Number(v) : v === 'true' ? true : v);
+}
+if (!process.env.FLOW_UPLOAD_TOKEN &&
+  (process.env.FLOW_LLM_PROVIDER || process.env.FLOW_LLM_API_KEY || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)) {
+  console.warn('[import] a server LLM is configured but FLOW_UPLOAD_TOKEN is not set: anyone who can reach this server can run imports with it');
+}
+
 const HOST_ID = sessions.HOST_ID;
 const INTERRUPT_CHECK_MS = parseInt(process.env.FLOW_INTERRUPT_CHECK_MS || '5000', 10);
 const CLIENT_EVENT_TYPES = new Set([
@@ -59,6 +69,15 @@ app.get('/api/recipes', (req, res) => {
   }
 });
 
+// Recipe XML is data, never a page: user-supplied documents are served from the app's origin, so the browser must
+// not sniff, render scripts, load resources or run XSLT if someone opens the URL directly.
+function setXmlHeaders(res, name) {
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+  res.setHeader('Content-Disposition', `inline; filename="${String(name).replace(/[^A-Za-z0-9_.-]/g, '_')}.xml"`);
+}
+
 app.get('/api/recipes/:id', (req, res) => {
   const id = req.params.id;
   const file = recipes.recipePath(id);
@@ -68,7 +87,7 @@ app.get('/api/recipes/:id', (req, res) => {
   if (!fs.existsSync(file)) {
     const user = recipes.getUserRecipe(id);
     if (!user) return res.status(404).json({ error: 'Recipe not found' });
-    res.setHeader('Content-Type', 'application/xml');
+    setXmlHeaders(res, id);
     return res.send(user.xml);
   }
   try {
@@ -80,12 +99,12 @@ app.get('/api/recipes/:id', (req, res) => {
   } catch (error) {
     console.warn(`[recipe ${id}] validation failed:`, error.message);
   }
-  res.setHeader('Content-Type', 'application/xml');
+  setXmlHeaders(res, id);
   res.sendFile(file);
 });
 
 app.get('/api/operations', (req, res) => {
-  res.setHeader('Content-Type', 'application/xml');
+  setXmlHeaders(res, 'operations');
   res.sendFile(path.join(recipes.RECIPES_DIR, 'operations.xml'));
 });
 
@@ -139,6 +158,11 @@ app.get('/api/sessions/:id/events', (req, res) => {
 // ---- recipe import and user recipes ----------------------------------------------------------------------------
 
 const MAX_XML_BYTES = 1024 * 1024;
+// check / convert / save run the parser, the converter and a scheduler dry run synchronously: keep inputs small
+// (the largest built-in recipe is ~31 kB) and rate-limit them per client address.
+const MAX_CHECK_XML_BYTES = parseInt(process.env.FLOW_CHECK_MAX_BYTES || String(256 * 1024), 10);
+const CHECK_RATE_LIMIT = parseInt(process.env.FLOW_CHECK_RATE_LIMIT || '30', 10); // requests per window per IP
+const CHECK_RATE_WINDOW_MS = 60 * 1000;
 const MAX_TEXT_BYTES = 1024 * 1024;
 const MAX_URL_LENGTH = 2048;
 const MAX_NOTES_LENGTH = 4000;
@@ -160,17 +184,48 @@ function requireUploadToken(req, res, next) {
 }
 
 // Reads body.xml: { xml } or sends 400 / 413 and returns null.
-function bodyXml(req, res) {
+function bodyXml(req, res, maxBytes = MAX_CHECK_XML_BYTES) {
   const xml = req.body && req.body.xml;
   if (typeof xml !== 'string' || !xml.trim()) {
     res.status(400).json({ error: 'xml is required' });
     return null;
   }
-  if (Buffer.byteLength(xml, 'utf8') > MAX_XML_BYTES) {
-    res.status(413).json({ error: 'xml is too large (max 1 MB)' });
+  if (Buffer.byteLength(xml, 'utf8') > Math.min(maxBytes, MAX_XML_BYTES)) {
+    res.status(413).json({ error: `xml is too large (max ${Math.round(Math.min(maxBytes, MAX_XML_BYTES) / 1024)} kB)` });
     return null;
   }
   return xml;
+}
+
+// Fixed-window rate limit per client address for the CPU-heavy recipe endpoints.
+const checkHits = new Map(); // ip -> { start, count }
+function checkRateLimit(req, res, next) {
+  if (!(CHECK_RATE_LIMIT > 0)) return next();
+  const now = Date.now();
+  const key = req.ip || 'unknown';
+  let entry = checkHits.get(key);
+  if (!entry || now - entry.start >= CHECK_RATE_WINDOW_MS) {
+    entry = { start: now, count: 0 };
+    checkHits.set(key, entry);
+  }
+  entry.count += 1;
+  if (checkHits.size > 10000) {
+    for (const [ip, e] of checkHits) if (now - e.start >= CHECK_RATE_WINDOW_MS) checkHits.delete(ip);
+  }
+  if (entry.count > CHECK_RATE_LIMIT) {
+    res.setHeader('Retry-After', String(Math.ceil((entry.start + CHECK_RATE_WINDOW_MS - now) / 1000)));
+    return res.status(429).json({ error: 'Too many recipe checks, try again in a minute' });
+  }
+  next();
+}
+
+// metricizeRecipeXml throws on XML it cannot parse: that is the client's input, so answer 422, not 500.
+async function metricize(mod, xml, precisionScale) {
+  try {
+    return { result: await mod.metricizeRecipeXml(xml, { DOMParser, XMLSerializer, precisionScale }) };
+  } catch (error) {
+    return { error: String((error && error.message) || error).slice(0, 500) };
+  }
 }
 
 async function requireImporter(res) {
@@ -250,7 +305,7 @@ app.post('/api/import', requireUploadToken, asyncRoute(async (req, res) => {
   if (llm !== undefined && llm !== null) {
     const { config, error } = importJobs.clientLlmConfig(llm);
     if (error) return res.status(400).json({ error });
-    llmConfig = config;
+    llmConfig = await importJobs.secureClientLlmConfig(importer, config);
   } else {
     llmConfig = importJobs.serverLlmConfig(importer);
   }
@@ -277,7 +332,7 @@ app.delete('/api/import/:jobId', requireUploadToken, (req, res) => {
   res.json(job);
 });
 
-app.post('/api/recipes/check', asyncRoute(async (req, res) => {
+app.post('/api/recipes/check', checkRateLimit, asyncRoute(async (req, res) => {
   const xml = bodyXml(req, res);
   if (xml === null) return;
   const importer = await requireImporter(res);
@@ -288,7 +343,15 @@ app.post('/api/recipes/check', asyncRoute(async (req, res) => {
   if (req.body.metricize === true) {
     const mod = await importJobs.conversions();
     if (!mod) return res.status(503).json({ error: 'Unit conversions are not available on this server' });
-    conversion = await mod.metricizeRecipeXml(xml, { DOMParser, XMLSerializer, precisionScale });
+    const { result, error } = await metricize(mod, xml, precisionScale);
+    if (error) {
+      // Report it like any other check failure (well-formedness problems with line numbers).
+      const check = await importer.checkRecipeXml(xml, { precisionScale, planCheck: false });
+      if (!check.errors.length) check.errors.push(error);
+      check.ok = false;
+      return res.status(422).json({ ...check, error });
+    }
+    conversion = result;
     source = conversion.xml;
   }
   const id = typeof req.body.id === 'string' && recipes.isValidId(req.body.id) ? req.body.id : undefined;
@@ -299,12 +362,13 @@ app.post('/api/recipes/check', asyncRoute(async (req, res) => {
   res.json(check);
 }));
 
-app.post('/api/recipes/convert', asyncRoute(async (req, res) => {
+app.post('/api/recipes/convert', checkRateLimit, asyncRoute(async (req, res) => {
   const xml = bodyXml(req, res);
   if (xml === null) return;
   const mod = await importJobs.conversions();
   if (!mod) return res.status(503).json({ error: 'Unit conversions are not available on this server' });
-  const result = await mod.metricizeRecipeXml(xml, { DOMParser, XMLSerializer, precisionScale: req.body.precisionScale === true });
+  const { result, error } = await metricize(mod, xml, req.body.precisionScale === true);
+  if (error) return res.status(422).json({ error });
   res.json({ xml: result.xml, changes: result.changes || [], warnings: result.warnings || [] });
 }));
 
@@ -318,7 +382,12 @@ function idError(id) {
   return null;
 }
 
-app.post('/api/recipes', requireUploadToken, asyncRoute(async (req, res) => {
+// The stored document's root id always equals the id it is stored under.
+function withRootId(importer, xml, id) {
+  return typeof importer.setRootAttributes === 'function' ? importer.setRootAttributes(xml, { id }) : xml;
+}
+
+app.post('/api/recipes', requireUploadToken, checkRateLimit, asyncRoute(async (req, res) => {
   const xml = bodyXml(req, res);
   if (xml === null) return;
   const header = recipes.readHeader(xml);
@@ -339,12 +408,14 @@ app.post('/api/recipes', requireUploadToken, asyncRoute(async (req, res) => {
 
   const importer = await requireImporter(res);
   if (!importer) return;
+  // checkRecipeXml also refuses foreign elements, namespaces and processing instructions (stored-XSS guard).
   const check = await importer.checkRecipeXml(xml, { id, precisionScale: req.body.precisionScale === true });
   if (!check || !check.ok || (check.errors && check.errors.length)) {
     return res.status(422).json({ error: 'The recipe has errors', check });
   }
+  const stored = withRootId(importer, xml, id);
   try {
-    const saved = recipes.saveUserRecipe({ id, xml, title: check.title || header.title }, { overwrite });
+    const saved = recipes.saveUserRecipe({ id, xml: stored, title: check.title || header.title }, { overwrite });
     console.log(`[recipes] ${saved.created ? 'saved' : 'replaced'} user recipe ${id}`);
     res.status(201).json({ id, title: saved.title, check });
   } catch (error) {
@@ -353,7 +424,7 @@ app.post('/api/recipes', requireUploadToken, asyncRoute(async (req, res) => {
   }
 }));
 
-app.put('/api/recipes/:id', requireUploadToken, asyncRoute(async (req, res) => {
+app.put('/api/recipes/:id', requireUploadToken, checkRateLimit, asyncRoute(async (req, res) => {
   const id = req.params.id;
   const invalid = idError(id);
   if (invalid) return res.status(invalid.status).json({ error: invalid.error });
@@ -368,7 +439,7 @@ app.put('/api/recipes/:id', requireUploadToken, asyncRoute(async (req, res) => {
   if (!check || !check.ok || (check.errors && check.errors.length)) {
     return res.status(422).json({ error: 'The recipe has errors', check });
   }
-  const saved = recipes.saveUserRecipe({ id, xml, title: check.title || header.title }, { overwrite: true });
+  const saved = recipes.saveUserRecipe({ id, xml: withRootId(importer, xml, id), title: check.title || header.title }, { overwrite: true });
   console.log(`[recipes] updated user recipe ${id}`);
   res.json({ id, title: saved.title, check });
 }));

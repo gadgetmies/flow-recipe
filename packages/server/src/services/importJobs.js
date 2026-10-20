@@ -5,8 +5,6 @@
 // object, never logged, scrubbed from error messages and dropped as soon as the job finishes.
 
 const path = require('path');
-const dns = require('dns');
-const net = require('net');
 const { pathToFileURL } = require('url');
 const { v4: uuidv4 } = require('uuid');
 
@@ -16,7 +14,6 @@ const JOB_TIMEOUT_MS = parseInt(process.env.FLOW_IMPORT_JOB_TIMEOUT_MS || String
 const MAX_RUNNING = parseInt(process.env.FLOW_IMPORT_MAX_JOBS || '20', 10);
 const MAX_RUNNING_PER_IP = parseInt(process.env.FLOW_IMPORT_MAX_JOBS_PER_IP || '3', 10);
 const MAX_STORED_JOBS = 500;
-const MAX_REDIRECTS = 5;
 
 // ---- module loading -----------------------------------------------------------------------------------------------
 
@@ -96,7 +93,22 @@ function describe(importer, config) {
     described = { provider: config.provider, model: config.model || null, baseUrl: config.baseUrl || null };
   }
   const { apiKey, ...rest } = described || {};
+  if (rest.baseUrl) rest.baseUrl = publicBaseUrl(rest.baseUrl);
   return { ...rest, hasKey: !!config.apiKey };
+}
+
+// A base URL safe to show to anyone: no credentials, query (Azure-style ?api-key=) or fragment.
+function publicBaseUrl(baseUrl) {
+  try {
+    const u = new URL(baseUrl);
+    return `${u.origin}${u.pathname}`.replace(/\/+$/, '');
+  } catch (error) {
+    return null;
+  }
+}
+
+function trimSlash(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
 }
 
 function str(value, max) {
@@ -127,6 +139,10 @@ function clientLlmConfig(llm) {
       return { error: 'llm.baseUrl is not a valid URL' };
     }
     if (!['http:', 'https:'].includes(parsed.protocol)) return { error: 'llm.baseUrl must be http(s)' };
+    if (parsed.username || parsed.password) return { error: 'llm.baseUrl must not contain credentials' };
+    if (parsed.search || parsed.hash || baseUrl.includes('?') || baseUrl.includes('#')) {
+      return { error: 'llm.baseUrl must not contain a query or fragment' };
+    }
     config.baseUrl = baseUrl;
   }
   if ((provider === 'anthropic' || provider === 'openai') && !apiKey) {
@@ -144,71 +160,46 @@ function scrub(message, secrets) {
   return text.replace(/\b(sk-[A-Za-z0-9_-]{8,}|sk-ant-[A-Za-z0-9_-]{8,})\b/g, '***').slice(0, 2000);
 }
 
-// ---- URL fetching with a private-address guard ------------------------------------------------------------------
+// ---- outbound requests for a client-supplied LLM configuration ---------------------------------------------------
+//
+// A client may point the server at any LLM base URL. The server must not become a proxy into its own network:
+// private, loopback and link-local hosts are refused (checked again at connect time by the importer's pinned fetch)
+// unless the operator allows them with FLOW_LLM_ALLOW_PRIVATE=1 or the URL is the server's own FLOW_LLM_BASE_URL
+// (e.g. a local Ollama the operator configured). Response bodies from client-supplied endpoints never reach the job
+// error, only the status code.
 
-function privateAllowed() {
-  return process.env.FLOW_IMPORT_ALLOW_PRIVATE === '1';
+function llmPrivateAllowedFor(baseUrl) {
+  if (process.env.FLOW_LLM_ALLOW_PRIVATE === '1') return true;
+  const own = process.env.FLOW_LLM_BASE_URL;
+  return !!(own && baseUrl && trimSlash(own) === trimSlash(baseUrl));
 }
 
-function isPrivateAddress(address) {
-  const family = net.isIP(address);
-  if (family === 4) {
-    const [a, b] = address.split('.').map(Number);
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      a >= 224
-    );
+/**
+ * Completes a config from clientLlmConfig for use by this server: checks the effective base URL and installs the
+ * guarded fetch. Throws an error with status 400 when the base URL is not allowed.
+ */
+async function secureClientLlmConfig(importer, config) {
+  if (!config || config.provider === 'mock') return config;
+  if (!importer || typeof importer.createGuardedFetch !== 'function' || typeof importer.assertPublicUrl !== 'function') {
+    throw httpError(503, 'Recipe importer is not available on this server');
   }
-  if (family === 6) {
-    const lower = address.toLowerCase();
-    if (lower === '::' || lower === '::1') return true;
-    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPrivateAddress(mapped[1]);
-    return /^(fc|fd|fe8|fe9|fea|feb|ff)/.test(lower);
-  }
-  return true;
-}
-
-async function assertPublicUrl(rawUrl) {
-  let url;
-  try {
-    url = new URL(rawUrl);
-  } catch (error) {
-    throw new Error('Invalid URL');
-  }
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Only http(s) URLs can be imported');
-  if (url.username || url.password) throw new Error('URLs with credentials are not allowed');
-  if (privateAllowed()) return url;
-  const host = url.hostname.replace(/^\[|\]$/g, '');
-  const addresses = net.isIP(host) ? [{ address: host }] : await dns.promises.lookup(host, { all: true });
-  if (!addresses.length || addresses.some((a) => isPrivateAddress(a.address))) {
-    throw new Error(`Refusing to fetch ${url.hostname}: private or local address`);
-  }
-  return url;
-}
-
-// fetch() that checks every hop (redirects are followed by hand) against the private-address guard.
-function guardedFetch(signal) {
-  return async function fetchPublic(input, init = {}) {
-    let current = typeof input === 'string' ? input : input.url;
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-      await assertPublicUrl(current);
-      const response = await fetch(current, { ...init, redirect: 'manual', signal: init.signal || signal });
-      if (response.status >= 300 && response.status < 400 && response.headers.get('location')) {
-        current = new URL(response.headers.get('location'), current).href;
-        continue;
-      }
-      return response;
+  const described = typeof importer.describeLlmConfig === 'function' ? importer.describeLlmConfig(config) : null;
+  const effective = config.baseUrl || (described && described.baseUrl) || null;
+  const allowPrivate = llmPrivateAllowedFor(effective);
+  // The provider defaults (api.anthropic.com, api.openai.com) are public; a client-chosen URL and Ollama's
+  // localhost default are checked up front. Every connection is checked again by the guarded fetch.
+  if (effective && (config.baseUrl || config.provider === 'ollama')) {
+    try {
+      await importer.assertPublicUrl(effective, { allowPrivate });
+    } catch (error) {
+      const hint = error.code === 'blocked-address'
+        ? ' (private and local LLM servers can only be used when the server operator configures them: FLOW_LLM_BASE_URL or FLOW_LLM_ALLOW_PRIVATE=1)'
+        : '';
+      throw httpError(400, `llm.baseUrl is not allowed: ${error.message}${hint}`);
     }
-    throw new Error('Too many redirects');
-  };
+  }
+  const trustedEndpoint = !config.baseUrl || (!!process.env.FLOW_LLM_BASE_URL && trimSlash(process.env.FLOW_LLM_BASE_URL) === trimSlash(config.baseUrl));
+  return { ...config, fetch: importer.createGuardedFetch({ allowPrivate }), errorDetail: trustedEndpoint };
 }
 
 // ---- jobs -------------------------------------------------------------------------------------------------------
@@ -268,7 +259,8 @@ function sanitizeResult(result, existingIds, importer) {
     const { apiKey, ...rest } = out.llm;
     out.llm = rest;
   }
-  // Suggest an id that does not collide with a built-in or a saved recipe.
+  // Suggest an id that does not collide with a built-in or a saved recipe (the importer already got the taken ids;
+  // this catches recipes saved while the job ran). The root id attribute always matches the suggested id.
   if (typeof out.id === 'string' && existingIds.has(out.id)) {
     if (importer && typeof importer.suggestRecipeId === 'function') {
       out.id = importer.suggestRecipeId(out.id, [...existingIds]);
@@ -277,6 +269,10 @@ function sanitizeResult(result, existingIds, importer) {
       while (existingIds.has(`${out.id}-${n}`)) n++;
       out.id = `${out.id}-${n}`;
     }
+  }
+  if (typeof out.id === 'string' && typeof out.xml === 'string' && out.xml && importer && typeof importer.setRootAttributes === 'function') {
+    out.xml = importer.setRootAttributes(out.xml, { id: out.id });
+    if (out.check && typeof out.check === 'object') out.check = { ...out.check, id: out.id };
   }
   return out;
 }
@@ -341,7 +337,8 @@ function startJob({ params, llmConfig, ip = 'unknown', existingIds = () => [] })
     if (params.url) {
       progress('fetching', params.url);
       if (typeof importer.fetchRecipeSource !== 'function') throw new Error('Importer cannot fetch URLs');
-      source = await importer.fetchRecipeSource(params.url, { fetch: guardedFetch(signal), signal });
+      // The importer's default fetch is the pinned SSRF-guarded one (FLOW_IMPORT_ALLOW_PRIVATE=1 lifts it).
+      source = await importer.fetchRecipeSource(params.url, { signal });
     } else if (params.text && typeof importer.textSource === 'function') {
       source = importer.textSource(params.text, {});
     }
@@ -354,6 +351,7 @@ function startJob({ params, llmConfig, ip = 'unknown', existingIds = () => [] })
       notes: params.notes,
       onProgress: progress,
       signal,
+      existingIds: existingIds(),
     });
     if (signal.aborted) throw signal.reason || new Error('Cancelled');
     return sanitizeResult(result, new Set(existingIds()), importer);
@@ -406,8 +404,7 @@ module.exports = {
   serverLlmConfig,
   clientLlmConfig,
   describe,
-  assertPublicUrl,
-  isPrivateAddress,
+  secureClientLlmConfig,
   startJob,
   getJob,
   cancelJob,

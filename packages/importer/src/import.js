@@ -164,12 +164,21 @@ export async function importRecipe({
   const conv = conversions()
 
   let best = null
+  let repairFailure = null
   const history = []
   let attempts = 0
   for (;;) {
     throwIfAborted(signal)
     progress(attempts === 0 ? 'generating' : 'repairing', { attempt: attempts + 1 })
-    const raw = await client.complete({ system, messages: conversation, maxTokens, signal })
+    let raw
+    try {
+      raw = await client.complete({ system, messages: conversation, maxTokens, signal })
+    } catch (e) {
+      // A failed repair round (rate limit, overload, timeout, refusal) must not discard a usable earlier attempt.
+      if (!best || (signal && signal.aborted) || (e && e.code === 'aborted')) throw e
+      repairFailure = `Repair round ${attempts} failed: ${e && e.message ? e.message : String(e)}`
+      break
+    }
     attempts++
     conversation.push({ role: 'assistant', content: raw })
     throwIfAborted(signal)
@@ -220,6 +229,7 @@ export async function importRecipe({
     conversation.push({ role: 'user', content: buildRepairMessage(check, { attempt: attempts }) })
   }
 
+  if (repairFailure) best.check.warnings.push(repairFailure)
   progress('done', { attempts, ok: best.check.ok })
   return {
     id: best.check.id || wantedId || suggestRecipeId(src.title, existingIds),

@@ -1,110 +1,16 @@
-// Recipe source extraction: fetch a page safely (http/https only, SSRF guard, timeout, size limit) and turn it into
+// Recipe source extraction: fetch a page safely (http/https only, SSRF guard pinned at connect time — see net.js,
+// timeout, size limit) and turn it into
 // a Source — schema.org Recipe JSON-LD first (incl. @graph, arrays, HowToSection), then microdata, then the
 // readable main text.
 
-import { lookup as dnsLookup } from 'node:dns/promises'
-import { isIP } from 'node:net'
+import { SourceError, assertPublicUrl, createGuardedFetch } from './net.js'
 import { collapse, decodeEntities, findAll, findFirst, htmlToText, metaContent, parseHtml, rawText, readableText, tidyText } from './html.js'
 
 export const USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
 export const MAX_TEXT_CHARS = 30000
 
-/** Error with a machine-readable `code` (invalid-url, blocked-address, dns, http-status, not-html, timeout, network, aborted). */
-export class SourceError extends Error {
-  constructor(code, message, extra = {}) {
-    super(message)
-    this.name = 'SourceError'
-    this.code = code
-    Object.assign(this, extra)
-  }
-}
-
-// ---------------------------------------------------------------------------------------------------------------
-// SSRF guard
-
-function ipv4Parts(ip) {
-  const p = ip.split('.').map(Number)
-  return p.length === 4 && p.every((x) => Number.isInteger(x) && x >= 0 && x <= 255) ? p : null
-}
-
-/** True for loopback, private, link-local, CGNAT, unspecified, multicast and unique-local addresses. */
-export function isPrivateAddress(ip) {
-  let addr = String(ip || '').trim().toLowerCase()
-  if (addr.startsWith('[') && addr.endsWith(']')) addr = addr.slice(1, -1)
-  const zone = addr.indexOf('%')
-  if (zone >= 0) addr = addr.slice(0, zone)
-  const kind = isIP(addr)
-  if (kind === 4) {
-    const [a, b] = ipv4Parts(addr)
-    if (a === 0 || a === 10 || a === 127) return true
-    if (a === 169 && b === 254) return true
-    if (a === 172 && b >= 16 && b <= 31) return true
-    if (a === 192 && b === 168) return true
-    if (a === 100 && b >= 64 && b <= 127) return true
-    if (a >= 224) return true
-    return false
-  }
-  if (kind === 6) {
-    if (addr === '::' || addr === '::1') return true
-    const mapped = /^(?:0*:)*:?ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(addr) || /^::(\d+\.\d+\.\d+\.\d+)$/.exec(addr)
-    if (mapped) return isPrivateAddress(mapped[1])
-    const hexMapped = /^(?:0*:)*:?ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(addr)
-    if (hexMapped) {
-      const hi = parseInt(hexMapped[1], 16)
-      const lo = parseInt(hexMapped[2], 16)
-      return isPrivateAddress(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`)
-    }
-    const first = parseInt(addr.split(':')[0] || '0', 16)
-    if ((first & 0xfe00) === 0xfc00) return true // fc00::/7 unique local
-    if ((first & 0xffc0) === 0xfe80) return true // fe80::/10 link local
-    if ((first & 0xff00) === 0xff00) return true // multicast
-    return false
-  }
-  return false
-}
-
-function allowPrivateFromEnv() {
-  return typeof process !== 'undefined' && process.env && process.env.FLOW_IMPORT_ALLOW_PRIVATE === '1'
-}
-
-/**
- * Validate a URL for fetching: http/https only, no credentials, and (unless allowed) the host must not resolve to a
- * private or loopback address. Returns the parsed URL.
- * @param {string} url
- * @param {{ lookup?: Function, allowPrivate?: boolean }} [options] lookup(host, { all: true }) → [{ address }]
- */
-export async function assertPublicUrl(url, { lookup = dnsLookup, allowPrivate = allowPrivateFromEnv() } = {}) {
-  let parsed
-  try {
-    parsed = new URL(String(url || '').trim())
-  } catch {
-    throw new SourceError('invalid-url', `Not a valid URL: ${String(url || '').slice(0, 200)}`)
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new SourceError('invalid-url', `Only http and https URLs can be imported (got ${parsed.protocol.replace(/:$/, '')})`)
-  }
-  if (parsed.username || parsed.password) throw new SourceError('invalid-url', 'URLs with credentials are not allowed')
-  if (allowPrivate) return parsed
-  const host = parsed.hostname.replace(/^\[|\]$/g, '')
-  if (!host) throw new SourceError('invalid-url', 'URL has no host')
-  let addresses
-  if (isIP(host)) addresses = [host]
-  else {
-    try {
-      const res = await lookup(host, { all: true, verbatim: true })
-      addresses = (Array.isArray(res) ? res : [res]).map((r) => (typeof r === 'string' ? r : r.address))
-    } catch (e) {
-      throw new SourceError('dns', `Cannot resolve host ${host}: ${e.code || e.message}`)
-    }
-  }
-  if (!addresses.length) throw new SourceError('dns', `Cannot resolve host ${host}`)
-  const blocked = addresses.find(isPrivateAddress)
-  if (blocked) {
-    throw new SourceError('blocked-address', `Refusing to fetch ${host}: it resolves to a private or loopback address (${blocked})`)
-  }
-  return parsed
-}
+export { SourceError, isPrivateAddress, assertPublicUrl, createGuardedFetch, parseIPv6 } from './net.js'
 
 // ---------------------------------------------------------------------------------------------------------------
 // Fetch
@@ -181,10 +87,12 @@ function combineSignals(signals) {
 /**
  * Fetch a recipe page and extract its Source. Uses a browser-like User-Agent, follows up to 5 redirects (each hop
  * checked by the SSRF guard), times out after `timeoutMs` (whole download), reads at most `maxBytes` (the rest is
- * ignored; `source.truncated` is set).
+ * ignored; `source.truncated` is set). The default fetch is the guarded one from net.js, which re-checks every DNS
+ * answer at connect time; a custom `fetch` (tests) only gets the per-hop URL check.
  * @returns {Promise<object>} Source
  */
-export async function fetchRecipeSource(url, { fetch = globalThis.fetch, timeoutMs = 15000, maxBytes = 3e6, signal, lookup, allowPrivate } = {}) {
+export async function fetchRecipeSource(url, { fetch, timeoutMs = 15000, maxBytes = 3e6, signal, lookup, allowPrivate } = {}) {
+  if (!fetch) fetch = createGuardedFetch(allowPrivate === undefined ? {} : { allowPrivate })
   if (typeof fetch !== 'function') throw new SourceError('network', 'No fetch implementation available (Node 18+ required)')
   const timeout = AbortSignal.timeout(timeoutMs)
   const combined = combineSignals([timeout, signal])
@@ -244,6 +152,60 @@ export async function fetchRecipeSource(url, { fetch = globalThis.fetch, timeout
 // ---------------------------------------------------------------------------------------------------------------
 // Value helpers
 
+const MAX_DURATION_CHARS = 120
+const ISO_UNIT_SECONDS = { Y: 365 * 86400, W: 7 * 86400, D: 86400, H: 3600, S: 1 }
+
+/**
+ * ISO 8601 duration → seconds with a linear scanner (no backtracking regex): P[nY][nM][nW][nD][T[nH][nM][nS]],
+ * numbers may have a '.' or ',' fraction. null when the text is not such a duration.
+ */
+function parseIsoDuration(s) {
+  let i = 0
+  if (s[i] === '-' || s[i] === '+') i++
+  if (s[i] !== 'P' && s[i] !== 'p') return null
+  i++
+  const dateOrder = 'YMWD'
+  const timeOrder = 'HMS'
+  let inTime = false
+  let last = -1
+  let total = 0
+  let parts = 0
+  let timeParts = 0
+  while (i < s.length) {
+    const c = s[i].toUpperCase()
+    if (c === 'T') {
+      if (inTime) return null
+      inTime = true
+      last = -1
+      i++
+      continue
+    }
+    const start = i
+    while (i < s.length && s.charCodeAt(i) >= 48 && s.charCodeAt(i) <= 57) i++
+    if (i === start) return null
+    if (s[i] === '.' || s[i] === ',') {
+      i++
+      const fracStart = i
+      while (i < s.length && s.charCodeAt(i) >= 48 && s.charCodeAt(i) <= 57) i++
+      if (i === fracStart) return null
+    }
+    const value = Number(s.slice(start, i).replace(',', '.'))
+    if (i >= s.length) return null
+    const unit = s[i].toUpperCase()
+    i++
+    const order = inTime ? timeOrder : dateOrder
+    const pos = order.indexOf(unit)
+    if (pos < 0 || pos <= last) return null
+    last = pos
+    const factor = unit === 'M' ? (inTime ? 60 : 30 * 86400) : ISO_UNIT_SECONDS[unit]
+    total += value * factor
+    parts++
+    if (inTime) timeParts++
+  }
+  if (!parts || (inTime && !timeParts)) return null
+  return Math.round(total)
+}
+
 /** ISO 8601 duration (PT1H30M, P1DT2H, PT90M, P0DT0H45M0S) → seconds; also tolerates "1 hour 30 minutes". */
 export function parseDuration(value) {
   if (value === null || value === undefined) return null
@@ -251,15 +213,15 @@ export function parseDuration(value) {
   if (Array.isArray(value)) return parseDuration(value[0])
   if (typeof value === 'object') return parseDuration(value['@value'] || value.value || null)
   const s = String(value).trim()
-  const m = /^-?P(?:(\d+(?:[.,]\d+)?)Y)?(?:(\d+(?:[.,]\d+)?)M)?(?:(\d+(?:[.,]\d+)?)W)?(?:(\d+(?:[.,]\d+)?)D)?(?:T(?:(\d+(?:[.,]\d+)?)H)?(?:(\d+(?:[.,]\d+)?)M)?(?:(\d+(?:[.,]\d+)?)S)?)?$/i.exec(s)
-  if (m && s.length > 1 && !/^P$|T$/i.test(s)) {
-    const n = (x) => (x ? Number(x.replace(',', '.')) : 0)
-    const total = n(m[1]) * 365 * 86400 + n(m[2]) * 30 * 86400 + n(m[3]) * 7 * 86400 + n(m[4]) * 86400 + n(m[5]) * 3600 + n(m[6]) * 60 + n(m[7])
-    return Math.round(total)
+  // Durations are short; anything longer is not one (and must not reach a regex).
+  if (!s || s.length > MAX_DURATION_CHARS) return null
+  if (s[0] === 'P' || s[0] === 'p' || ((s[0] === '-' || s[0] === '+') && /^[-+][Pp]/.test(s))) {
+    const iso = parseIsoDuration(s)
+    if (iso !== null) return iso
   }
   let total = 0
   let found = false
-  const re = /(\d+(?:[.,]\d+)?)\s*(d|days?|h|hrs?|hours?|m|mins?|minutes?|s|secs?|seconds?)\b/gi
+  const re = /(\d{1,6}(?:[.,]\d{1,6})?)\s{0,3}(d|days?|h|hrs?|hours?|m|mins?|minutes?|s|secs?|seconds?)\b/gi
   let mm
   while ((mm = re.exec(s))) {
     found = true
@@ -284,7 +246,7 @@ function cleanText(v) {
   if (v === null || v === undefined) return ''
   if (typeof v === 'object') return cleanText(v['@value'] || v.text || v.name || '')
   const s = String(v)
-  return /<[a-z][\s\S]*>/i.test(s) ? tidyText(htmlToText(s)) : tidyText(decodeEntities(s).replace(/\r\n?/g, '\n'))
+  return /<[a-z][^<>]*>/i.test(s) ? tidyText(htmlToText(s)) : tidyText(decodeEntities(s).replace(/\r\n?/g, '\n'))
 }
 
 function cleanLine(v) {
@@ -517,7 +479,7 @@ function pageTitle(root) {
   const og = metaContent(root, 'og:title', 'twitter:title')
   if (og) return og
   const t = findFirst(root, (el) => el.name === 'title')
-  const title = t ? collapse(decodeEntities(rawText(t))) : ''
+  const title = t ? collapse(decodeEntities(rawText(t).slice(0, 2000))).slice(0, 300) : ''
   if (title) return title.replace(/\s+[|–—-]\s+[^|–—-]{2,60}$/, '').trim() || title
   const h1 = findFirst(root, (el) => el.name === 'h1')
   return h1 ? collapse(htmlToText(h1)) : null

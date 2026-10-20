@@ -62,9 +62,11 @@ const BLOCK_CLOSES_P = new Set(['div', 'ul', 'ol', 'table', 'h1', 'h2', 'h3', 'h
  * Parse HTML into a light tree: { type: 'element', name, attrs, children, parent } / { type: 'text', text } /
  * { type: 'comment', text }. Tolerant: unmatched end tags are ignored, unclosed elements are closed at the end.
  */
+const MAX_DEPTH = 256
+
 export function parseHtml(html) {
   const src = String(html || '')
-  const root = { type: 'element', name: '#document', attrs: {}, children: [], parent: null }
+  const root = { type: 'element', name: '#document', attrs: {}, children: [], parent: null, depth: 0 }
   let cur = root
   let i = 0
   const n = src.length
@@ -152,9 +154,11 @@ export function parseHtml(html) {
       const p = isOpen(['p'], ['div', 'section', 'article', 'li', 'td', 'body'])
       if (p) cur = p.parent
     }
-    const el = { type: 'element', name, attrs, children: [], parent: cur }
+    const el = { type: 'element', name, attrs, children: [], parent: cur, depth: cur.depth + 1 }
     cur.children.push(el)
+    // Pathologically deep nesting would overflow the recursive walkers: past MAX_DEPTH, elements become siblings.
     if (VOID.has(name) || selfClosing) continue
+    if (el.depth >= MAX_DEPTH && !RAW_TEXT.has(name)) continue
     if (RAW_TEXT.has(name)) {
       const re = new RegExp(`</${name}\\s*>`, 'i')
       const rest = src.slice(i)
