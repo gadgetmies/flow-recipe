@@ -154,7 +154,7 @@ describe('flow-recipe MCP server with the importer', () => {
   let tmp
   before(async () => {
     fake = await startFakeServer()
-    client = await connect({ FLOW_RECIPE_SERVER: fake.url, FLOW_UPLOAD_TOKEN: 'secret-token', FLOW_IMPORT_POLL_MS: '20' })
+    client = await connect({ FLOW_RECIPE_SERVER: fake.url, FLOW_UPLOAD_TOKEN: 'secret-token', FLOW_IMPORT_POLL_MS: '20', FLOW_IMPORT_ALLOW_PRIVATE: '1' })
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-recipe-mcp-'))
   })
   after(async () => {
@@ -235,6 +235,8 @@ describe('flow-recipe MCP server with the importer', () => {
     const body = json(result)
     assert.match(body.xml, /<recipe/)
     assert.ok(Array.isArray(body.changes))
+    const broken = await client.callTool({ name: 'convert_recipe_units', arguments: { xml: '<recipe><title>x' } })
+    assert.equal(broken.isError, true)
   })
 
   test('fetch_recipe_source extracts JSON-LD', async () => {

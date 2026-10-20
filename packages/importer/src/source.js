@@ -329,23 +329,11 @@ export function flattenInstructions(value, section = null) {
     const name = cleanLine(item.name)
     if (text) {
       const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
-      const first = lines.length ? collapse(lines[0]) : ''
       const prefix = name && name.length <= 80 && !collapse(text).toLowerCase().startsWith(name.replace(/[.…]+$/, '').toLowerCase()) && !/^step\s*\d+$/i.test(name) ? `${name}: ` : ''
       lines.forEach((l, i) => push(i === 0 && prefix ? prefix + l : l))
-      void first
     } else if (name) push(name)
   }
   return out
-}
-
-function firstString(...values) {
-  for (const v of values) {
-    for (const x of asArray(v)) {
-      const s = cleanLine(x)
-      if (s) return s
-    }
-  }
-  return null
 }
 
 /** recipeYield → { yield: descriptive string | null, servings: number | null } */

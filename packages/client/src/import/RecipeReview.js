@@ -30,7 +30,7 @@ import { chainStageNames, conversionFor, conversionTooltip, fmtAmount, fmtHold, 
 import XmlEditor from './XmlEditor'
 
 function ConvertedChip({ change }) {
-  if (!change) return null
+  if (!change || (change.to && fmtAmount(change.to) === fmtAmount(change.from, { fraction: true }))) return null
   return (
     <Tooltip title={conversionTooltip(change)} enterTouchDelay={0} arrow>
       <Chip size="small" variant="outlined" icon={<SwapHorizIcon />} label={fromLabel(change)} sx={{ height: 22, '& .MuiChip-label': { px: 0.75 } }} />

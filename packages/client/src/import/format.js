@@ -72,8 +72,8 @@ export function unitLabel(unit, number = 1) {
 /** { number: 250, unit: 'g' } → "250 g" */
 export function fmtAmount(a, { fraction = false } = {}) {
   if (!a) return ''
-  const num = fraction ? fmtFraction(a.number) : fmtNumber(a.number)
   const unit = unitLabel(a.unit, a.number)
+  const num = fraction || unit === 'tsp' || unit === 'tbsp' ? fmtFraction(a.number) : fmtNumber(a.number)
   return unit ? `${num} ${unit}` : num
 }
 

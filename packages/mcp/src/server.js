@@ -316,8 +316,15 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     safe(async ({ xml, precisionScale = false }) => {
-      const [{ metricizeRecipeXml }, { DOMParser, XMLSerializer }] = await Promise.all([deps.conversions(), deps.xmldom()])
-      const result = metricizeRecipeXml(xml, { DOMParser, XMLSerializer, precisionScale: !!precisionScale })
+      const [{ metricizeRecipeXml }, { DOMParser, XMLSerializer }, importer] = await Promise.all([deps.conversions(), deps.xmldom(), deps.importer()])
+      const problems = importer.checkWellFormed ? importer.checkWellFormed(xml) : []
+      if (problems.length) {
+        return errorResult('The XML is not well-formed; nothing was converted.', {
+          hint: 'Fix these problems first (check_recipe reports them too).',
+          errors: problems.map(p => `line ${p.line}, column ${p.column}: ${p.message}`),
+        })
+      }
+      const result = metricizeRecipeXml(xml, { DOMParser: importer.QuietDOMParser || DOMParser, XMLSerializer, precisionScale: !!precisionScale })
       return jsonResult({
         changes: trimDeep(result.changes, { maxArray: 150 }),
         warnings: result.warnings,

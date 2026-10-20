@@ -8,13 +8,13 @@ import { makeMockCheck, makeMockResult, MOCK_SOURCE_URL, RECIPES_FIXTURE_IDS } f
 export const IMPORT_TIMING = { pollMs: 1000, mockStageMs: 1100 }
 
 const STAGES = [
-  ['fetching', 'Downloading the page'],
-  ['generating', 'Writing the recipe XML'],
-  ['converting', 'Converting to metric units'],
-  ['checking', 'Validating and test-planning'],
+  ['fetching', 'Found schema.org recipe data: 9 ingredients, 8 steps'],
+  ['generating', 'Attempt 1'],
+  ['converting', '7 amounts converted (cups → g, °F → °C)'],
+  ['checking', 'Planning with 1 and 3 cooks'],
   ['repairing', 'Fixing 1 problem: output "dough" is never used'],
-  ['converting', 'Converting to metric units'],
-  ['checking', 'Validating and test-planning'],
+  ['converting', 'Nothing left to convert'],
+  ['checking', 'Planning with 1 and 3 cooks'],
 ]
 
 const jobs = new Map()

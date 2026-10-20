@@ -119,8 +119,13 @@ export default function ImportProgress({ job, fromText, sourceLabel, startedAt, 
                 <StepLabel optional={s.key === 'repairing' ? <Typography variant="caption">round {round}</Typography> : null}>{s.label}</StepLabel>
                 <StepContent>
                   <Typography variant="body2" color="text.secondary">
-                    {job?.detail || HINTS[s.key]}
+                    {HINTS[s.key]}
                   </Typography>
+                  {job?.detail && job.detail !== s.label && (
+                    <Typography variant="body2" sx={{ mt: 0.5 }}>
+                      {job.detail}
+                    </Typography>
+                  )}
                 </StepContent>
               </Step>
             ))}
