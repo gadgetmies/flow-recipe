@@ -86,9 +86,9 @@ function titleOf(xml) {
   return m ? decodeEntities(m[1].replace(/<!\[CDATA\[|\]\]>/g, '')).replace(/\s+/g, ' ').trim() : null
 }
 
-function score(check) {
+function score(check, xml) {
   if (!check) return Infinity
-  return check.errors.length * 100 + (check.plan && !check.plan.ok ? 10 : 0) + (check.plan ? 0 : 5)
+  return (xml ? 0 : 100000) + check.errors.length * 100 + (check.plan && !check.plan.ok ? 10 : 0) + (check.plan ? 0 : 5)
 }
 
 function needsRepair(check) {
@@ -214,7 +214,7 @@ export async function importRecipe({
     }
     history.push({ attempt: attempts, errors: check.errors.length, warnings: check.warnings.length, planOk: check.plan ? check.plan.ok : null })
     const candidate = { xml, check, changes }
-    if (!best || score(check) < score(best.check) || (score(check) === score(best.check) && attempts > 1)) best = candidate
+    if (!best || score(check, xml) <= score(best.check, best.xml)) best = candidate
 
     if (!needsRepair(check) || attempts > maxRepairs) break
     conversation.push({ role: 'user', content: buildRepairMessage(check, { attempt: attempts }) })

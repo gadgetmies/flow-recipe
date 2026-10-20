@@ -35,17 +35,17 @@ export function tidy(n) {
 
 /**
  * Kitchen rounding for grams: < 10 g → 1 g (0.1 g with a precision scale), < 250 g → 1 g, < 1000 g → 5 g,
- * otherwise 10 g. Idempotent: rounding a rounded value returns it unchanged. Never rounds a positive amount to 0.
+ * otherwise 10 g. Idempotent: rounding a rounded value returns it unchanged. Under 1 g without a precision scale the step is 0.5 g; a positive amount never rounds to 0.
  */
 export function roundForKitchen(grams, { precisionScale = false } = {}) {
   const g = Number(grams)
   if (!Number.isFinite(g) || g <= 0) return g
   let r
-  if (g < 10) r = precisionScale ? roundTo(g, 0.1) : roundTo(g, 1)
+  if (g < 10) r = precisionScale ? roundTo(g, 0.1) : g < 1 ? roundTo(g, 0.5) : roundTo(g, 1)
   else if (g < 250) r = roundTo(g, 1)
   else if (g < 1000) r = roundTo(g, 5)
   else r = roundTo(g, 10)
-  if (r === 0) r = precisionScale ? 0.1 : roundTo(g, 0.5) || 0.5
+  if (r === 0) r = precisionScale ? 0.1 : 0.5
   return r
 }
 

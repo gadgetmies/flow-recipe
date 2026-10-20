@@ -322,7 +322,7 @@ findDensities(name, properties?) → [entry]          // every matching entry, b
 normaliseIngredientName(name) → string
 toMetricAmount({ number, unit }, { ingredient, properties?, precisionScale = false, density? })
   → { number, unit, from: { number, unit }, method: 'unchanged'|'metric'|'density'|'spoon'|'count', density, note }
-roundForKitchen(grams, { precisionScale }) → number   // <10 g: 1 g (0.1 g precision); <250: 1 g; <1000: 5 g; else 10 g
+roundForKitchen(grams, { precisionScale }) → number   // <1 g: 0.5 g, <10 g: 1 g (0.1 g precision); <250: 1 g; <1000: 5 g; else 10 g
 toCelsiusRounded(fahrenheit) → number                 // 350 → 175
 inchesToCm(inches) → number                           // 9 → 23
 convertInchText('9x13 inch') → '23x33 cm' | null
