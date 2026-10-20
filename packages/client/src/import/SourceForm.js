@@ -177,7 +177,7 @@ export default function SourceForm({ source, onSourceChange, llmInfo, llmInfoErr
           </Button>
           {blocker && (touched || !llmState.ready) && (
             <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1, textAlign: 'center' }}>
-              {blocker}
+              {touched ? blocker : llmState.reason || blocker}
             </Typography>
           )}
         </Box>

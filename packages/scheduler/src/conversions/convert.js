@@ -3,7 +3,7 @@
 // leavening / extracts stay metric spoons unless the cook has a precision scale (then g with 0.1 g resolution).
 
 import {
-  BUTTER_STICK_GRAMS, COUNT, IMPERIAL_MASS, IMPERIAL_VOLUME, MASS, PINCH_GRAMS, VOLUME, imperialKey, isImperialLength,
+  BUTTER_STICK_GRAMS, COUNT, IMPERIAL_MASS, IMPERIAL_VOLUME, MASS, PINCH_GRAMS, VOLUME, imperialKey, isImperialLength, isLength,
 } from '../units.js'
 import { findDensity } from './match.js'
 import { isSpoonIngredient } from './densities.js'
@@ -34,7 +34,7 @@ export function tidy(n) {
 }
 
 /**
- * Kitchen rounding for grams: < 10 g → 1 g (0.1 g with a precision scale), < 100 g → 1 g, < 1000 g → 5 g,
+ * Kitchen rounding for grams: < 10 g → 1 g (0.1 g with a precision scale), < 250 g → 1 g, < 1000 g → 5 g,
  * otherwise 10 g. Idempotent: rounding a rounded value returns it unchanged. Never rounds a positive amount to 0.
  */
 export function roundForKitchen(grams, { precisionScale = false } = {}) {
@@ -42,7 +42,7 @@ export function roundForKitchen(grams, { precisionScale = false } = {}) {
   if (!Number.isFinite(g) || g <= 0) return g
   let r
   if (g < 10) r = precisionScale ? roundTo(g, 0.1) : roundTo(g, 1)
-  else if (g < 100) r = roundTo(g, 1)
+  else if (g < 250) r = roundTo(g, 1)
   else if (g < 1000) r = roundTo(g, 5)
   else r = roundTo(g, 10)
   if (r === 0) r = precisionScale ? 0.1 : roundTo(g, 0.5) || 0.5
@@ -127,7 +127,7 @@ export function toMetricAmount({ number, unit }, { ingredient = null, properties
   }
   if (k === 'stick') {
     if (entry && entry.kind === 'fat') {
-      return result(massAmount(n * BUTTER_STICK_GRAMS, precisionScale), 'metric', `one stick of ${label(entry)} = ${BUTTER_STICK_GRAMS} g`)
+      return result(massAmount(Math.round(n * BUTTER_STICK_GRAMS), precisionScale), 'metric', `one stick of ${label(entry)} = ${BUTTER_STICK_GRAMS} g`)
     }
     return unchanged('count')
   }
@@ -150,6 +150,7 @@ export function toMetricAmount({ number, unit }, { ingredient = null, properties
   }
 
   if (isImperialLength(k)) return result({ number: inchesToCm(n), unit: 'cm' }, 'metric')
+  if (isLength(k)) return unchanged('unchanged')
   return unchanged('unchanged', `unknown unit '${unit}'`)
 }
 

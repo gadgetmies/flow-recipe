@@ -1,6 +1,7 @@
 // Ingredient name → density entry. Names are normalised (accents, punctuation, hyphens, plurals), leading
 // quantities and units are dropped ("2 cups all-purpose flour, sifted"), and the longest alias that occurs as a
-// contiguous run of words wins; ties go to the alias that ends later (the head noun: "orange bitters" → bitters).
+// contiguous run of words wins; ties go to the alias that ends later (the head noun: "orange bitters" → bitters,
+// "cinnamon plum quark" → quark), then to the longer alias.
 
 import { DENSITIES } from './densities.js'
 
@@ -74,7 +75,7 @@ function bestMatch(words) {
       let ok = true
       for (let j = 0; j < n; j++) if (words[i + j] !== alias.tokens[j]) { ok = false; break }
       if (!ok) continue
-      const score = [n, alias.length, i + n]
+      const score = [n, i + n, alias.length]
       if (!best || compare(score, best.score) > 0) best = { score, entry: alias.entry }
     }
   }
@@ -138,7 +139,7 @@ export function findDensities(ingredientName, properties) {
     const n = alias.tokens.length
     for (let i = 0; i + n <= words.length; i++) {
       if (alias.tokens.every((t, j) => words[i + j] === t)) {
-        const score = [n, alias.length, i + n]
+        const score = [n, i + n, alias.length]
         const prev = seen.get(alias.entry.id)
         if (!prev || compare(score, prev.score) > 0) seen.set(alias.entry.id, { score, entry: alias.entry })
       }
