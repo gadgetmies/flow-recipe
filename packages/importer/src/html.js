@@ -235,11 +235,24 @@ const SKIP_ALWAYS = new Set(['script', 'style', 'noscript', 'template', 'svg', '
  */
 export function htmlToText(node, { skip } = {}) {
   const root = typeof node === 'string' ? parseHtml(node) : node
-  const out = []
-  const rec = (el) => {
+  let out = ''
+  const newlines = (n) => {
+    let have = 0
+    for (let k = out.length - 1; k >= 0 && have < n; k--) {
+      const c = out[k]
+      if (c === '\n') have++
+      else if (c === ' ' || c === '\t') continue
+      else break
+    }
+    if (out.length === 0) return
+    out += '\n'.repeat(Math.max(0, n - have))
+  }
+  const rec = (el, pre) => {
     for (const c of el.children || []) {
       if (c.type === 'text') {
-        if (!c.raw) out.push(decodeEntities(c.text))
+        if (c.raw) continue
+        const t = decodeEntities(c.text)
+        out += pre ? t : t.replace(/[\s\u00a0]+/g, ' ')
         continue
       }
       if (c.type !== 'element') continue
@@ -247,17 +260,21 @@ export function htmlToText(node, { skip } = {}) {
       if (skip && skip(c)) continue
       if (c.attrs && (c.attrs.hidden !== undefined || c.attrs['aria-hidden'] === 'true')) continue
       if (/display\s*:\s*none/i.test((c.attrs && c.attrs.style) || '')) continue
+      if (c.name === 'br') {
+        out += '\n'
+        continue
+      }
       const block = BLOCK.has(c.name)
       const heading = /^h[1-6]$/.test(c.name)
-      if (block) out.push(heading ? '\n\n' : '\n')
-      if (c.name === 'li') out.push('- ')
-      if (c.name === 'td' || c.name === 'th') out.push(' ')
-      rec(c)
-      if (block) out.push(heading ? '\n\n' : '\n')
+      if (block) newlines(heading ? 2 : 1)
+      if (c.name === 'li') out += '- '
+      if (c.name === 'td' || c.name === 'th') out += ' '
+      rec(c, pre || c.name === 'pre')
+      if (block) newlines(heading ? 2 : 1)
     }
   }
-  rec(root)
-  return tidyText(out.join(''))
+  rec(root, false)
+  return tidyText(out)
 }
 
 /** Collapse spaces within lines, drop empty-line runs and lines that are just bullets. */
