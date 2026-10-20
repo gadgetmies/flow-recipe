@@ -140,7 +140,7 @@ function buildDish(dish, session, catalogue, inventory, policy, graph, seen) {
         qty: t.qty ?? 1,
         mode: t.reserved ? 'reserved' : 'active',
         soil: t.soil ?? op.soil ?? 'rinse',
-        capacity: toolCapacity(inventory, type) ?? def?.capacity ?? null,
+        capacity: pickCapacity(toolCapacity(inventory, type), def?.capacity),
         count: inInventory ? toolCount(inventory, type) : 1,
       })
     }
@@ -476,6 +476,15 @@ export function topologicalOrder(graph) {
  * @param {object} catalogue Catalogue (README §3)
  * @returns {object} Graph (README §5)
  */
+// The kitchen's capacity wins when it is in the recipe's unit (or the recipe has none); a recipe capacity in another
+// unit (a sheet of 12 cookies vs. the default inventory's 16 buns) is the recipe's own fact and is kept.
+function pickCapacity(inventoryCapacity, recipeCapacity) {
+  if (!recipeCapacity) return inventoryCapacity ?? null
+  if (!inventoryCapacity) return recipeCapacity
+  const same = String(inventoryCapacity.unit).toLowerCase() === String(recipeCapacity.unit).toLowerCase()
+  return same ? inventoryCapacity : recipeCapacity
+}
+
 export function buildGraph(session, catalogue) {
   const inventory = session.inventory ?? defaultInventory()
   const policy = session.policy ?? {}

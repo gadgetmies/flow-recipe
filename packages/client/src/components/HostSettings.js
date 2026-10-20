@@ -38,6 +38,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import AddIcon from '@mui/icons-material/Add'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
+import AddLinkIcon from '@mui/icons-material/AddLink'
 import { getDefaultInventory, getRecipes } from '../api'
 import { fmtClock, msToTimeInput, timeInputToMs } from '../utils/time'
 import { HOST_ID } from '../config'
@@ -60,7 +61,7 @@ function useDebounced(fn, ms = 400) {
 
 // ---------- dishes ----------
 
-function DishesEditor({ dishes, recipes, onChange, readOnly }) {
+function DishesEditor({ dishes, recipes, onChange, readOnly, importPath }) {
   const [local, setLocal] = useState(dishes)
   useEffect(() => setLocal(dishes), [dishes])
   const emit = useDebounced((next) => onChange(next.map(({ title, ...d }) => d)))
@@ -118,6 +119,7 @@ function DishesEditor({ dishes, recipes, onChange, readOnly }) {
                 {(recipes.some((r) => r.id === d.recipeId) ? recipes : [...recipes, { id: d.recipeId, title: d.title || d.recipeId }]).map((r) => (
                   <MenuItem key={r.id} value={r.id}>
                     {r.title}
+                    {r.source === 'imported' && <Chip size="small" variant="outlined" color="secondary" label="imported" sx={{ ml: 1, height: 20 }} />}
                   </MenuItem>
                 ))}
               </Select>
@@ -172,9 +174,16 @@ function DishesEditor({ dishes, recipes, onChange, readOnly }) {
           </Stack>
         </Stack>
       ))}
-      <Button startIcon={<AddIcon />} onClick={add} disabled={recipes.length === 0}>
-        Add dish
-      </Button>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Button startIcon={<AddIcon />} onClick={add} disabled={recipes.length === 0}>
+          Add dish
+        </Button>
+        {importPath && (
+          <Button component={RouterLink} to={importPath} startIcon={<AddLinkIcon />}>
+            Import a recipe from a URL
+          </Button>
+        )}
+      </Stack>
     </Stack>
   )
 }
@@ -542,7 +551,13 @@ export default function HostSettings({
               Dishes
             </Typography>
             {session ? (
-              <DishesEditor dishes={session.dishes} recipes={recipes} onChange={onUpdateDishes} readOnly={!isHost || !isDraft} />
+              <DishesEditor
+                dishes={session.dishes}
+                recipes={recipes}
+                onChange={onUpdateDishes}
+                readOnly={!isHost || !isDraft}
+                importPath={`/import${mock ? '?mock=1' : ''}`}
+              />
             ) : (
               'Connecting...'
             )}

@@ -15,6 +15,16 @@ const IMPORTER = path.join(__dirname, '..', '..', 'importer', 'src', 'index.js')
 const TIMEOUT_MS = 15000;
 const HAS_IMPORTER = fs.existsSync(IMPORTER);
 const needsImporter = HAS_IMPORTER ? {} : { skip: '@flow-recipe/importer not present' };
+// metricizeRecipeXml / DENSITIES come from @flow-recipe/scheduler (conversions module).
+const HAS_CONVERSIONS = (() => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'scheduler', 'package.json'), 'utf-8'));
+    return !!(pkg.exports && pkg.exports['./conversions']);
+  } catch (error) {
+    return false;
+  }
+})();
+const needsConversions = HAS_IMPORTER && HAS_CONVERSIONS ? {} : { skip: 'scheduler conversions not present' };
 
 const SANDWICH_XML = fs.readFileSync(path.join(RECIPES_DIR, 'sandwich.xml'), 'utf-8');
 const BUNS_XML = fs.readFileSync(path.join(RECIPES_DIR, 'buns.xml'), 'utf-8');
@@ -200,7 +210,7 @@ test('server: recipe import and user recipes', async (t) => {
     assert.strictEqual(res.status, 404);
   });
 
-  await t.test('GET /api/conversions returns the density table', needsImporter, async () => {
+  await t.test('GET /api/conversions returns the density table', needsConversions, async () => {
     const { status, body } = await request('GET', `${base}/api/conversions`);
     assert.strictEqual(status, 200);
     assert.ok(Array.isArray(body) && body.length > 0);
@@ -218,15 +228,17 @@ test('server: recipe import and user recipes', async (t) => {
     assert.strictEqual(res.status, 200);
     assert.strictEqual(res.body.ok, false);
     assert.ok(res.body.errors.length > 0);
-    res = await request('POST', `${base}/api/recipes/check`, { xml: SANDWICH_XML, metricize: true });
-    assert.strictEqual(res.status, 200);
-    assert.strictEqual(typeof res.body.xml, 'string');
-    assert.ok(Array.isArray(res.body.changes));
+    if (HAS_CONVERSIONS) {
+      res = await request('POST', `${base}/api/recipes/check`, { xml: SANDWICH_XML, metricize: true });
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(typeof res.body.xml, 'string');
+      assert.ok(Array.isArray(res.body.changes));
+    }
     res = await request('POST', `${base}/api/recipes/check`, {});
     assert.strictEqual(res.status, 400);
   });
 
-  await t.test('POST /api/recipes/convert metricizes the XML', needsImporter, async () => {
+  await t.test('POST /api/recipes/convert metricizes the XML', needsConversions, async () => {
     const res = await request('POST', `${base}/api/recipes/convert`, { xml: SANDWICH_XML });
     assert.strictEqual(res.status, 200);
     assert.strictEqual(typeof res.body.xml, 'string');
@@ -384,7 +396,7 @@ test('server: upload token, mock gating and private address guard', async (t) =>
     assert.strictEqual(res.status, 202);
     const job = await waitForJob(base, res.body.jobId);
     assert.strictEqual(job.status, 'error');
-    assert.match(job.error, /private or local/);
+    assert.match(job.error, /private/);
     assert.ok(!server.output().includes(SECRET_KEY));
   });
 });

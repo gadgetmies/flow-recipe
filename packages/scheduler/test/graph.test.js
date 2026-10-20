@@ -203,6 +203,13 @@ test('inventory with 2 sheets → buffer capacity 32', () => {
   assert.equal(batchesOf(graph, 'place').length, 4, 'batches follow the capacity per sheet, not the sheet count')
 })
 
+test('a recipe capacity in another unit than the inventory one is kept (cookies on a bun sheet)', () => {
+  const inventory = mergeInventory(defaultInventory(), { tools: [{ type: 'baking-sheet', count: 4, capacity: { number: 12, unit: 'cookie' } }] })
+  const graph = buildGraph(session([bunsDish()], inventory), catalogue)
+  assert.equal(batchesOf(graph, 'place').length, 4, 'the recipe sheet holds 16 buns')
+  assert.ok(!graph.diagnostics.some((d) => d.code === 'NO_CAPACITY'))
+})
+
 test('policy hold applies when the recipe gives none; ambient is unbounded', () => {
   const recipe = bunsModel()
   recipe.serving = { temperature: 'hot', hold: null }

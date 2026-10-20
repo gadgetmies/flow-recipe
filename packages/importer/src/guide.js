@@ -221,7 +221,8 @@ export function buildRepairMessage(check, { attempt = 1, extraErrors = [], maxWa
   if (check && check.plan && !check.plan.ok) {
     lines.push('', 'Scheduler dry run failed:')
     if (check.plan.error) lines.push(`- ${check.plan.error}`)
-    for (const d of (check.plan.diagnostics || []).slice(0, 8)) lines.push(`- ${d}`)
+    const serious = (check.plan.diagnostics || []).filter((d) => /\[(INVARIANT|DEADLOCK|INCOMPLETE|LATE|SPREAD|NO_[A-Z_]+)\]/.test(d))
+    for (const d of serious.slice(0, 8)) lines.push(`- ${d.length > 500 ? `${d.slice(0, 500)}…` : d}`)
   }
   const warnings = importantWarnings(check).slice(0, maxWarnings)
   if (warnings.length) {
@@ -238,7 +239,7 @@ export function importantWarnings(check) {
   for (const w of check.warnings || []) out.push(w)
   for (const l of check.unitLint || []) if (!l.level || l.level === 'warning') out.push(`${l.taskId ? `Task '${l.taskId}': ` : ''}${l.message}`)
   if (check.plan && check.plan.ok) {
-    for (const d of check.plan.diagnostics || []) if (/^\[(INVARIANT|DEADLOCK|INCOMPLETE|NO_)/.test(d)) out.push(`Scheduler: ${d}`)
+    for (const d of check.plan.diagnostics || []) if (/\[(INVARIANT|DEADLOCK|INCOMPLETE|NO_[A-Z_]+)\]/.test(d)) out.push(`Scheduler: ${d.length > 500 ? `${d.slice(0, 500)}…` : d}`)
   }
   return out
 }
