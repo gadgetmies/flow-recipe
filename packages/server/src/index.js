@@ -4,10 +4,13 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const { DOMParser, XMLSerializer } = require('@xmldom/xmldom');
 const { initDatabase, getDatabase } = require('./database');
 const sessions = require('./services/sessions');
 const recipes = require('./services/recipes');
 const planning = require('./services/planning');
+const importJobs = require('./services/importJobs');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,7 +35,7 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 const HOST_ID = sessions.HOST_ID;
 const INTERRUPT_CHECK_MS = parseInt(process.env.FLOW_INTERRUPT_CHECK_MS || '5000', 10);
@@ -59,8 +62,14 @@ app.get('/api/recipes', (req, res) => {
 app.get('/api/recipes/:id', (req, res) => {
   const id = req.params.id;
   const file = recipes.recipePath(id);
-  if (!file || !fs.existsSync(file) || id === 'operations') {
+  if (!file || id === 'operations') {
     return res.status(404).json({ error: 'Recipe not found' });
+  }
+  if (!fs.existsSync(file)) {
+    const user = recipes.getUserRecipe(id);
+    if (!user) return res.status(404).json({ error: 'Recipe not found' });
+    res.setHeader('Content-Type', 'application/xml');
+    return res.send(user.xml);
   }
   try {
     const result = planning.validateRecipe(fs.readFileSync(file, 'utf-8'), id);
@@ -125,6 +134,260 @@ app.get('/api/sessions/:id', (req, res) => {
 app.get('/api/sessions/:id/events', (req, res) => {
   if (!sessions.sessionExists(req.params.id)) return res.status(404).json({ error: 'Session not found' });
   res.json(sessions.getEvents(req.params.id));
+});
+
+// ---- recipe import and user recipes ----------------------------------------------------------------------------
+
+const MAX_XML_BYTES = 1024 * 1024;
+const MAX_TEXT_BYTES = 1024 * 1024;
+const MAX_URL_LENGTH = 2048;
+const MAX_NOTES_LENGTH = 4000;
+
+recipes.onUserRecipeChange((id) => planning.forgetRecipe(id));
+
+// Optional write protection: with FLOW_UPLOAD_TOKEN set, writes need `Authorization: Bearer <token>`.
+function requireUploadToken(req, res, next) {
+  const token = process.env.FLOW_UPLOAD_TOKEN;
+  if (!token) return next();
+  const header = req.get('authorization') || '';
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  const given = Buffer.from(match ? match[1].trim() : '');
+  const expected = Buffer.from(token);
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+// Reads body.xml: { xml } or sends 400 / 413 and returns null.
+function bodyXml(req, res) {
+  const xml = req.body && req.body.xml;
+  if (typeof xml !== 'string' || !xml.trim()) {
+    res.status(400).json({ error: 'xml is required' });
+    return null;
+  }
+  if (Buffer.byteLength(xml, 'utf8') > MAX_XML_BYTES) {
+    res.status(413).json({ error: 'xml is too large (max 1 MB)' });
+    return null;
+  }
+  return xml;
+}
+
+async function requireImporter(res) {
+  const importer = await importJobs.loadImporter();
+  if (!importer || typeof importer.checkRecipeXml !== 'function') {
+    res.status(503).json({ error: 'Recipe importer is not available on this server' });
+    return null;
+  }
+  return importer;
+}
+
+function asyncRoute(handler) {
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch((error) => {
+      console.error(`Error in ${req.method} ${req.path}:`, error && error.message);
+      if (!res.headersSent) res.status(error.status || 500).json({ error: error.status ? error.message : 'Internal error' });
+    });
+  };
+}
+
+function existingRecipeIds() {
+  return recipes.listRecipes().map((r) => r.id).concat(['operations']);
+}
+
+app.get('/api/llm', asyncRoute(async (req, res) => {
+  const importer = await importJobs.loadImporter();
+  const config = importJobs.serverLlmConfig(importer);
+  res.json({
+    server: importJobs.describe(importer, config),
+    providers: importJobs.PROVIDERS,
+    available: !!(importer && typeof importer.importRecipe === 'function'),
+  });
+}));
+
+app.get('/api/conversions', asyncRoute(async (req, res) => {
+  const mod = await importJobs.conversions();
+  if (!mod || !Array.isArray(mod.DENSITIES)) {
+    return res.status(503).json({ error: 'Unit conversions are not available on this server' });
+  }
+  res.json(mod.DENSITIES);
+}));
+
+app.post('/api/import', requireUploadToken, asyncRoute(async (req, res) => {
+  const body = req.body || {};
+  const { url, text, precisionScale, servings, notes, llm } = body;
+  const params = { precisionScale: precisionScale === true, servings: null, notes: null };
+
+  if (typeof url === 'string' && url.trim()) {
+    if (url.length > MAX_URL_LENGTH) return res.status(400).json({ error: 'url is too long' });
+    let parsed;
+    try {
+      parsed = new URL(url.trim());
+    } catch (error) {
+      return res.status(400).json({ error: 'url is not a valid URL' });
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) return res.status(400).json({ error: 'url must be http(s)' });
+    params.url = parsed.href;
+  } else if (typeof text === 'string' && text.trim()) {
+    if (Buffer.byteLength(text, 'utf8') > MAX_TEXT_BYTES) {
+      return res.status(413).json({ error: 'text is too large (max 1 MB)' });
+    }
+    params.text = text;
+  } else {
+    return res.status(400).json({ error: 'url or text is required' });
+  }
+  if (servings !== undefined && servings !== null && servings !== '') {
+    const n = Number(servings);
+    if (!Number.isFinite(n) || n <= 0 || n > 1000) return res.status(400).json({ error: 'servings must be a positive number' });
+    params.servings = n;
+  }
+  if (typeof notes === 'string' && notes.trim()) params.notes = notes.trim().slice(0, MAX_NOTES_LENGTH);
+
+  const importer = await requireImporter(res);
+  if (!importer) return;
+
+  let llmConfig;
+  if (llm !== undefined && llm !== null) {
+    const { config, error } = importJobs.clientLlmConfig(llm);
+    if (error) return res.status(400).json({ error });
+    llmConfig = config;
+  } else {
+    llmConfig = importJobs.serverLlmConfig(importer);
+  }
+  if (!llmConfig) return res.status(400).json({ error: 'No LLM configured' });
+
+  try {
+    const job = importJobs.startJob({ params, llmConfig, ip: req.ip, existingIds: existingRecipeIds });
+    res.status(202).json({ jobId: job.id });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    throw error;
+  }
+}));
+
+app.get('/api/import/:jobId', (req, res) => {
+  const job = importJobs.getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Import job not found' });
+  res.json(job);
+});
+
+app.delete('/api/import/:jobId', requireUploadToken, (req, res) => {
+  const job = importJobs.cancelJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Import job not found' });
+  res.json(job);
+});
+
+app.post('/api/recipes/check', asyncRoute(async (req, res) => {
+  const xml = bodyXml(req, res);
+  if (xml === null) return;
+  const importer = await requireImporter(res);
+  if (!importer) return;
+  const precisionScale = req.body.precisionScale === true;
+  let source = xml;
+  let conversion = null;
+  if (req.body.metricize === true) {
+    const mod = await importJobs.conversions();
+    if (!mod) return res.status(503).json({ error: 'Unit conversions are not available on this server' });
+    conversion = await mod.metricizeRecipeXml(xml, { DOMParser, XMLSerializer, precisionScale });
+    source = conversion.xml;
+  }
+  const id = typeof req.body.id === 'string' && recipes.isValidId(req.body.id) ? req.body.id : undefined;
+  const check = await importer.checkRecipeXml(source, { precisionScale, id });
+  if (conversion) {
+    return res.json({ ...check, xml: conversion.xml, changes: conversion.changes, conversionWarnings: conversion.warnings });
+  }
+  res.json(check);
+}));
+
+app.post('/api/recipes/convert', asyncRoute(async (req, res) => {
+  const xml = bodyXml(req, res);
+  if (xml === null) return;
+  const mod = await importJobs.conversions();
+  if (!mod) return res.status(503).json({ error: 'Unit conversions are not available on this server' });
+  const result = await mod.metricizeRecipeXml(xml, { DOMParser, XMLSerializer, precisionScale: req.body.precisionScale === true });
+  res.json({ xml: result.xml, changes: result.changes || [], warnings: result.warnings || [] });
+}));
+
+function idError(id) {
+  if (!recipes.isValidId(id) || id.length > recipes.MAX_ID_LENGTH) {
+    return { status: 400, error: 'Invalid recipe id (letters, digits, - and _; max 100 characters)' };
+  }
+  if (recipes.isReservedId(id) || recipes.isBuiltin(id)) {
+    return { status: 409, error: `Recipe id '${id}' is reserved by a built-in recipe` };
+  }
+  return null;
+}
+
+app.post('/api/recipes', requireUploadToken, asyncRoute(async (req, res) => {
+  const xml = bodyXml(req, res);
+  if (xml === null) return;
+  const header = recipes.readHeader(xml);
+  if (!header) return res.status(400).json({ error: 'xml is not a <recipe> document' });
+
+  let id = req.body.id;
+  if (id !== undefined && id !== null && id !== '' && typeof id !== 'string') {
+    return res.status(400).json({ error: 'id must be a string' });
+  }
+  if (!id) id = header.rootId;
+  if (!id) return res.status(400).json({ error: 'id is required (or an id attribute on <recipe>)' });
+  const invalid = idError(id);
+  if (invalid) return res.status(invalid.status).json({ error: invalid.error });
+  const overwrite = req.body.overwrite === true;
+  if (!overwrite && recipes.userRecipeExists(id)) {
+    return res.status(409).json({ error: `Recipe '${id}' already exists` });
+  }
+
+  const importer = await requireImporter(res);
+  if (!importer) return;
+  const check = await importer.checkRecipeXml(xml, { id, precisionScale: req.body.precisionScale === true });
+  if (!check || !check.ok || (check.errors && check.errors.length)) {
+    return res.status(422).json({ error: 'The recipe has errors', check });
+  }
+  try {
+    const saved = recipes.saveUserRecipe({ id, xml, title: check.title || header.title }, { overwrite });
+    console.log(`[recipes] ${saved.created ? 'saved' : 'replaced'} user recipe ${id}`);
+    res.status(201).json({ id, title: saved.title, check });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    throw error;
+  }
+}));
+
+app.put('/api/recipes/:id', requireUploadToken, asyncRoute(async (req, res) => {
+  const id = req.params.id;
+  const invalid = idError(id);
+  if (invalid) return res.status(invalid.status).json({ error: invalid.error });
+  if (!recipes.userRecipeExists(id)) return res.status(404).json({ error: 'Recipe not found' });
+  const xml = bodyXml(req, res);
+  if (xml === null) return;
+  const header = recipes.readHeader(xml);
+  if (!header) return res.status(400).json({ error: 'xml is not a <recipe> document' });
+  const importer = await requireImporter(res);
+  if (!importer) return;
+  const check = await importer.checkRecipeXml(xml, { id, precisionScale: req.body.precisionScale === true });
+  if (!check || !check.ok || (check.errors && check.errors.length)) {
+    return res.status(422).json({ error: 'The recipe has errors', check });
+  }
+  const saved = recipes.saveUserRecipe({ id, xml, title: check.title || header.title }, { overwrite: true });
+  console.log(`[recipes] updated user recipe ${id}`);
+  res.json({ id, title: saved.title, check });
+}));
+
+app.delete('/api/recipes/:id', requireUploadToken, (req, res) => {
+  const id = req.params.id;
+  const invalid = idError(id);
+  if (invalid) return res.status(invalid.status === 409 ? 403 : invalid.status).json({ error: invalid.status === 409 ? 'Built-in recipes cannot be deleted' : invalid.error });
+  if (!recipes.deleteUserRecipe(id)) return res.status(404).json({ error: 'Recipe not found' });
+  console.log(`[recipes] deleted user recipe ${id}`);
+  res.json({ id, deleted: true });
+});
+
+// JSON errors for body parsing (malformed JSON, body over the 2 MB limit).
+app.use('/api', (error, req, res, next) => {
+  if (!error) return next();
+  if (error.type === 'entity.too.large') return res.status(413).json({ error: 'Request body is too large' });
+  if (error.type === 'entity.parse.failed') return res.status(400).json({ error: 'Malformed JSON' });
+  next(error);
 });
 
 const clientBuildPath = path.join(__dirname, '../../client/build');

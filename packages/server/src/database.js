@@ -69,9 +69,24 @@ const EXPECTED_SCHEMAS = {
 )`,
 };
 
+// Tables holding user data that must survive a reset of the session tables above. Each one is checked on its own:
+// a missing table is created, a changed schema is migrated by copying the columns both versions share.
+const PRESERVED_SCHEMAS = {
+  user_recipes: `CREATE TABLE IF NOT EXISTS user_recipes (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT '',
+  xml TEXT NOT NULL,
+  source_url TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)`,
+};
+
 function normalizeSchema(sql) {
   if (!sql) return '';
+  // SQLite stores the statement without "IF NOT EXISTS", so compare without it.
   return sql
+    .replace(/\bIF\s+NOT\s+EXISTS\b/gi, '')
     .replace(/\s+/g, ' ')
     .replace(/\s*\(\s*/g, '(')
     .replace(/\s*\)\s*/g, ')')
@@ -117,6 +132,10 @@ function initDatabase() {
     `);
   }
 
+  for (const [tableName, expectedSchema] of Object.entries(PRESERVED_SCHEMAS)) {
+    migratePreservedTable(tableName, expectedSchema);
+  }
+
   const createTablesSql = Object.values(EXPECTED_SCHEMAS).join(';\n\n') + ';';
 
   db.exec(createTablesSql + `
@@ -129,6 +148,36 @@ function initDatabase() {
   `);
 
   console.log(`Database initialized (${dbPath})`);
+}
+
+function migratePreservedTable(tableName, expectedSchema) {
+  const actualTable = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name=?`).get(tableName);
+  if (!actualTable) {
+    db.exec(expectedSchema);
+    return;
+  }
+  if (normalizeSchema(actualTable.sql) === normalizeSchema(expectedSchema)) return;
+
+  console.log(`Schema of ${tableName} changed, migrating its rows...`);
+  const oldColumns = db.prepare(`PRAGMA table_info(${tableName})`).all().map((c) => c.name);
+  const backup = `${tableName}_migrating`;
+  const migrate = db.transaction(() => {
+    db.exec(`DROP TABLE IF EXISTS ${backup}; ALTER TABLE ${tableName} RENAME TO ${backup};`);
+    db.exec(expectedSchema);
+    const newColumns = db.prepare(`PRAGMA table_info(${tableName})`).all().map((c) => c.name);
+    const shared = newColumns.filter((c) => oldColumns.includes(c));
+    if (shared.length) {
+      const list = shared.join(', ');
+      db.exec(`INSERT INTO ${tableName} (${list}) SELECT ${list} FROM ${backup}`);
+    }
+    db.exec(`DROP TABLE ${backup}`);
+  });
+  try {
+    migrate();
+  } catch (error) {
+    // The transaction rolled back: the old table and its rows are kept untouched.
+    console.error(`Cannot migrate ${tableName}, keeping the old table:`, error.message);
+  }
 }
 
 function getDatabase() {
@@ -146,6 +195,8 @@ function closeDatabase() {
 }
 
 module.exports = {
+  EXPECTED_SCHEMAS,
+  PRESERVED_SCHEMAS,
   initDatabase,
   getDatabase,
   closeDatabase,

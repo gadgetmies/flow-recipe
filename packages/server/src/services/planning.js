@@ -141,6 +141,11 @@ function recipeModel(recipeId) {
   return model;
 }
 
+// Drops the cached model of a recipe (called when a user recipe is saved or deleted).
+function forgetRecipe(recipeId) {
+  recipeCache.delete(recipeId);
+}
+
 function validateRecipe(xml, id) {
   const parse = fn('parseRecipe');
   const validate = fn('validateRecipe');
@@ -511,6 +516,7 @@ module.exports = {
   defaultInventory,
   mergeInventory,
   validateRecipe,
+  forgetRecipe,
   getPlan,
   rebuild,
   start,

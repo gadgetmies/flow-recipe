@@ -1,0 +1,30 @@
+{
+  "name": "@flow-recipe/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server that lets an agent (Claude) fetch, author, convert, check and upload flow-recipe recipes.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./server": "./src/server.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "flow-recipe-mcp": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@flow-recipe/importer": "0.1.0",
+    "@flow-recipe/scheduler": "0.1.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@xmldom/xmldom": "^0.8.10",
+    "zod": "^4.1.12"
+  }
+}

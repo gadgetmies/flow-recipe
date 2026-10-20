@@ -80,6 +80,45 @@ test('parsed attributes', () => {
   assert.equal(catalogue.mix.maxInputs, null)
 })
 
+// Operations added for recipes imported from the web (RECIPE.spec.md lists them for the LLM).
+const WEB_OPERATIONS = [
+  'chop', 'dice', 'mince', 'cut', 'zest', 'juice', 'crush', 'sift', 'rinse', 'drain', 'season', 'knead', 'blend',
+  'mash', 'toss', 'fry', 'saute', 'sear', 'toast', 'simmer', 'cook', 'steam', 'roast', 'rest', 'cool', 'marinate',
+  'freeze', 'roll-out', 'shape', 'scoop', 'pipe', 'glaze', 'assemble', 'garnish', 'plate',
+]
+
+test('web recipe operations', () => {
+  for (const name of WEB_OPERATIONS) {
+    const op = catalogue[name]
+    assert.ok(op, `missing operation ${name}`)
+    assert.ok(op.title.length > 0)
+    if (op.options.duration) {
+      assert.equal(op.options.duration.required, true, `${name} needs its duration`)
+      assert.equal(op.time.passiveFrom, 'duration')
+      assert.equal(op.time.passive, 0, `${name}: the passive part comes from the duration option only`)
+    }
+  }
+  for (const name of ['chop', 'dice', 'mince', 'cut']) assert.deepEqual(catalogue[name].requires, ['knife'])
+  for (const name of ['fry', 'saute', 'sear', 'toast', 'simmer', 'cook']) {
+    assert.equal(catalogue[name].attention, 'monitored')
+    assert.equal(catalogue[name].station, 'hob')
+    assert.deepEqual(catalogue[name].requires, ['hot-pan'])
+  }
+  assert.equal(catalogue.fry.completion.urgency, 'critical')
+  assert.equal(catalogue.simmer.checkInterval, 300)
+  assert.equal(catalogue.roast.expand, 'bake-in-oven')
+  assert.deepEqual(catalogue.roast.requires, ['oven'])
+  assert.equal(catalogue.rinse.station, 'sink')
+  assert.equal(catalogue.marinate.station, 'fridge')
+  assert.equal(catalogue.shape.divisible, 'units')
+  assert.equal(catalogue.scoop.time.model, 'per-unit')
+
+  const fry = { operation: 'fry', options: { duration: { number: 4, unit: 'minutes' } } }
+  assert.deepEqual(durations(catalogue.fry, fry, 4), { active: 30 + 10 * 4, passive: 240 })
+  const rest = { operation: 'rest', options: { duration: { number: 10 } } }
+  assert.deepEqual(durations(catalogue.rest, rest, 1), { active: 0, passive: 600 })
+})
+
 test('loader defaults', () => {
   const xml = `<operations>
     <operation name="a"><title>A</title><timeline active="10"/></operation>

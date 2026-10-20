@@ -8,7 +8,7 @@
     "dev": "concurrently \"yarn server:watch\" \"yarn client:start\"",
     "build": "yarn install && yarn workspace client build",
     "start": "yarn workspace server start",
-    "test": "yarn workspace @flow-recipe/scheduler test && yarn workspace server test && CI=true yarn workspace client test --watchAll=false",
+    "test": "yarn workspace @flow-recipe/scheduler test && yarn workspace server test && CI=true yarn workspace client test --watchAll=false && yarn workspace @flow-recipe/mcp test",
     "test:scheduler": "yarn workspace @flow-recipe/scheduler test",
     "validate:recipes": "yarn workspace @flow-recipe/scheduler validate",
     "demo": "yarn workspace @flow-recipe/scheduler demo"

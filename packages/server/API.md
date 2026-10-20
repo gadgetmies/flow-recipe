@@ -11,13 +11,45 @@ Times are epoch milliseconds everywhere.
 
 | Method & path | Body / params | Response |
 |---|---|---|
-| `GET /api/recipes` | | `[{ id, title, serving }]` from every `recipes/*.xml` except operations.xml |
-| `GET /api/recipes/:id` | | the recipe XML (`application/xml`) |
+| `GET /api/recipes` | | `[{ id, title, serving, source: 'builtin'\|'imported', sourceUrl }]`: every `recipes/*.xml` except operations.xml (sorted by id), then the user recipes from the `user_recipes` table |
+| `GET /api/recipes/:id` | | the recipe XML (`application/xml`), built-in file first, else user recipe; `404` |
 | `GET /api/operations` | | operations.xml (`application/xml`) |
 | `GET /api/inventory/default` | | `Inventory` JSON |
 | `POST /api/sessions` | `{ sessionId, dishes: [{ recipeId, scale?, serveTime? }], inventory?, policy?, startTime? }` | `201 { session }`; `409` if it exists. Default: one dish, serveTime = now + 90 min |
 | `GET /api/sessions/:id` | | `{ session: SessionView, plan: Plan \| null }` |
 | `GET /api/sessions/:id/events` | | `[Event]` |
+
+### Recipe import and user recipes
+
+Shapes `Source`, `CheckResult`, `ImportResult` are defined by `@flow-recipe/importer` (see its README /
+the design contract); the server loads it with a dynamic `import()` and answers `503` when it is not available.
+Endpoints marked (auth) require `Authorization: Bearer <FLOW_UPLOAD_TOKEN>` when that env variable is set (reads stay
+open). JSON bodies are limited to 2 MB, `xml` and pasted `text` to 1 MB (`413`).
+
+| Method & path | Body / params | Response |
+|---|---|---|
+| `GET /api/llm` | | `{ server: { provider, model, baseUrl, hasKey } \| null, providers: ['anthropic','openai','openai-compatible','ollama'], available: bool }` — `server` is the env configuration (`FLOW_LLM_PROVIDER`, `FLOW_LLM_MODEL`, `FLOW_LLM_API_KEY`/`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`, `FLOW_LLM_BASE_URL`), never the key; `available` = importer loaded |
+| `GET /api/conversions` | | the density table (`DENSITIES`: `[{ id, names, gPerMl, kind, pieceGrams?, source? }]`) |
+| (auth) `POST /api/import` | `{ url? \| text?, precisionScale?, servings?, notes?, llm?: { provider, model?, apiKey?, baseUrl? } }` | `202 { jobId }`. `llm` (the user's own configuration) wins over the server's; neither → `400 { error: 'No LLM configured' }`. `400` invalid input, `429` too many running jobs (20 in total, 3 per client IP) |
+| `GET /api/import/:jobId` | | `{ id, status: 'running'\|'done'\|'error', stage, detail, attempts, createdAt, finishedAt, result?: ImportResult, error? }`; `404` unknown or expired (jobs are kept 1 h after finishing) |
+| (auth) `DELETE /api/import/:jobId` | | cancels a running job → the job view with `status: 'error', error: 'Cancelled'` |
+| `POST /api/recipes/check` | `{ xml, precisionScale?, id?, metricize? }` | `CheckResult`; with `metricize: true` the XML is converted first and the response adds `{ xml, changes, conversionWarnings }` |
+| `POST /api/recipes/convert` | `{ xml, precisionScale? }` | `{ xml, changes, warnings }` (`metricizeRecipeXml`) |
+| (auth) `POST /api/recipes` | `{ xml, id?, overwrite? }` | `201 { id, title, check }`. `id` defaults to `<recipe id>`. `400` invalid id/xml, `409` built-in or reserved id (`operations`, case-insensitive match of a file) or existing id without `overwrite: true`, `422 { error, check }` when the check has errors |
+| (auth) `PUT /api/recipes/:id` | `{ xml }` | `200 { id, title, check }` replaces a user recipe; `404` unknown, `409` built-in, `422 { error, check }` |
+| (auth) `DELETE /api/recipes/:id` | | `200 { id, deleted: true }`; `403` built-in, `404` unknown |
+
+Import jobs live in memory only. Stages reported by `stage`: `queued`, `fetching`, `generating`, `converting`,
+`checking`, `repairing`, `done`; `attempts` counts LLM generations. Job failures (including timeouts after 10 min)
+are captured in `error`. An API key sent in `llm` is used only by the running job: it is never stored, logged or
+returned, it is scrubbed from error messages and dropped when the job ends. URLs are fetched only over http(s) and
+never from private/loopback/link-local addresses (every redirect hop is checked) unless `FLOW_IMPORT_ALLOW_PRIVATE=1`.
+The `mock` LLM provider (`llm: { provider: 'mock', mockResponse }`) is accepted only when `NODE_ENV=test` or
+`FLOW_ALLOW_MOCK_LLM=1`. Other env knobs: `FLOW_IMPORT_MAX_JOBS` (20), `FLOW_IMPORT_MAX_JOBS_PER_IP` (3),
+`FLOW_IMPORT_JOB_TTL_MS` (1 h), `FLOW_IMPORT_JOB_TIMEOUT_MS` (10 min).
+
+Saving or deleting a user recipe drops the parsed model cached by `services/planning.js` (`forgetRecipe`). Sessions
+can use user recipes like built-in ones (`dishes[].recipeId`).
 
 ```
 SessionView = {
@@ -78,6 +110,7 @@ dishes(id PK, session_id, recipe_id, title, scale, serve_time, early_tolerance, 
 participants(session_id, participant_id, socket_id, name, joined_at, is_spectator, connected, placeholder, profile_json, PK(session_id, participant_id))
 events(id PK AUTOINCREMENT, session_id, participant_id, type, uuid, units, payload_json, at)
 help_requests(... unchanged)
+user_recipes(id PK, title, xml, source_url, created_at, updated_at)   -- epoch ms; kept when the session tables are reset
 ```
 `completed_tasks` is replaced by `events` (`taskDone` rows). Legacy columns `scale`, `mise_en_place`,
 `session_started`, `recipe_name` stay for compatibility with old clients during the transition but new code reads

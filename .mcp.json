@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "flow-recipe": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["packages/mcp/src/index.js"],
+      "env": {
+        "FLOW_RECIPE_SERVER": "${FLOW_RECIPE_SERVER:-http://localhost:3001}",
+        "FLOW_UPLOAD_TOKEN": "${FLOW_UPLOAD_TOKEN:-}",
+        "FLOW_RECIPES_DIR": "${FLOW_RECIPES_DIR:-}"
+      }
+    }
+  }
+}
