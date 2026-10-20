@@ -2,7 +2,7 @@ import { test, describe, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   extractRecipeSource, textSource, fetchRecipeSource, assertPublicUrl, isPrivateAddress, parseDuration, parseYield,
-  flattenInstructions, SourceError, USER_AGENT,
+  flattenInstructions, SourceError, USER_AGENT, IMPORTER_USER_AGENT,
 } from '../src/source.js'
 import { decodeEntities, htmlToText } from '../src/html.js'
 import { fixture, startServer } from './helpers.js'
@@ -173,6 +173,18 @@ describe('fetchRecipeSource against a local server', () => {
       } else if (req.url === '/moved') {
         res.writeHead(301, { location: '/recipe' })
         res.end()
+      } else if (req.url === '/picky') {
+        // a bot filter that refuses clients claiming to be a browser
+        if (/Chrome/.test(req.headers['user-agent'] || '')) {
+          res.writeHead(403, { 'content-type': 'text/html' })
+          res.end('<h1>Just a moment...</h1>')
+        } else {
+          res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+          res.end(fixture('jsonld.html'))
+        }
+      } else if (req.url === '/forbidden') {
+        res.writeHead(403, { 'content-type': 'text/html' })
+        res.end('no')
       } else if (req.url === '/text') {
         res.writeHead(200, { 'content-type': 'text/plain' })
         res.end('Toast\n\nIngredients\n- 2 slices bread\n\nMethod\n- Toast the bread.')
@@ -205,6 +217,19 @@ describe('fetchRecipeSource against a local server', () => {
     const req = server.requests.find((r) => r.url === '/recipe')
     assert.equal(req.headers['user-agent'], USER_AGENT)
     assert.match(req.headers.accept, /text\/html/)
+    assert.equal(req.headers['sec-fetch-mode'], 'navigate')
+    assert.match(req.headers['accept-language'], /en-US/)
+    assert.match(req.headers['accept-encoding'], /gzip/)
+    assert.notEqual(String(req.headers.connection || '').toLowerCase(), 'close', 'no Connection: close quirk')
+  })
+
+  test('a 403 is retried once with plain headers', async () => {
+    const s = await fetchRecipeSource(`${server.url}/picky`)
+    assert.equal(s.title, 'Classic Chocolate Chip Cookies & Milk')
+    const agents = server.requests.filter((r) => r.url === '/picky').map((r) => r.headers['user-agent'])
+    assert.deepEqual(agents, [USER_AGENT, IMPORTER_USER_AGENT])
+    await assert.rejects(fetchRecipeSource(`${server.url}/forbidden`), (e) => e.status === 403 && /paste the recipe text/.test(e.message))
+    assert.equal(server.requests.filter((r) => r.url === '/forbidden').length, 2, 'exactly one retry')
   })
 
   test('decodes the declared charset', async () => {
@@ -239,5 +264,12 @@ describe('fetchRecipeSource against a local server', () => {
     const s = await fetchRecipeSource(`${server.url}/big`, { maxBytes: 20000 })
     assert.equal(s.truncated, true)
     assert.equal(s.title, 'Big page')
+  })
+})
+
+describe('ingredient lines', () => {
+  test('zero amounts from a CMS ("0 kg kananmunaa") are dropped, the ingredient kept', () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({ '@type': 'Recipe', name: 'Korvapuustit', recipeIngredient: ['0 kg kananmunaa', '0.5 dl maitoa', '50 g hiivaa'] })}</script>`
+    assert.deepEqual(extractRecipeSource(html, 'https://example.fi/r').ingredients, ['kananmunaa', '0.5 dl maitoa', '50 g hiivaa'])
   })
 })

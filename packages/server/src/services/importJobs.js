@@ -278,7 +278,7 @@ function sanitizeResult(result, existingIds, importer) {
 }
 
 /**
- * Starts an import job. `params` = validated request fields { url?, text?, precisionScale, servings, notes },
+ * Starts an import job. `params` = validated request fields { url?, text?, ref?, precisionScale, servings, notes },
  * `llmConfig` = the provider configuration (may hold an API key; it is only kept in this closure).
  * `existingIds()` lists recipe ids already taken. Throws with `status` 429 when the concurrency caps are reached.
  */
@@ -340,11 +340,12 @@ function startJob({ params, llmConfig, ip = 'unknown', existingIds = () => [] })
       // The importer's default fetch is the pinned SSRF-guarded one (FLOW_IMPORT_ALLOW_PRIVATE=1 lifts it).
       source = await importer.fetchRecipeSource(params.url, { signal });
     } else if (params.text && typeof importer.textSource === 'function') {
-      source = importer.textSource(params.text, {});
+      // params.ref (the page the user tried) is only recorded as the recipe's ref; it is never fetched
+      source = importer.textSource(params.text, { url: params.ref || null });
     }
     if (signal.aborted) throw signal.reason || new Error('Cancelled');
     const result = await importer.importRecipe({
-      ...(source ? { source } : { text: params.text }),
+      ...(source ? { source } : { text: params.text, ref: params.ref || null }),
       llm: config,
       precisionScale: params.precisionScale,
       servings: params.servings,

@@ -55,14 +55,18 @@ unit="cookie"/></property></properties></tool>`
 
 - A tool names a **type**; the kitchen inventory says how many exist. Use these types as ids when they fit: `bowl`
   (4 l), `large-bowl` (8 l), `cup`, `jug`, `plate`, `serving-plate`, `baking-sheet`, `baking-tin`, `cake-mould`,
-  `square-dish`, `shallow-dish`, `cooling-rack`, `pot`, `pan`, `mixing-glass`, `rocks-glass`, `whisk`, `spatula`,
-  `frosting-spatula`, `spoon`, `fork`, `knife`, `pastry-brush`, `grater`, `peeler`, `sieve`, `strainer`, `bar-spoon`,
-  `fruit-baller`, `blender`, `ladle`, `kitchen-scale`, `precision-scale`, `towel`, `parchment-paper`, `cling-film`,
-  `cover`. Other types are allowed (assumed to exist once). `type="…"` maps an id to another type (rare).
+  `square-dish`, `shallow-dish`, `cooling-rack`, `pot` (4 l, 2 of them), `casserole-pot` (Dutch oven, 5 l),
+  `pan`, `serving-bowl`, `mixing-glass`, `rocks-glass`, `whisk`, `spatula`, `frosting-spatula`, `spoon`, `fork`,
+  `knife`, `cutting-board` (2, so two cooks can cut at once), `rolling-pin`, `hand-mixer`, `pastry-brush`, `grater`,
+  `peeler`, `sieve`, `strainer`, `bar-spoon`, `fruit-baller`, `blender`, `ladle`, `kitchen-scale`,
+  `precision-scale`, `towel`, `parchment-paper`, `cling-film`, `cover`. Other types are allowed (assumed to exist
+  once). `type="…"` maps an id to another type (rare).
 - Never declare the oven, hob or microwave; operations bring them.
 - `capacity` with a unit: containers in litres (`pot` 3 l) so a rising dough gets a bowl that fits; **carriers** in
   the unit of the stream they carry (`baking-sheet` 12 `cookie`, `pan` 2 `fillet`, `plate` 1 `serving`). Carrier
-  capacity turns 24 cookies into 2 sheets and sheets into oven rounds (2 sheets per round). Use the realistic count.
+  capacity turns 24 cookies into 2 sheets and sheets into oven rounds (2 sheets per round). Use the realistic count
+  for THIS item (bun size, spacing from the source): the recipe's capacity always wins over the kitchen's default
+  (16 buns per sheet), which applies only when the recipe states none.
 - Parchment paper and cling film are tools, consumed as `<input ref>` by `line` / `cover`.
 
 ## 5. Tasks
@@ -118,7 +122,8 @@ unit="cookie"/></property></properties></tool>`
   `dumpling`, `drink`, `bowl` — names a stream of units; `amount` is the count for the stated yield. Plain quantity
   units are NOT streams: `pieces`, `piece`, `pcs`, `unit(s)`, `portion(s)`, `slice(s)`, `dash`, any mass, volume or
   time unit. Write `serving`, not `portion`.
-- A stream starts where a mass becomes units (`split` with `parts`, `scoop`, `shape`, `cut`); every later task on it
+- A stream starts where a mass becomes units (`split` with `parts`, `scoop`, `shape`, `cut`; also 2 rolled `sheet`s
+  cut into 34 `bun`s); every later task on it
   repeats `amount` and `unit` (24 `cookie` through to the final output). `split` with `unit-size` (45 g) derives the
   count from the producing output's `amount` in g (`<output id="dough" amount="1100" unit="g">`); prefer `parts`.
 - **Pipelines**: consecutive tasks on one stream whose operations are per-unit (**u** in §10) are linked unit by
@@ -146,6 +151,26 @@ unit="cookie"/></property></properties></tool>`
   stream's unit gives rounds), `sear`, `saute` (onions, garlic, vegetables), `toast` (nuts, spices), `simmer`
   (sauces, stews, soups), `cook` (pasta, rice, grains, eggs), `boil`, `steam`; `heat` takes `temperature` or
   `duration`; `melt` and `soften` take none.
+- **One vessel, several steps** (one-pot stews, sauces built on the fond, butter melted then milk added): the
+  steps happen in order in the same pot, but a shared `<tool ref>` alone does not order them — the scheduler only
+  follows inputs. Carry the vessel on as data: each step in the same pot consumes the previous step's output.
+  When the earlier result leaves the pot (browned beef set aside), give that task a second output for the used pot
+  and make it an input of the next step:
+
+  ```xml
+  <task id="brown-beef" operation="sear">…
+    <tools><tool ref="casserole-pot" reserved="true" soil="wash"/></tools>
+    <outputs><output id="browned-beef">browned beef</output><output id="pot-with-fond">pot with the fond</output></outputs>
+  </task>
+  <task id="saute-onion" operation="saute">…
+    <inputs><input ref="sliced-onion"/><input ref="pot-with-fond"/></inputs>
+    <tools><tool ref="casserole-pot" reserved="true" soil="wash"/></tools>
+    <outputs><output id="softened-onion">onion softened on the fond</output></outputs>
+  </task>
+  <!-- later: <task id="add-beef-back"> takes softened-onion (or the sauce built on it) and browned-beef -->
+  ```
+
+  The check warns ("Vessel order: …") when two tasks hold the same reserved vessel with no input path between them.
 - **Waits** have one input, one output and a required `duration`: `raise` (proofing), `chill` (fridge), `freeze`,
   `rest` (dough, meat), `cool` (room temperature, rack), `marinate` (fridge), `soak`. Ranges → the lower bound;
   overnight → 8 hours. Never `wait` (it links nothing).
@@ -161,7 +186,14 @@ unit="cookie"/></property></properties></tool>`
   Never convert volume to weight, ounces to grams or °F to °C yourself, and never round: the deterministic converter
   (`metricizeRecipeXml`, run by the importer and by `convert_recipe_units`) is the source of truth. It converts with
   its density table and kitchen rounding and leaves `<!-- converted from 1 cup (all-purpose flour, 0.53 g/ml) -->`
-  next to every changed value. When the source gives both ("1 cup (125 g) flour"), use the metric figure.
+  next to every changed value. **When the source states a weight, use it verbatim** — also in parentheses or
+  side by side ("1 cup (125 g) flour" → `125` `g`; "1.2 kg / 2.4 lb beef" → `1.2` `kg`); the converter only
+  converts volumes that have no weight, and its density estimate differs from the author's own figure.
+- Non-English spoons may be copied as written; they are metric (5 ml / 15 ml) and normalised by the converter:
+  Finnish `tl`/`rkl`, Swedish `tsk`/`msk`/`krm` (1 ml), Norwegian/Danish `ts`/`ss`/`spsk`, German `TL`/`EL`,
+  French `c.à.c`/`c.à.s`; `kpl`/`st`/`Stk` are `pieces`; `Prise`/`ripaus` a `pinch`. Packages (`prk`, `pkt`,
+  `pss`, `tlk`, can, jar, packet) stay counts: put the package size in the ingredient name ("cream, 2 dl carton")
+  or measure the contents in g/ml. Ingredient names, titles and instructions stay in the source's language.
 - Unit spellings: `g kg ml dl l tsp tbsp cup fl oz oz lb stick pint quart` (amounts), `celsius fahrenheit`,
   `inch`/`cm`. Decimals only (`0.5`, not `1/2`). Countables are `pieces` ("3 large eggs" → `3` `pieces`, size as a
   `size` property).
@@ -170,10 +202,13 @@ unit="cookie"/></property></properties></tool>`
     honey, syrup, oil and other viscous liquids;
   - **ml / dl / l** for thin liquids: water, milk, stock, wine, cream, juice, spirits;
   - **`tsp` (5 ml) / `tbsp` (15 ml)** for small amounts (≤ 1 tbsp, under ~10 g) of salt, spices, baking powder,
-    baking soda, yeast, extracts — unless the user has a precision scale: then grams with one decimal;
+    baking soda, yeast, extracts and fresh herbs, and for anything else that is both ≤ 1 tbsp and under 10 g
+    (2 tsp cornstarch) — a 1 g kitchen scale cannot weigh it — unless the user has a precision scale: then grams
+    with one decimal. Fresh herbs in bigger amounts may stay `sprig`/`bunch`/`handful` counts as the source says;
   - **`pieces`** for countables: eggs, onions, garlic cloves, lemons, fillets, gelatine sheets;
   - temperatures `celsius`, lengths cm. A cup is the US cup (236.6 ml).
-  Amounts the converter cannot handle (unknown units, no density) are reported by the unit lint; fix those by hand.
+  Amounts the converter cannot handle (unknown units, no density) are reported by the unit lint as warnings; fix
+  those by hand (an unknown unit is never silently accepted).
 - **Scaling**: every amount, `parts` and stream `amount` is for the yield the source states (24 cookies, 4
   servings). Never rescale; the scheduler scales the whole recipe.
 
@@ -188,12 +223,21 @@ unit="cookie"/></property></properties></tool>`
    as a reserved tool and are returned in `<outputs>` where the units leave them.
 7. One measure per ingredient use, amounts as the source states them (the converter metricizes), for the stated yield.
 8. Holds on degrading results, `<serving>` set, perishables with `storage`.
+9. Steps that happen one after another in the same pot or pan are linked by data (§7, one vessel, several steps).
 
 Mistakes: `name` attributes or amounts on ingredients; preheat tasks; `wait` instead of `rest`/`cool`; `portion` or
 `pieces` as a stream unit; one "shape and bake" task; two inputs to `bake-in-oven`; `<output>` in instructions;
 instructions without any embedded ref; the baking sheet never returned; `<batch>` or nested `<tasks>` (v1,
-rejected); converting cups/ounces/°F yourself instead of copying the source; fractions like `1/2`; unit words
+rejected); converting cups/ounces/°F yourself instead of copying the source; density-converting an amount the
+source already gives in grams; one-pot steps linked only by the shared pot; fractions like `1/2`; unit words
 the converter does not know (`smidgen`, `knob`); durations without a unit; stray outputs nobody uses.
+
+**The dry run** (`check_recipe`, `bin/check.js`, the import's check) plans the recipe with 1 and 3 cooks and the
+default kitchen, as soon as possible from a fixed start. `plan.runs[].makespanSeconds` is the elapsed time from the
+first step to serving, `activeSeconds` the hands-on time, `criticalPathSeconds` the time with unlimited cooks. Compare
+the 1-cook figure with the source's total time: it should be close to it plus the waits you modelled (measuring
+every ingredient adds a few minutes). Much longer usually means a passive step modelled as active, a missing
+carrier return, a too-small capacity or one-pot steps that are not linked; 3 cooks never take longer than 1.
 
 ## 10. Operations
 

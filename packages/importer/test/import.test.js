@@ -1,6 +1,6 @@
 import { test, describe, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { importRecipe, suggestRecipeId, extractXml, setRootAttributes, ImportError } from '../src/import.js'
+import { importRecipe, suggestRecipeId, extractXml, setRootAttributes, ImportError, httpUrlOrNull } from '../src/import.js'
 import { buildMessages, buildRepairMessage, catalogueSummary, loadGuide, loadOperationsXml, formatSource } from '../src/guide.js'
 import { catalogueFor, conversions } from '../src/check.js'
 import { extractRecipeSource } from '../src/source.js'
@@ -128,7 +128,12 @@ describe('importRecipe with the mock LLM', () => {
     assert.match(result.xml, /<recipe version="2" id="brown-butter-cookies-2"[^>]* ref="http:\/\/127\.0\.0\.1:\d+\/cookies"/)
     assert.equal(result.check.id, 'brown-butter-cookies-2')
     assert.ok(result.check.plan && result.check.plan.ok)
-    assert.deepEqual(result.source, { url: `${server.url}/cookies`, title: 'Classic Chocolate Chip Cookies & Milk', structured: true })
+    const { times, yield: yieldText, servings, ...sourceRest } = result.source
+    assert.deepEqual(sourceRest, { url: `${server.url}/cookies`, title: 'Classic Chocolate Chip Cookies & Milk', structured: true })
+    assert.deepEqual(Object.keys(times).sort(), ['cook', 'prep', 'total'])
+    assert.ok(Object.values(times).some((v) => Number.isFinite(v) && v > 0), JSON.stringify(times))
+    assert.ok(yieldText === null || typeof yieldText === 'string')
+    assert.ok(servings === null || Number.isFinite(servings))
     assert.deepEqual(result.llm, { provider: 'mock', model: 'mock', baseUrl: null, hasKey: false })
     assert.deepEqual(result.history.map((h) => h.errors > 0), [true, false])
     if (conversions()) {
@@ -160,6 +165,21 @@ describe('importRecipe with the mock LLM', () => {
     assert.equal(result.attempts, 2)
     assert.equal(result.id, 'brown-butter-cookies')
     assert.match(result.xml, /ref="https:\/\/example.org\/p"/)
+  })
+
+  test('pasted text with a ref: the ref is recorded (never fetched), source times and yield are reported', async () => {
+    const text = 'Brown butter cookies\nMakes 24 cookies\nPrep time: 20 minutes\nTotal time: 1 hour 30 minutes\nIngredients\n- 1 cup butter\nMethod\n- bake'
+    const llm = { provider: 'mock', mockResponse: GOOD }
+    const result = await importRecipe({ text, ref: 'https://blocked.example.com/cookies?x=1', llm })
+    assert.equal(result.source.url, 'https://blocked.example.com/cookies?x=1')
+    assert.match(result.xml, /ref="https:\/\/blocked\.example\.com\/cookies\?x=1"/)
+    assert.equal(result.source.times.prep, 1200)
+    assert.equal(result.source.times.total, 5400)
+    assert.equal(result.source.times.cook, null)
+    const bad = await importRecipe({ text, ref: 'javascript:alert(1)', llm })
+    assert.equal(bad.source.url, null)
+    assert.equal(httpUrlOrNull('ftp://x/y'), null)
+    assert.equal(httpUrlOrNull('http://example.com'), 'http://example.com/')
   })
 
   test('input validation and cancellation', async () => {

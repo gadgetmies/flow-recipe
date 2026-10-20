@@ -2,7 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { checkRecipeXml, conversions } from '../src/check.js'
+import { checkRecipeXml, conversions, repairWorthyWarnings, VESSEL_ORDER_PREFIX } from '../src/check.js'
 import { checkWellFormed } from '../src/wellformed.js'
 import { RECIPES_DIR } from '../src/guide.js'
 import { fixture } from './helpers.js'
@@ -25,6 +25,13 @@ describe('checkRecipeXml on the built-in recipes', () => {
       assert.ok(r.plan.activeSeconds > 0)
       assert.equal(r.plan.runs.length, 2)
       assert.deepEqual(r.plan.runs.map((x) => x.participants), [1, 3])
+      // planned as soon as possible: more cooks are never slower, the critical path is a lower bound, and the
+      // dry run's artificial serve time produces no lateness or repair notes
+      const [one, three] = r.plan.runs
+      assert.ok(three.makespanSeconds <= one.makespanSeconds, `3 cooks ${three.makespanSeconds} s > 1 cook ${one.makespanSeconds} s`)
+      assert.ok(r.plan.criticalPathSeconds > 0 && r.plan.criticalPathSeconds <= three.makespanSeconds + 60)
+      assert.ok(Number.isFinite(one.activeSeconds) && one.activeSeconds <= one.makespanSeconds)
+      assert.ok(!r.plan.diagnostics.some((d) => /\[(LATE|REPAIR_[A-Z]+|CRITICAL_PATH|START_EARLIER)\]/.test(d)), r.plan.diagnostics.join('\n'))
     })
   }
 })
@@ -105,5 +112,50 @@ describe('checkWellFormed', () => {
       assert.ok(errors.every((e) => e.line >= 1 && e.column >= 1))
     }
     assert.equal(checkWellFormed('<a>\n\n<b></c></a>')[0].line, 3)
+  })
+})
+
+const ONE_POT = `<?xml version="1.0" encoding="utf-8"?>
+<recipe version="2" id="one-pot" ref="https://example.com/stew">
+  <title>One-pot stew</title>
+  <serving temperature="hot"/>
+  <ingredients><ingredient id="beef">beef</ingredient><ingredient id="onion">onion</ingredient></ingredients>
+  <tools><tool id="casserole-pot">casserole pot</tool><tool id="spoon">spoon</tool></tools>
+  <tasks>
+    <task id="brown-beef" operation="sear">
+      <options><option name="duration"><numeric-value number="10" unit="minutes"/></option></options>
+      <inputs><input ref="beef"/></inputs>
+      <tools><tool ref="casserole-pot" reserved="true"/></tools>
+      <outputs><output id="browned-beef">browned beef</output>FOND</outputs>
+    </task>
+    <task id="saute-onion" operation="saute">
+      <options><option name="duration"><numeric-value number="5" unit="minutes"/></option></options>
+      <inputs><input ref="onion"/>FONDIN</inputs>
+      <tools><tool ref="casserole-pot" reserved="true"/><tool ref="spoon"/></tools>
+      <outputs><output id="soft-onion">soft onion</output></outputs>
+    </task>
+    <task id="simmer-stew" operation="simmer">
+      <options><option name="duration"><numeric-value number="60" unit="minutes"/></option></options>
+      <inputs><input ref="soft-onion"/><input ref="browned-beef"/></inputs>
+      <tools><tool ref="casserole-pot" reserved="true"/></tools>
+      <outputs><output id="stew" final="true">stew</output></outputs>
+    </task>
+  </tasks>
+</recipe>`
+
+describe('one vessel for several steps', () => {
+  test('two pot steps without a data path between them are flagged and fed to the repair loop', () => {
+    const r = checkRecipeXml(ONE_POT.replace('FOND', '').replace('FONDIN', ''), { planCheck: false })
+    const w = r.warnings.filter((x) => x.startsWith(VESSEL_ORDER_PREFIX))
+    assert.equal(w.length, 1, r.warnings.join('\n'))
+    assert.match(w[0], /'brown-beef' and task 'saute-onion'/)
+    assert.deepEqual(repairWorthyWarnings(r), w)
+  })
+
+  test('the vessel carried on as an output orders the steps', () => {
+    const xml = ONE_POT.replace('FOND', '<output id="pot-with-fond">pot with the fond</output>').replace('FONDIN', '<input ref="pot-with-fond"/>')
+    const r = checkRecipeXml(xml, { planCheck: false })
+    assert.equal(r.ok, true, r.errors.join('\n'))
+    assert.deepEqual(r.warnings.filter((x) => x.startsWith(VESSEL_ORDER_PREFIX)), [])
   })
 })

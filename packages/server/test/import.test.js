@@ -391,6 +391,27 @@ test('server: recipe import and user recipes', async (t) => {
     assert.strictEqual(job.status, 'done', JSON.stringify(job.error));
   });
 
+  await t.test('POST /api/import with pasted text and ref records the ref without fetching it', needsImporter, async () => {
+    let res = await request('POST', `${base}/api/import`, { text: 'Toast', ref: 'javascript:alert(1)', llm: { provider: 'mock', mockResponse: SANDWICH_XML } });
+    assert.strictEqual(res.status, 400);
+    assert.match(res.body.error, /ref/);
+    res = await request('POST', `${base}/api/import`, { text: 'Toast', ref: 'not a url', llm: { provider: 'mock', mockResponse: SANDWICH_XML } });
+    assert.strictEqual(res.status, 400);
+    // a private address is fine as a ref: it is only written into the XML, never requested
+    const ref = `${fixtures.url}/never-fetched.html`;
+    res = await request('POST', `${base}/api/import`, {
+      text: 'Butter sandwich: spread 1 tbsp butter on 2 slices of bread.',
+      ref,
+      llm: { provider: 'mock', mockResponse: SANDWICH_XML },
+    });
+    assert.strictEqual(res.status, 202, JSON.stringify(res.body));
+    const job = await waitForJob(base, res.body.jobId);
+    assert.strictEqual(job.status, 'done', JSON.stringify(job.error));
+    assert.strictEqual(job.result.source.url, ref);
+    assert.ok(job.result.xml.includes(`ref="${ref}"`), job.result.xml.slice(0, 300));
+    assert.deepEqual(Object.keys(job.result.source.times).sort(), ['cook', 'prep', 'total']);
+  });
+
   await t.test('import errors are captured in the job and never leak the API key', needsImporter, async () => {
     const res = await request('POST', `${base}/api/import`, {
       url: `${fixtures.url}/recipe.html`,

@@ -91,6 +91,24 @@ function score(check, xml) {
   return (xml ? 0 : 100000) + check.errors.length * 100 + (check.plan && !check.plan.ok ? 10 : 0) + (check.plan ? 0 : 5) + repairWorthyWarnings(check).length
 }
 
+/** An http(s) URL string (normalised), or null for anything else. Never fetched. */
+export function httpUrlOrNull(value) {
+  if (typeof value !== 'string' || !value.trim() || value.length > 2048) return null
+  try {
+    const u = new URL(value.trim())
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null
+  } catch {
+    return null
+  }
+}
+
+/** Source times as { prep, cook, total } in seconds (null when the page does not say). */
+function sourceTimes(times) {
+  const t = times && typeof times === 'object' ? times : {}
+  const n = (v) => (Number.isFinite(v) && v > 0 ? Math.round(v) : null)
+  return { prep: n(t.prep), cook: n(t.cook), total: n(t.total) }
+}
+
 function needsRepair(check) {
   return !check.ok || (check.plan !== null && check.plan !== undefined && !check.plan.ok) || repairWorthyWarnings(check).length > 0
 }
@@ -108,6 +126,7 @@ function throwIfAborted(signal) {
 export async function importRecipe({
   url,
   text,
+  ref = null,
   source,
   llm,
   precisionScale = false,
@@ -142,7 +161,8 @@ export async function importRecipe({
       src = await fetchRecipeSource(url, { signal, ...(fetch ? { fetch } : {}) })
     } else if (text && String(text).trim()) {
       progress('fetching', { text: true })
-      src = textSource(String(text))
+      // `ref`: the page the text came from (the URL the user tried); recorded as the recipe's ref, never fetched
+      src = textSource(String(text), { url: httpUrlOrNull(ref) })
     } else throw new ImportError('input', 'Give a URL or the recipe text')
   }
   if (!src.structured && !String(src.text || '').trim() && !(src.ingredients || []).length) {
@@ -236,7 +256,15 @@ export async function importRecipe({
     xml: best.xml,
     check: best.check,
     conversions: best.changes,
-    source: { url: src.url || null, title: src.title || null, structured: !!src.structured },
+    source: {
+      url: src.url || null,
+      title: src.title || null,
+      structured: !!src.structured,
+      // what the recipe page says, for comparison with the dry-run estimate (seconds)
+      times: sourceTimes(src.times),
+      yield: src.yield || null,
+      servings: Number.isFinite(src.servings) ? src.servings : null,
+    },
     attempts,
     history,
     llm: describeLlmConfig(client),

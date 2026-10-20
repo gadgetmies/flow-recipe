@@ -7,7 +7,35 @@ import { SourceError, assertPublicUrl, createGuardedFetch } from './net.js'
 import { collapse, decodeEntities, findAll, findFirst, htmlToText, metaContent, parseHtml, rawText, readableText, tidyText } from './html.js'
 
 export const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
+/** The honest identity used for the one retry after a 403 (some bot filters only block clients claiming to be browsers). */
+export const IMPORTER_USER_AGENT = 'flow-recipe-importer/1.0 (recipe import for a kitchen planner)'
+
+/** Request headers of a current desktop Chrome opening a page from the address bar. */
+export const BROWSER_HEADERS = Object.freeze({
+  'user-agent': USER_AGENT,
+  accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+  'accept-language': 'en-US,en;q=0.9,fi;q=0.8,sv;q=0.7,de;q=0.6',
+  'accept-encoding': 'gzip, deflate, br',
+  'cache-control': 'max-age=0',
+  'sec-ch-ua': '"Google Chrome";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"Windows"',
+  'sec-fetch-dest': 'document',
+  'sec-fetch-mode': 'navigate',
+  'sec-fetch-site': 'none',
+  'sec-fetch-user': '?1',
+  'upgrade-insecure-requests': '1',
+})
+
+/** Headers for the retry after a 403: plain, honest, no browser claims. */
+export const PLAIN_HEADERS = Object.freeze({
+  'user-agent': IMPORTER_USER_AGENT,
+  accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+  'accept-language': 'en-US,en;q=0.9',
+  'accept-encoding': 'gzip, deflate, br',
+})
+
 export const MAX_TEXT_CHARS = 30000
 
 export { SourceError, isPrivateAddress, assertPublicUrl, createGuardedFetch, parseIPv6 } from './net.js'
@@ -84,8 +112,17 @@ function combineSignals(signals) {
   return ctl.signal
 }
 
+async function discardBody(res) {
+  try {
+    if (res.body && typeof res.body.cancel === 'function') await res.body.cancel()
+  } catch {
+    // ignore
+  }
+}
+
 /**
- * Fetch a recipe page and extract its Source. Uses a browser-like User-Agent, follows up to 5 redirects (each hop
+ * Fetch a recipe page and extract its Source. Sends the headers of a desktop Chrome (retried once with plain
+ * headers after a 403), follows up to 5 redirects (each hop
  * checked by the SSRF guard), times out after `timeoutMs` (whole download), reads at most `maxBytes` (the rest is
  * ignored; `source.truncated` is set). The default fetch is the guarded one from net.js, which re-checks every DNS
  * answer at connect time; a custom `fetch` (tests) only gets the per-hop URL check.
@@ -96,33 +133,28 @@ export async function fetchRecipeSource(url, { fetch, timeoutMs = 15000, maxByte
   if (typeof fetch !== 'function') throw new SourceError('network', 'No fetch implementation available (Node 18+ required)')
   const timeout = AbortSignal.timeout(timeoutMs)
   const combined = combineSignals([timeout, signal])
-  let current = (await assertPublicUrl(url, { lookup, allowPrivate })).toString()
+  const start = (await assertPublicUrl(url, { lookup, allowPrivate })).toString()
+  let current = start
   let res
   try {
-    for (let hop = 0; ; hop++) {
-      res = await fetch(current, {
-        method: 'GET',
-        redirect: 'manual',
-        signal: combined,
-        headers: {
-          'user-agent': USER_AGENT,
-          accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5',
-          'accept-language': 'en-US,en;q=0.9,fi;q=0.8,sv;q=0.7,de;q=0.6',
-        },
-      })
-      const location = res.status >= 300 && res.status < 400 && res.headers && res.headers.get ? res.headers.get('location') : null
-      if (!location) break
-      if (hop >= 5) throw new SourceError('http-status', `Too many redirects fetching ${url}`)
-      const next = new URL(location, current).toString()
-      try {
-        if (res.body && typeof res.body.cancel === 'function') await res.body.cancel()
-      } catch {
-        // ignore
+    // A browser-like request first; when the site answers 403 (bot filters that fingerprint the client and dislike
+    // a "browser" that is not one), one retry with plain, honest headers.
+    for (const headers of [BROWSER_HEADERS, PLAIN_HEADERS]) {
+      current = start
+      for (let hop = 0; ; hop++) {
+        res = await fetch(current, { method: 'GET', redirect: 'manual', signal: combined, headers: { ...headers } })
+        const location = res.status >= 300 && res.status < 400 && res.headers && res.headers.get ? res.headers.get('location') : null
+        if (!location) break
+        if (hop >= 5) throw new SourceError('http-status', `Too many redirects fetching ${url}`)
+        const next = new URL(location, current).toString()
+        await discardBody(res)
+        current = (await assertPublicUrl(next, { lookup, allowPrivate })).toString()
       }
-      current = (await assertPublicUrl(next, { lookup, allowPrivate })).toString()
+      if (res.status !== 403 || headers === PLAIN_HEADERS) break
+      await discardBody(res)
     }
     if (!res.ok) {
-      const hint = res.status === 403 || res.status === 429 ? ' (the site may block automated requests; paste the recipe text instead)' : ''
+      const hint = res.status === 403 || res.status === 429 || res.status === 402 ? ' (the site blocks automated requests; paste the recipe text instead)' : ''
       throw new SourceError('http-status', `The page returned HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}${hint}`, { status: res.status })
     }
     const type = contentTypeOf(res)
@@ -349,11 +381,18 @@ export function findRecipeObjects(data, depth = 0, out = []) {
   return out
 }
 
+/** "0 kg kananmunaa" (a CMS placeholder for "some, for brushing") → "kananmunaa": a zero amount is no amount. */
+function dropZeroAmount(line) {
+  if (typeof line !== 'string') return line
+  return line.replace(/^0+(?:[.,]0+)?\s+(?:[A-Za-zäöåÄÖÅ]{1,4}\.?\s+(?=\S))?/, '')
+}
+
 function recipeFromObject(obj) {
   const y = parseYield(obj.recipeYield !== undefined ? obj.recipeYield : obj.yield)
   const ingredients = asArray(obj.recipeIngredient || obj.ingredients)
     .flatMap((x) => (typeof x === 'object' && x !== null ? [x.name || x.text || ''] : [x]))
     .map(cleanLine)
+    .map(dropZeroAmount)
     .filter(Boolean)
   const steps = flattenInstructions(obj.recipeInstructions || obj.instructions || [])
   const times = {}

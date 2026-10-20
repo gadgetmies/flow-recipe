@@ -71,8 +71,11 @@ function describePlan(plan) {
     for (const run of runs) {
       const n = run.participants ?? run.cooks ?? run.count
       const t = formatDuration(run.makespanSeconds)
-      if (n != null && t) lines.push(`${n} cook(s): ${t}.`)
+      const hands = formatDuration(run.activeSeconds)
+      if (n != null && t) lines.push(`${n} cook(s): ${t} start to serve${hands ? ` (${hands} hands-on)` : ''}.`)
     }
+    const cp = formatDuration(plan.criticalPathSeconds)
+    if (cp) lines.push(`Critical path (unlimited cooks): ${cp}; compare these with the source's total time.`)
   } else {
     for (const [key, label] of [
       ['makespanSeconds', 'Estimated time'],

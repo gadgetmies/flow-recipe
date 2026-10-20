@@ -105,7 +105,7 @@ test('web recipe operations', () => {
     assert.deepEqual(catalogue[name].requires, ['hot-pan'])
   }
   assert.equal(catalogue.fry.completion.urgency, 'critical')
-  assert.equal(catalogue.simmer.checkInterval, 300)
+  assert.equal(catalogue.simmer.checkInterval, 600, "a stir every 10 min (review 1 P3-8: 20 checks for one stew)")
   assert.equal(catalogue.roast.expand, 'bake-in-oven')
   assert.deepEqual(catalogue.roast.requires, ['oven'])
   assert.equal(catalogue.rinse.station, 'sink')

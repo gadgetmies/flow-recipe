@@ -598,3 +598,42 @@ describe('review 1 regressions: ingredient matching', () => {
     assert.equal(findDensity('2 cups (250 g) flour').id, 'flour-all-purpose')
   })
 })
+
+describe('review 1 flow: Nordic and European units, herbs and amounts too light to weigh', () => {
+  test('Finnish, Swedish, Norwegian, German and French spoons are metric spoons', () => {
+    assert.deepEqual([conv(1, 'tl', 'kaneli').number, conv(1, 'tl', 'kaneli').unit], [1, 'tsp'])
+    assert.deepEqual([conv(2, 'TL', 'salt').number, conv(2, 'TL', 'salt').unit], [2, 'tsp'])
+    assert.equal(conv(1, 'rkl', 'vehnäjauho').unit, 'tbsp', '8 g of flour is too light for a kitchen scale')
+    assert.deepEqual([conv(2, 'rkl', 'vehnäjauho').number, conv(2, 'rkl', 'vehnäjauho').unit], [16, 'g'])
+    assert.equal(conv(1, 'msk', 'salt').unit, 'tbsp')
+    assert.equal(conv(1, 'EL', 'salt').unit, 'tbsp')
+    assert.equal(conv(1, 'c.à.s', 'salt').unit, 'tbsp')
+    assert.deepEqual([conv(2, 'krm', 'salt').number, conv(2, 'krm', 'salt').unit], [0.5, 'tsp'], 'krm is 1 ml')
+    assert.equal(conv(3, 'dl', 'vehnäjauho').unit, 'g')
+    assert.deepEqual([conv(2, 'kpl', 'kananmuna').number, conv(2, 'kpl', 'kananmuna').unit], [2, 'pieces'])
+    assert.equal(conv(1, 'Prise', 'salt').unit, 'pinch')
+    assert.equal(conv(1, 'prk', 'kerma').unit, 'jar')
+    assert.equal(conv(2, 'cans', 'tomatoes').unit, 'cans', 'English count words stay as written')
+  })
+
+  test('the lint asks for the canonical spoon spelling and for package sizes', () => {
+    const xml = `<recipe version="2" id="x"><title>X</title><ingredients><ingredient id="kaneli">kaneli</ingredient><ingredient id="kerma">kerma</ingredient></ingredients><tools/><tasks>
+      <task id="m1" operation="measure"><options><option name="amount"><numeric-value number="1" unit="tl"/></option></options><inputs><input ref="kaneli"/></inputs><outputs><output id="o1">a</output></outputs></task>
+      <task id="m2" operation="measure"><options><option name="amount"><numeric-value number="1" unit="prk"/></option></options><inputs><input ref="kerma"/></inputs><outputs><output id="o2">b</output></outputs></task>
+    </tasks></recipe>`
+    const lint = lintRecipeUnits(parseRecipe(xml, { DOMParser }))
+    assert.ok(lint.some((l) => l.taskId === 'm1' && l.level === 'warning' && /should be written 'tsp'/.test(l.message)), JSON.stringify(lint))
+    assert.ok(lint.some((l) => l.taskId === 'm2' && l.level === 'info' && /package/.test(l.message)), JSON.stringify(lint))
+    const converted = metricizeRecipeXml(xml, xmlOpts)
+    assert.match(converted.xml, /number="1" unit="tsp"/)
+  })
+
+  test('fresh herbs and other amounts too light for a 1 g scale stay spoons without a precision scale', () => {
+    assert.deepEqual([conv(1, 'tsp', 'fresh parsley').number, conv(1, 'tsp', 'fresh parsley').unit], [1, 'tsp'])
+    assert.equal(conv(2, 'tbsp', 'chopped fresh dill').unit, 'tbsp')
+    assert.equal(conv(1, 'cup', 'fresh parsley').unit, 'g', 'a cup of parsley is weighed')
+    assert.deepEqual([conv(2, 'tsp', 'cornstarch').number, conv(2, 'tsp', 'cornstarch').unit], [2, 'tsp'])
+    assert.equal(conv(1, 'tbsp', 'butter').unit, 'g', '14 g of butter is still weighed')
+    assert.equal(conv(1, 'tsp', 'fresh parsley', true).unit, 'g', 'a precision scale weighs it')
+  })
+})

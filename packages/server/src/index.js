@@ -270,7 +270,7 @@ app.get('/api/conversions', asyncRoute(async (req, res) => {
 
 app.post('/api/import', requireUploadToken, asyncRoute(async (req, res) => {
   const body = req.body || {};
-  const { url, text, precisionScale, servings, notes, llm } = body;
+  const { url, text, ref, precisionScale, servings, notes, llm } = body;
   const params = { precisionScale: precisionScale === true, servings: null, notes: null };
 
   if (typeof url === 'string' && url.trim()) {
@@ -288,6 +288,18 @@ app.post('/api/import', requireUploadToken, asyncRoute(async (req, res) => {
       return res.status(413).json({ error: 'text is too large (max 1 MB)' });
     }
     params.text = text;
+    // ref: the page the pasted text came from (the URL the user tried). Recorded as the recipe's ref, never fetched.
+    if (ref !== undefined && ref !== null && ref !== '') {
+      if (typeof ref !== 'string' || ref.length > MAX_URL_LENGTH) return res.status(400).json({ error: 'ref must be an http(s) URL' });
+      let parsedRef;
+      try {
+        parsedRef = new URL(ref.trim());
+      } catch (error) {
+        return res.status(400).json({ error: 'ref is not a valid URL' });
+      }
+      if (!['http:', 'https:'].includes(parsedRef.protocol)) return res.status(400).json({ error: 'ref must be an http(s) URL' });
+      params.ref = parsedRef.href;
+    }
   } else {
     return res.status(400).json({ error: 'url or text is required' });
   }

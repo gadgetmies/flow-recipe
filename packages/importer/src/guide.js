@@ -83,13 +83,14 @@ export function unitsPolicy({ precisionScale = false } = {}) {
   return [
     'MEASUREMENT RULES (code converts units after you answer; do NOT convert them yourself):',
     '- Copy every amount EXACTLY as the source states it, in the source\'s own units: 1 cup flour → number="1" unit="cup", 2 tbsp butter → unit="tbsp", ½ tsp salt → number="0.5" unit="tsp", 8 oz cream cheese → unit="oz", 1 stick butter → unit="stick", 1 lb potatoes → unit="lb", 200 g sugar → unit="g", 3 dl milk → unit="dl". Temperatures likewise: 350 °F → number="350" unit="fahrenheit", 180 °C → unit="celsius". Pan sizes: value="9x13 inch" or "23 cm" as written.',
-    '- Never convert volume to weight, ounces to grams or °F to °C, and never round: a converter with a density table does that deterministically and records what it changed. If the source gives both (e.g. "1 cup (125 g) flour"), use the metric figure.',
+    '- Never convert volume to weight, ounces to grams or °F to °C, and never round: a converter with a density table does that deterministically and records what it changed. When the source states a weight, use it verbatim, also when it is in parentheses or side by side ("1 cup (125 g) flour" → number="125" unit="g"; "1.2 kg / 2.4 lb beef" → number="1.2" unit="kg"); only volumes without a weight are left for the converter.',
+    '- Nordic, German and French spoons may be copied as written (tl, rkl, tsk, msk, krm, ts, ss, TL, EL, c.à.c, c.à.s): they are metric 5 ml / 15 ml spoons and the converter normalises them; kpl/st/Stk are pieces. Package counts (prk, pkt, can, jar, packet) stay counts: name the package size in the ingredient ("cream, 2 dl carton") or measure the contents in g/ml.',
     '- Use the standard unit spellings: g, kg, ml, dl, l, tsp, tbsp, cup, fl oz, oz, lb, stick, pint, quart, fahrenheit, celsius, inch. Write numbers as plain decimals (0.5, not 1/2 or ½).',
     '- Countable things are pieces (unit "pieces"): eggs, garlic cloves, onions, lemons, gelatine sheets, tortillas. "3 large eggs" → number="3" unit="pieces"; put the size in the ingredient properties (size="large") if the source says so.',
-    '- Pinch/dash stay counts (unit "pieces" with the ingredient name saying pinch).',
+    '- Pinch/dash/sprig/bunch/handful stay counts with that word as the unit (number="1" unit="pinch").',
     precisionScale
-      ? '- The cook HAS a precision scale (0.1 g): the converter will weigh small amounts of spices, salt, leavening and extracts; still write them as the source does (1 tsp), and give their measure tasks a precision-scale tool.'
-      : '- The cook has NO precision scale: small amounts of spices, salt, leavening and extracts stay teaspoons/tablespoons; the converter handles it.',
+      ? '- The cook HAS a precision scale (0.1 g): the converter will weigh small amounts of spices, salt, leavening, extracts and fresh herbs; still write them as the source does (1 tsp), and give their measure tasks a precision-scale tool.'
+      : '- The cook has NO precision scale: small amounts (up to 1 tbsp and under 10 g) of spices, salt, leavening, extracts, fresh herbs, starch and the like stay teaspoons/tablespoons; the converter handles it.',
     '- Durations use minutes/hours/seconds.',
   ].join('\n')
 }
@@ -102,11 +103,12 @@ const SCHEDULER_THINKING = `HOW TO WRITE FOR THE SCHEDULER (think about each poi
 3. Unit streams: when work is done per piece (cookies, buns, dumplings, burgers, crepes, portions), split the mass into units with the split operation (parts option = the count) or produce outputs with amount + unit="cookie" etc., and keep the same unit name on every following per-unit output (shape → place on sheet → bake → cool). This is what lets several cooks work in a pipeline. Pick the count from the source yield.
 4. Carriers and capacities: declare tools that hold units with a capacity property in that unit (baking sheet capacity 12 cookie, cooling rack 24 cookie, pan 4 pancake), give per-unit oven work the sheet as a reserved tool (bake-in-oven expands into oven rounds), and return the carrier in <outputs> (<tool ref="baking-sheet"/>) on the task that frees it (usually moving units to the rack or plate) so the sheet can be reused for the next round.
 5. Reserved tools: a bowl or pot that holds a mixture across several tasks is reserved="true" on each of those tasks; set soil="wash"/"rinse"/"none" on tools so dish-washing is planned realistically (a scale or a towel is soil="none").
-6. Holds: put hold (minutes) on outputs that must be used soon (beaten egg whites 10, melted chocolate 15, whipped cream 30, cooked pasta 5, fried food 10, risen dough 15) and leave it off when things keep for long.
+6. Holds: put hold (minutes) only on results that degrade, on the result that degrades (whipped cream 30, beaten egg whites 10, warm milk for yeast 10, melted chocolate 15, boiling water 15, cooked pasta 2, fried food 10, shaped dough before baking 30, hot baked goods 10); leave it off for things that keep (cut vegetables, a made sauce, measured dry ingredients).
 7. Serving: add <serving temperature="hot|cold|ambient" hold="…"/> matching how the dish is eaten (soup hot hold 10, ice cream cold, cookies ambient). Mark the dish output final="true".
 8. Storage: perishables get a storage property (fridge/freezer) on the ingredient (milk, butter, eggs, cream, meat, fish, fresh cheese); butter that must be soft gets an out-of-storage time.
 9. Requirements: tasks needing a knife, a hot pan or the oven state requires="…" when the operation does not already require it; long passive steps (rising, chilling, baking, simmering) use operations with a passive part so cooks are free meanwhile.
-10. Joins: wrap steps that one cook must do in one go without interruption in <join>.`
+10. Joins: wrap steps that one cook must do in one go without interruption in <join>.
+11. One vessel, several steps: steps done one after another in the same pot or pan (brown the meat, then soften the onions in the fat, then add the liquid) must be linked by data, because a shared tool does not order them. Each step consumes the previous step's output; when the earlier result leaves the pot, give that task an extra output for the used pot (e.g. "pot-with-fond") and make it an input of the next step in that pot.`
 
 const OUTPUT_RULES = `OUTPUT RULES (strict):
 - Answer with exactly ONE complete XML document and nothing else: no explanations, no markdown fences, no comments outside the document. Start with <?xml version="1.0" encoding="utf-8"?> and the root <recipe version="2" id="…" ref="SOURCE URL">.

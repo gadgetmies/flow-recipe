@@ -365,7 +365,7 @@
 
     <!-- Gentle cooking in liquid: sauces, stews, soups, reductions. Stir now and then. -->
     <operation name="simmer" min-inputs="1" min-outputs="1"
-               attention="monitored" check-interval="300" check-duration="15" divisible="none" preemptible="never"
+               attention="monitored" check-interval="600" check-duration="15" divisible="none" preemptible="never"
                soil="wash" station="hob" tedium="1" requires="hot-pan">
         <title>Simmer</title>
         <options>

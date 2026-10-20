@@ -229,7 +229,13 @@ export function createGuardedFetch({ allowPrivate = allowPrivateFromEnv(), looku
       }
       let req
       try {
-        req = mod.request(url, { method, headers, lookup: pinned, agent: false, ...(signal ? { signal } : {}) }, (res) => {
+        // A private keep-alive agent per request: `agent: false` would send "Connection: close", which no browser
+        // does (bot filters notice); the agent and its socket are destroyed once the response is over.
+        const agent = new mod.Agent({ keepAlive: true, maxSockets: 1 })
+        const dispose = () => agent.destroy()
+        req = mod.request(url, { method, headers, lookup: pinned, agent, ...(signal ? { signal } : {}) }, (res) => {
+          res.on('close', dispose)
+          res.on('error', dispose)
           let stream = res
           const encoding = String(res.headers['content-encoding'] || '').trim().toLowerCase()
           const decoder = encoding === 'gzip' || encoding === 'x-gzip' ? zlib.createGunzip() : encoding === 'deflate' ? zlib.createInflate() : encoding === 'br' ? zlib.createBrotliDecompress() : null
@@ -263,7 +269,10 @@ export function createGuardedFetch({ allowPrivate = allowPrivateFromEnv(), looku
         fail(e)
         return
       }
-      req.on('error', fail)
+      req.on('error', (e) => {
+        if (req.agent && typeof req.agent.destroy === 'function') req.agent.destroy()
+        fail(e)
+      })
       if (body !== null) req.end(body)
       else req.end()
     })
