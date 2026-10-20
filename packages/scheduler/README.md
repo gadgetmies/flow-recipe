@@ -9,7 +9,8 @@ Keep them in sync when you change anything.
 ```
 src/
   index.js            re-exports everything below
-  units.js            unit normalisation (mass, volume, time, temperature, pieces)
+  units.js            unit normalisation (mass, volume, time, temperature, pieces; imperial/US + length helpers)
+  conversions/        metric unit policy: density table, amount conversion, recipe XML metricizer, unit lint
   inventory.js        default kitchen inventory + helpers
   recipe/             XML → RecipeModel, validation
   catalogue/          operations.xml → Catalogue, duration model, instruction text
@@ -34,6 +35,20 @@ normaliseAmount({ number, unit }) → { number, unit }   // 'grams'|'g' → 'g';
 toSeconds({ number, unit })        → number            // seconds|minutes|hours|min|s|h
 toCelsius({ number, unit })        → number            // celsius|celcius|fahrenheit|c|f
 isMass(unit), isVolume(unit), isCount(unit)             // count: pieces|pcs|piece|units
+```
+
+Imperial / US units are **additive** helpers: the metric tables and functions above are unchanged (`isMass('oz')` is
+still false, `canonicalUnit('oz')` is still `'oz'`), the conversions module uses these instead.
+
+```js
+IMPERIAL_MASS   // g:  oz, ounce(s), lb, lbs, pound(s)
+IMPERIAL_VOLUME // ml: 'fl oz', floz, fluid ounce(s), cup(s) 240, pint(s)/pt 473, quart(s)/qt 946, gallon(s)/gal 3785
+LENGTH          // cm: mm, cm, m (+ long spellings), in, inch, inches, '"'
+BUTTER_STICK_GRAMS = 113, PINCH_GRAMS = 0.3
+imperialKey(unit)                       // 'Fl. Oz.' → 'fl oz'
+isImperialMass, isImperialVolume, isImperialLength, isLength, isFahrenheit, isImperial(unit)
+toMetricBase({ number, unit }) → { number, unit: 'g'|'ml'|'cm' } | null   // metric and imperial
+toCentimeters({ number, unit }) → number | null
 ```
 
 ## 2. RecipeModel (recipe/parse.js)
@@ -285,3 +300,74 @@ node bin/demo.js --recipes buns,tiramisu,negroni --participants 4 --sheets 2 --s
 ```js
 planSession({ recipes: { [id]: xmlString }, operationsXml, session, DOMParser }) → { catalogue, graph, plan }
 ```
+
+## 10. Conversions (conversions/)
+
+`@flow-recipe/scheduler/conversions` (also re-exported from the package index). Pure ESM, browser-safe: the XML
+function takes the `DOMParser` / `XMLSerializer` constructors (browser globals or `@xmldom/xmldom`).
+
+**Unit policy.** Everything metric. Weighable ingredients (flours, sugars, fats, oils, honey and syrups, cheese,
+nuts, chopped produce …) are measured in **g** (kg from 1000 g). Thin liquids (water, milk, cream, stock, wine,
+juice, spirits) stay in **ml / dl / l**. Countables stay **pieces** (eggs, garlic cloves, onions, lemons, gelatine
+sheets). Small amounts (≤ 1 tbsp or < 10 g) of spices, salt, leavening, extracts and other `spoon` entries stay
+**metric spoons** (`tsp` = 5 ml, `tbsp` = 15 ml, to 1/4) — unless the cook has a precision scale
+(`precisionScale: true`), then they are grams with 0.1 g resolution. Temperatures in °C (nearest 5), lengths in cm
+(nearest 0.5).
+
+```js
+DENSITIES        // [{ id, names: [display name, ...aliases], gPerMl, kind, pieceGrams?, spoon?, note?, source }]
+                 // 380 entries; kind: liquid|viscous|fat|powder|granular|spice|leavening|produce|nut|grain|dairy|other
+findDensity(name, properties?) → entry | null
+findDensities(name, properties?) → [entry]          // every matching entry, best first
+normaliseIngredientName(name) → string
+toMetricAmount({ number, unit }, { ingredient, properties?, precisionScale = false, density? })
+  → { number, unit, from: { number, unit }, method: 'unchanged'|'metric'|'density'|'spoon'|'count', density, note }
+roundForKitchen(grams, { precisionScale }) → number   // <10 g: 1 g (0.1 g precision); <250: 1 g; <1000: 5 g; else 10 g
+toCelsiusRounded(fahrenheit) → number                 // 350 → 175
+inchesToCm(inches) → number                           // 9 → 23
+convertInchText('9x13 inch') → '23x33 cm' | null
+metricizeRecipeXml(xml, { DOMParser, XMLSerializer, precisionScale = false })
+  → { xml, changes: [{ taskId, ingredientId, from, to, method, note }], warnings: [string] }
+lintRecipeUnits(model, { precisionScale }) → [{ level: 'warning'|'info', taskId, message }]
+```
+
+`gPerMl` is grams per millilitre *as measured with cups and spoons* (spooned flour, packed brown sugar, chopped
+onion, grated cheese), derived from the King Arthur ingredient weight chart (g per US cup ÷ 236.6) and USDA
+FoodData Central. Notable choices: all-purpose flour 0.53 (125 g/cup), granulated sugar 0.85, brown sugar 0.90
+(packed), butter 0.96 (one stick = 113 g), table salt 1.2 (1 tsp ≈ 6 g). **Kosher salt defaults to Diamond
+Crystal** (0.57 g/ml, 1 tsp ≈ 2.8 g), the brand most US recipe writers assume; Morton kosher salt is ~1.7× denser
+— name it ("Morton kosher salt") or set `<property name="brand" value="Morton"/>` to get 0.96. Bare "coriander" is
+the ground spice, "fresh coriander" / "cilantro" the herb; British "cornflour" is cornstarch. `pieceGrams` is
+informative (egg ≈ 50 g without shell, garlic clove ≈ 5 g, medium onion ≈ 150 g, gelatine sheet ≈ 1.7 g).
+
+`findDensity` normalises the name (case, accents, punctuation, hyphens, plurals), drops leading quantities and
+units and anything in parentheses, prefers the part before the first comma ("unsalted butter, softened"), tries
+"a or b" alternatives in order, prepends descriptive properties (`type`, `kind`, `variety`, `brand`, `form` …, so
+`cinnamon` + `type=ground` is "ground cinnamon"), then picks the alias with the most words that occurs as a
+contiguous run, ties going to the one ending later (the head noun: "orange bitters" → bitters). An entry id also
+matches.
+
+`toMetricAmount` rules, in order:
+- no unit, count units, clove/sprig/can/pinch/dash … → unchanged (`count`); with a precision scale a pinch is 0.3 g;
+  `stick(s)` of a fat → 113 g each;
+- metric mass → unchanged; oz/lb → g (`metric`), except `oz` of a thin liquid, read as fluid ounces → ml;
+- volume (metric spoons/ml/dl/l, or cup/fl oz/pint/quart/gallon):
+  - unknown ingredient → ml (`metric`, note `no density known`); metric volumes stay as they are;
+  - thin liquid → ml (≥ 1 l → l); tiny amounts (≤ 1 tbsp) of extracts and other spoon liquids → spoons (or g with a
+    precision scale); metric volumes stay as they are;
+  - spice / leavening / spoon entry, ≤ 1 tbsp or < 10 g, no precision scale → metric spoons (`spoon`);
+  - anything else with a density → g (`density`).
+- metric lengths stay; inches → cm; unknown units are left unchanged with a note.
+
+`metricizeRecipeXml` converts every `<option name="amount">` (the ingredient comes from the task's input ref: an
+`<ingredient>`'s text and properties, else an earlier output's name), Fahrenheit in any numeric-value (°C, nearest
+5), any other imperial mass / volume / inch numeric-value (tool capacity in quarts → l), output `volume` in US
+units → l, and inch sizes in `size`/`diameter`/`length`/… property values (`9x13 inch` → `23x33 cm`). Each changed
+value gets a comment in front: `<!-- converted from 1 cup (all-purpose flour, 0.53 g/ml) -->`. It is idempotent
+(the second run changes nothing and returns the input string) and returns the input untouched when nothing
+changes; otherwise the document is re-serialised (XML declaration and trailing newline kept).
+
+`lintRecipeUnits` reports `warning`s for non-metric units (options, tool / ingredient properties, output volumes),
+solids measured by volume (ml/dl/l), and spoons used for more than 2 tbsp of a weighable ingredient; `info` for
+small spoon amounts of weighable ingredients, spoon ingredients that could be weighed on a precision scale, volumes
+with no known density, and thin liquids measured by weight.

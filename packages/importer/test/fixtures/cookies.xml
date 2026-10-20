@@ -46,10 +46,6 @@
             <inputs><input ref="salt"/></inputs>
             <outputs><output id="salt-for-dough">salt</output></outputs>
         </task>
-        <task operation="preheat-oven" id="preheat" requires="oven">
-            <options><option name="temperature"><numeric-value number="180" unit="celsius"/></option></options>
-            <outputs><output id="hot-oven">hot oven</output></outputs>
-        </task>
         <task operation="cream" id="cream-butter-sugar">
             <tools><tool ref="bowl" reserved="true" soil="wash"/><tool ref="spatula" soil="wash"/></tools>
             <inputs><input ref="butter-for-dough"/><input ref="sugar-for-dough"/></inputs>
