@@ -21,9 +21,12 @@ import ContentPasteIcon from '@mui/icons-material/ContentPaste'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import LlmSettings from './LlmSettings'
+import { hostOf } from './format'
 
-export const emptySource = () => ({ mode: 'url', url: '', text: '', precisionScale: false, servings: '', notes: '' })
+// `ref`: the page pasted text was copied from (kept as the recipe's source when the site blocked reading it).
+export const emptySource = () => ({ mode: 'url', url: '', text: '', ref: '', precisionScale: false, servings: '', notes: '' })
 
 export function isHttpUrl(s) {
   try {
@@ -91,7 +94,7 @@ export default function SourceForm({ source, onSourceChange, llmInfo, llmInfoErr
                   inputMode="url"
                   value={source.url}
                   placeholder="https://…"
-                  onChange={(e) => set({ url: e.target.value })}
+                  onChange={(e) => set({ url: e.target.value, ref: '' })}
                   onBlur={() => source.url && setTouched(true)}
                   error={touched && !!problem}
                   helperText={touched && problem ? problem : 'Most recipe sites work. The page is read by this app’s server.'}
@@ -100,6 +103,22 @@ export default function SourceForm({ source, onSourceChange, llmInfo, llmInfoErr
                   InputProps={{ spellCheck: false }}
                 />
               ) : (
+                <>
+                {source.ref && (
+                  <Alert
+                    severity="info"
+                    icon={<LinkIcon />}
+                    action={
+                      <Button color="inherit" size="small" href={source.ref} target="_blank" rel="noreferrer" endIcon={<OpenInNewIcon />}>
+                        Open
+                      </Button>
+                    }
+                    sx={{ wordBreak: 'break-word' }}
+                  >
+                    Copy the title, ingredients and steps from <b>{hostOf(source.ref) || source.ref}</b> and paste them below. The link is kept
+                    as the recipe&apos;s source.
+                  </Alert>
+                )}
                 <TextField
                   label="Recipe text"
                   multiline
@@ -111,7 +130,9 @@ export default function SourceForm({ source, onSourceChange, llmInfo, llmInfoErr
                   error={touched && !!problem}
                   helperText={touched && problem ? problem : 'Copy the title, the ingredients and the steps from the page or a cookbook.'}
                   fullWidth
+                  autoFocus={!!source.ref}
                 />
+                </>
               )}
 
               <Box>

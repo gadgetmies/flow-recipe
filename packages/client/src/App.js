@@ -55,6 +55,11 @@ function MainApp() {
   // `?recipe=<id>` (e.g. from the import page) stays in the URL next to the new session id, so that a reload before the
   // session exists still creates it with that recipe (the server answers 409 once it exists, which is ignored).
   const recipeParam = queryParams.recipe && /^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(queryParams.recipe) ? queryParams.recipe : null
+  // `&serveIn=<minutes>` (the import's time estimate) sets the new dish's serve time, so the plan is not late from the start
+  const serveTimeParam = useMemo(() => {
+    const minutes = parseInt(queryParams.serveIn, 10)
+    return recipeParam && minutes > 0 && minutes <= 24 * 60 ? Date.now() + minutes * 60_000 : null
+  }, [queryParams.serveIn, recipeParam])
   useEffect(() => {
     const url = `${baseUrl}?session=${sessionId}${recipeParam ? `&recipe=${recipeParam}` : ''}${mock ? '&mock=1' : ''}`
     window.history.replaceState({ sessionId }, 'Flow Recipe', url)
@@ -98,7 +103,7 @@ function MainApp() {
     isSpectator,
     enabled: nameSet,
     mock,
-    createIfMissing: isHost && !mock && (!queryParams.session || recipeParam) ? { recipeId: recipeParam } : null,
+    createIfMissing: isHost && !mock && (!queryParams.session || recipeParam) ? { recipeId: recipeParam, serveTime: serveTimeParam } : null,
   })
 
   // keep the spectator flag in sync with what the server says about me
@@ -338,7 +343,12 @@ function MainApp() {
 
             <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 4 }} elevation={3}>
               <BottomNavigation
-                sx={{ '& .Mui-selected': { '& .MuiSvgIcon-root, & .MuiBottomNavigationAction-label': { color: 'primary.main' } } }}
+                sx={{
+                  // six actions fit a 360 px phone: drop MUI's 80 px minimum width
+                  '& .MuiBottomNavigationAction-root': { minWidth: 0, px: 0.5 },
+                  '& .MuiBottomNavigationAction-label': { whiteSpace: 'nowrap' },
+                  '& .Mui-selected': { '& .MuiSvgIcon-root, & .MuiBottomNavigationAction-label': { color: 'primary.main' } },
+                }}
                 showLabels
                 value={tab}
                 onChange={(event, newValue) => selectTab(newValue)}

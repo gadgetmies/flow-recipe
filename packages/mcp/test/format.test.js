@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseAmount, trimDeep, isValidRecipeId, sniffRecipeAttributes, formatDuration, kebab } from '../src/format.js'
+import { parseAmount, trimDeep, isValidRecipeId, isServerRecipeId, sniffRecipeAttributes, formatDuration, kebab } from '../src/format.js'
 
 test('parseAmount reads recipe amounts', () => {
   assert.equal(parseAmount(2), 2)
@@ -25,6 +25,8 @@ test('ids, attributes, durations', () => {
   assert.ok(isValidRecipeId('chocolate-chip-cookies'))
   assert.ok(!isValidRecipeId('../etc/passwd'))
   assert.ok(!isValidRecipeId('Buns'))
+  assert.ok(isServerRecipeId('My_Recipe-2') && isServerRecipeId('a'.repeat(100)))
+  assert.ok(!isServerRecipeId('../etc/passwd') && !isServerRecipeId('a'.repeat(101)) && !isServerRecipeId('-x'))
   assert.deepEqual(sniffRecipeAttributes('<recipe version="2" id=\'buns\'>\n<title>Buns</title>'), { version: '2', id: 'buns', title: 'Buns' })
   assert.equal(formatDuration(5400), '1 h 30 min')
   assert.equal(formatDuration(600), '10 min')

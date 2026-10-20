@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react'
 import { Alert, AlertTitle, Box, Button, Card, CardContent, Chip, LinearProgress, Stack, Step, StepContent, StepLabel, Stepper, Typography } from '@mui/material'
 import ContentPasteIcon from '@mui/icons-material/ContentPaste'
 import ReplayIcon from '@mui/icons-material/Replay'
+import BlockIcon from '@mui/icons-material/Block'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { fmtDuration } from '../utils/time'
+import { fmtJobDetail, hostOf } from './format'
 
 const LABELS = {
   fetching: 'Read the recipe page',
@@ -31,14 +34,21 @@ export function stepsFor(stage, attempts, repaired, fromText) {
 }
 
 function isFetchProblem(job) {
-  return job?.stage === 'fetching' || /fetch|forbidden|403|blocked|robot|captcha|timed? ?out/i.test(job?.error || '')
+  return job?.stage === 'fetching' || /fetch|forbidden|\b40[1-9]\b|\b429\b|blocked|robot|captcha/i.test(job?.error || '')
+}
+
+/** The error text without the importer's own "paste the recipe text instead" advice, which the card already gives. */
+function fetchErrorText(error) {
+  return String(error || '')
+    .replace(/\s*\(the site may block automated requests; paste the recipe text instead\)/i, '')
+    .trim()
 }
 
 function isKeyProblem(job) {
   return /api key|unauthori[sz]ed|401|invalid.*key|authentication/i.test(job?.error || '')
 }
 
-export default function ImportProgress({ job, fromText, sourceLabel, startedAt, onCancel, onRetry, onPasteText }) {
+export default function ImportProgress({ job, fromText, sourceLabel, sourceUrl, startedAt, onCancel, onRetry, onPasteText }) {
   const [now, setNow] = useState(Date.now())
   const [repaired, setRepaired] = useState(false)
   const failed = job?.status === 'error'
@@ -54,51 +64,75 @@ export default function ImportProgress({ job, fromText, sourceLabel, startedAt, 
   }, [stage])
 
   const steps = stepsFor(stage, job?.attempts || 1, repaired, fromText)
-  const active = Math.max(0, steps.findIndex((s) => s.key === stage))
+  // 'queued' (before the first report) shows the first step; 'done' (the result is being prepared) shows all done
+  const active = stage === 'done' ? steps.length : Math.max(0, steps.findIndex((s) => s.key === stage))
   const round = Math.max(1, (job?.attempts || 2) - 1)
 
   if (failed) {
     const fetchProblem = !fromText && isFetchProblem(job)
-    return (
-      <Stack spacing={2}>
-        <Alert severity="error">
-          <AlertTitle>{fetchProblem ? 'The site did not let us read the page' : 'The import failed'}</AlertTitle>
-          {job.error}
-        </Alert>
-        <Card>
-          <CardContent>
-            {fetchProblem ? (
+    if (fetchProblem) {
+      const host = hostOf(sourceUrl) || 'The site'
+      return (
+        <Stack spacing={2}>
+          <Card>
+            <CardContent>
               <Stack spacing={2}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <BlockIcon color="warning" />
+                  <Typography variant="h6">{host} did not let us read the page</Typography>
+                </Stack>
                 <Typography>
-                  Some recipe sites block automatic downloads. Open the page on your phone, select the title, ingredients and steps, copy
-                  them, and paste the text here instead.
+                  Many recipe sites block automatic downloads. Copy the recipe from the page yourself: open it, select the title,
+                  ingredients and steps, copy them and paste them in the next step. We keep the link as the recipe&apos;s source.
                 </Typography>
                 <Button variant="contained" size="large" startIcon={<ContentPasteIcon />} onClick={onPasteText} fullWidth>
-                  Paste the text instead
+                  Paste the recipe text
                 </Button>
+                {sourceUrl && (
+                  <Button href={sourceUrl} target="_blank" rel="noreferrer" startIcon={<OpenInNewIcon />} fullWidth variant="outlined">
+                    Open the recipe page
+                  </Button>
+                )}
                 <Button onClick={onRetry} startIcon={<ReplayIcon />}>
                   Try the link again
                 </Button>
               </Stack>
-            ) : (
-              <Stack spacing={2}>
-                <Typography>
-                  {isKeyProblem(job)
-                    ? 'The AI provider did not accept the API key. Check the key and the provider under “AI model”.'
-                    : 'You can try again; the AI model sometimes needs a second go. Adding a note for the AI can help too.'}
-                </Typography>
-                <Button variant="contained" size="large" startIcon={<ReplayIcon />} onClick={onRetry} fullWidth>
-                  Try again
-                </Button>
-                <Button onClick={onCancel}>Change the source or settings</Button>
-              </Stack>
-            )}
+            </CardContent>
+          </Card>
+          {job.error && (
+            <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-word', px: 1 }}>
+              Details: {fetchErrorText(job.error)}
+            </Typography>
+          )}
+        </Stack>
+      )
+    }
+    return (
+      <Stack spacing={2}>
+        <Alert severity="error">
+          <AlertTitle>The import failed</AlertTitle>
+          {job.error}
+        </Alert>
+        <Card>
+          <CardContent>
+            <Stack spacing={2}>
+              <Typography>
+                {isKeyProblem(job)
+                  ? 'The AI provider did not accept the API key. Check the key and the provider under “AI model”.'
+                  : 'You can try again; the AI model sometimes needs a second go. Adding a note for the AI can help too.'}
+              </Typography>
+              <Button variant="contained" size="large" startIcon={<ReplayIcon />} onClick={onRetry} fullWidth>
+                Try again
+              </Button>
+              <Button onClick={onCancel}>Change the source or settings</Button>
+            </Stack>
           </CardContent>
         </Card>
       </Stack>
     )
   }
 
+  const detail = fmtJobDetail(job?.detail)
   return (
     <Card>
       <CardContent>
@@ -121,9 +155,9 @@ export default function ImportProgress({ job, fromText, sourceLabel, startedAt, 
                   <Typography variant="body2" color="text.secondary">
                     {HINTS[s.key]}
                   </Typography>
-                  {job?.detail && job.detail !== s.label && (
-                    <Typography variant="body2" sx={{ mt: 0.5 }}>
-                      {job.detail}
+                  {detail && detail !== s.label && (
+                    <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
+                      {detail}
                     </Typography>
                   )}
                 </StepContent>

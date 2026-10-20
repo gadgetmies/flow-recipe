@@ -16,6 +16,9 @@ const UNIT_WORDS = new Set([
   'small', 'medium', 'large', 'x', 'of', 'a', 'an', 'to', 'or', 'and', 'plus', 'tl', 'rkl', 'ruokalusikallinen', 'teelusikallinen',
 ])
 
+/** Names that contain an alias but are something else entirely (no density is better than a wrong one). */
+const NOT_AN_ENTRY = [/\bice creams?\b/, /\bwater chestnuts?\b/]
+
 /** Properties whose values describe the ingredient itself (not storage etc.) and help the match. */
 const DESCRIPTIVE_PROPERTIES = ['type', 'kind', 'variety', 'brand', 'form', 'cut', 'state', 'style', 'grind']
 
@@ -115,7 +118,13 @@ export function findDensity(ingredientName, properties) {
   const byId = DENSITIES.find((e) => e.id === raw.trim().toLowerCase())
   if (byId) return byId
 
-  const extra = propertyWords(properties)
+  // Compound names whose words would match a different ingredient ("ice cream" is not cream).
+  const normalised = normaliseIngredientName(raw)
+  if (NOT_AN_ENTRY.some((re) => re.test(normalised))) return null
+
+  // A parenthetical without numbers qualifies the name like a property: "kosher salt (Morton)", "sugar (light brown)".
+  const qualifiers = [...raw.matchAll(/\(([^)0-9]{1,60})\)/g)].map((m) => m[1]).join(' ')
+  const extra = `${propertyWords(properties)} ${qualifiers}`.trim()
   const cleaned = raw.replace(/\([^)]*\)/g, ' ').replace(/\[[^\]]*\]/g, ' ')
   const [head, ...rest] = cleaned.split(/[,;:]/)
   // Main part first (alternatives in order: "butter or margarine" → butter), then the trailing notes.

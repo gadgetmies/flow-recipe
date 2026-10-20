@@ -3,7 +3,10 @@
 export function measurementRules({ precisionScale = false } = {}) {
   return `## Measurement rules (enforced by convert_recipe_units / check_recipe)
 
-- Everything metric. Temperatures in °C (F → C, rounded to 5 °C). Lengths and pan sizes in cm.
+- Draft amounts EXACTLY as the source states them, in its units (\`1\` \`cup\`, \`2\` \`tbsp\`, \`8\` \`oz\`, \`1\` \`stick\`,
+  \`350\` \`fahrenheit\`, \`9x13 inch\`); never convert volume → weight or °F → °C yourself. convert_recipe_units is the
+  source of truth: it converts to the metric policy below and notes each change.
+- After conversion everything is metric. Temperatures in °C (rounded to 5 °C). Lengths and pan sizes in cm.
 - Weigh what can be weighed: solids, powders, flours, sugars, fats, butter, chocolate, nuts, cheese, chopped
   produce and viscous liquids (honey, syrup, oil) → grams (\`g\`, \`kg\`), using the density table (lookup_density).
 - Thin liquids (water, milk, stock, wine, cream, juice, spirits) stay volumes: \`ml\`, \`dl\`, \`l\`.
@@ -13,7 +16,7 @@ export function measurementRules({ precisionScale = false } = {}) {
       ? 'THE USER HAS A PRECISION SCALE → grams with 0.1 g resolution (e.g. 3.2 g salt, 0.6 g cinnamon).'
       : 'metric spoons (`tsp` = 5 ml, `tbsp` = 15 ml, nearest ¼ tsp). The user has no precision scale.'
   }
-- \`cup\` = 240 ml, \`stick\` of butter = 113 g, \`oz\` = 28.35 g, \`lb\` = 453.6 g, \`fl oz\` = 29.57 ml.
+- \`cup\` = US cup 236.6 ml, \`stick\` of butter = 113 g, \`oz\` = 28.35 g, \`lb\` = 453.6 g, \`fl oz\` = 29.57 ml.
 - Never do the arithmetic by hand when a tool can: use convert_amount for single amounts and convert_recipe_units on
   the whole document (it leaves a \`<!-- converted from … -->\` comment next to each changed value).
 `
@@ -25,8 +28,8 @@ export const WORKFLOW = `## Workflow: create a flow-recipe recipe from a URL or 
    Know whether the user has a precision scale (0.1 g); ask once if they have not said.
 2. Read the authoring guide (get_authoring_guide) — XML format, operations, measurement rules, checklist.
 3. Draft ONE complete \`<recipe version="2">\` document. Exploit the scheduler: split per-unit work into unit
-   streams (\`unit="cookie"\`, split with \`unit-size\`), return carriers (sheets, pans, bowls) in \`<outputs>\`,
-   tool capacities, \`hold\` on outputs that can wait, \`<serving>\`, storage properties, \`soil\`, \`requires\`,
+   streams (\`unit="cookie"\`, split with \`parts\`), return carriers (sheets, pans, bowls) in \`<outputs>\`,
+   tool capacities, \`hold\` only on results that degrade, \`<serving>\`, storage properties, \`soil\`, \`requires\`,
    \`reserved\` tools, \`bake-in-oven\` with the sheet tool, \`final="true"\` outputs. Only use operations from the
    catalogue (list_operations). Set \`ref\` to the source URL.
 4. convert_recipe_units { xml, precisionScale } and continue with the returned XML.

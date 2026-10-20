@@ -20,6 +20,7 @@ import {
   Link,
   List,
   ListItem,
+  ListItemText,
   MenuItem,
   Select,
   Slider,
@@ -61,7 +62,26 @@ function useDebounced(fn, ms = 400) {
 
 // ---------- dishes ----------
 
+/** Second line of a recipe in the picker: the source site of an imported recipe, and the id when titles repeat. */
+function recipeSecondary(r, duplicateTitles) {
+  const parts = []
+  if (r.source === 'imported' && r.sourceUrl) {
+    try {
+      parts.push(new URL(r.sourceUrl).hostname.replace(/^www\./, ''))
+    } catch (e) {
+      // not a URL
+    }
+  }
+  if (duplicateTitles.has(r.title) || (r.source === 'imported' && !parts.length)) parts.push(`id ${r.id}`)
+  return parts.length ? parts.join(' · ') : null
+}
+
 function DishesEditor({ dishes, recipes, onChange, readOnly, importPath }) {
+  const duplicateTitles = useMemo(() => {
+    const counts = new Map()
+    for (const r of recipes) counts.set(r.title, (counts.get(r.title) || 0) + 1)
+    return new Set([...counts].filter(([, n]) => n > 1).map(([t]) => t))
+  }, [recipes])
   const [local, setLocal] = useState(dishes)
   useEffect(() => setLocal(dishes), [dishes])
   const emit = useDebounced((next) => onChange(next.map(({ title, ...d }) => d)))
@@ -115,11 +135,35 @@ function DishesEditor({ dishes, recipes, onChange, readOnly, importPath }) {
                   const r = recipes.find((x) => x.id === e.target.value)
                   update(i, { recipeId: e.target.value, title: r?.title || e.target.value })
                 }}
+                renderValue={(value) => {
+                  const r = recipes.find((x) => x.id === value)
+                  return (
+                    <Box component="span" sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                      <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {r?.title || d.title || value}
+                      </Box>
+                      {r && duplicateTitles.has(r.title) && (
+                        <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1, flexShrink: 0 }}>
+                          {r.id}
+                        </Typography>
+                      )}
+                      {r?.source === 'imported' && <Chip size="small" variant="outlined" color="secondary" label="imported" sx={{ ml: 1, height: 20 }} />}
+                    </Box>
+                  )
+                }}
               >
                 {(recipes.some((r) => r.id === d.recipeId) ? recipes : [...recipes, { id: d.recipeId, title: d.title || d.recipeId }]).map((r) => (
                   <MenuItem key={r.id} value={r.id}>
-                    {r.title}
-                    {r.source === 'imported' && <Chip size="small" variant="outlined" color="secondary" label="imported" sx={{ ml: 1, height: 20 }} />}
+                    <ListItemText
+                      primary={
+                        <>
+                          {r.title}
+                          {r.source === 'imported' && <Chip size="small" variant="outlined" color="secondary" label="imported" sx={{ ml: 1, height: 20 }} />}
+                        </>
+                      }
+                      secondary={recipeSecondary(r, duplicateTitles)}
+                      sx={{ my: 0 }}
+                    />
                   </MenuItem>
                 ))}
               </Select>

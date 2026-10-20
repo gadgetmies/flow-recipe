@@ -42,16 +42,20 @@ structure of the work rather than transcribing paragraphs:
   each ingredient plus `cream` and `beat` (or whatever the catalogue has). Every ingredient is measured by a
   `measure` task whose `amount` option holds the quantity.
 - **Unit streams for per-unit work.** When something is made in pieces (cookies, buns, dumplings, patties,
-  skewers, pancakes, portions), `split` the mass with a `unit-size` option into an output with
+  skewers, pancakes, portions), `split` the mass with a `parts` option (the count, e.g. 24) into an output with
   `amount="24" unit="cookie"`, and keep `unit="cookie"` on every downstream output (shape → place on sheet →
   bake → cool). This lets several cooks pipeline the work. The amount must be the same through the stream.
+  (`unit-size` only works when the producing output carries an `amount` in g; prefer `parts`.)
 - **Carriers and tool capacities.** Give carrier tools a `capacity` property in units (`<numeric-value
   number="12" unit="cookie"/>` on a baking sheet, rack, pan). Use the sheet as a `reserved="true"` tool of
   `place-on-sheet` and `bake-in-oven`, and return it in the `<outputs>` of the task that releases it
   (`<tool ref="baking-sheet"/>`), so it can be reused for the next round. Return bowls/pans after the step
   that empties them.
-- **Holds.** Add `hold="10" hold-unit="minutes"` to outputs that can wait that long (cut vegetables, made
-  sauce, dough balls); omit it for things that must be used immediately. Use the recipe's own timings.
+- **Holds.** `hold` (minutes) is how long a result stays good before its consumer must start. Put it **only on
+  results that degrade** — whipped cream 30, beaten egg whites 10, warm milk for yeast 10, melted chocolate 15,
+  boiling water 15, cooked pasta 2, fried food 10, shaped dough before baking 30, hot baked goods 10 — on the
+  result that degrades, not on a later transfer. **Omit it** for things that keep (cut vegetables, a made sauce,
+  measured dry ingredients): no hold means "keeps indefinitely" (RECIPE.spec.md §6).
 - **Serving.** `<serving temperature="hot|cold|ambient" hold="…" hold-unit="minutes"/>` — how long the dish
   stays good once finished.
 - **Storage.** Ingredient properties for storage (e.g. fridge items and `out-of-storage` times) as in the guide.
@@ -62,7 +66,10 @@ structure of the work rather than transcribing paragraphs:
 - **Final outputs.** Mark what is served with `final="true"`. Use `<join>` only where the guide says to.
 - Ids: lowercase kebab-case, unique across ingredients, tools, outputs and tasks. Recipe id from the title
   (e.g. `chocolate-chip-cookies`).
-- Write amounts as in the source (cups, oz, °F are fine at this point) — the next step converts them.
+- **Units: copy the source.** Write every amount exactly as the source states it, in its own units
+  (`1` `cup`, `2` `tbsp`, `0.5` `tsp`, `8` `oz`, `1` `stick`, `350` `fahrenheit`, `9x13 inch`). Do not convert
+  volume → weight or °F → °C yourself — `convert_recipe_units` does it deterministically from its density table
+  and notes every change. Decimals only (`0.5`, not `1/2`); countables are `pieces`.
 
 ## 4. Convert units
 
@@ -91,7 +98,7 @@ Stop after ~5 rounds and report what is still wrong instead of looping.
 Before uploading, show (keep it short):
 
 - Title, id, servings / yield, source URL.
-- Ingredients with metric amounts (weights where applicable); mark converted ones ("1 cup → 127 g").
+- Ingredients with metric amounts (weights where applicable); mark converted ones ("1 cup flour → 125 g").
 - Number of steps; estimated time with 1 cook and with 3 cooks; detected pipelines (e.g. "cookies: shape → bake
   → cool, 24 units on 2 sheets").
 - Assumptions you made (unknown densities, durations you estimated, pan sizes) and accepted warnings.

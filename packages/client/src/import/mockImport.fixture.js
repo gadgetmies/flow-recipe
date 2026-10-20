@@ -165,8 +165,15 @@ export function makeMockResult({ precisionScale = false, url = MOCK_SOURCE_URL, 
     xml: MOCK_XML,
     check: makeMockCheck({ precisionScale }),
     conversions: precisionScale ? MOCK_PRECISION_CONVERSIONS : MOCK_CONVERSIONS,
-    source: { url, title: 'The Best Chewy Chocolate Chip Cookies', structured: true },
+    source: { url, title: 'The Best Chewy Chocolate Chip Cookies', structured: true, times: { prep: 1200, cook: 1320, total: 4500 } },
     attempts,
     llm: { provider: 'anthropic', model: 'claude-sonnet-5-5', baseUrl: null, hasKey: true },
   }
 }
+
+/** Recipes imported earlier on the simulated server. */
+export const MOCK_IMPORTED_RECIPES = [
+  { id: 'beef-stew', title: 'Beef stew', serving: { temperature: 'hot', hold: 1800 }, source: 'imported', sourceUrl: 'https://www.recipetineats.com/beef-stew/' },
+  { id: 'beef-stew-2', title: 'Beef stew', serving: { temperature: 'hot', hold: 1800 }, source: 'imported', sourceUrl: 'https://www.bbcgoodfood.com/recipes/beef-stew' },
+  { id: 'korvapuustit', title: 'Korvapuustit', serving: null, source: 'imported', sourceUrl: null },
+]

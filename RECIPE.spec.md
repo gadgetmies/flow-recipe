@@ -79,7 +79,8 @@ unit="cookie"/></property></properties></tool>`
 
 - `operation` from §10; every task gets an `id`.
 - **Options** `<option name><numeric-value number unit/></option>`: always write the unit — durations
-  `minutes|hours|seconds`, temperatures `celsius`, amounts `g|kg|ml|dl|l|tsp|tbsp|pieces`. Default units differ
+  `minutes|hours|seconds`, temperatures as the source gives them (`celsius`, or `fahrenheit` — converted for you),
+  amounts in the source's units (§8). Default units differ
   per operation (`raise` seconds, `chill` hours). Options not in the catalogue do nothing.
 - **Inputs** `<input ref/>`: an ingredient, a tool (consumables) or an output of an EARLIER task (document order).
   `amount="10"` consumes only part of an output (10 of 24 ladyfingers); otherwise all of it.
@@ -155,16 +156,24 @@ unit="cookie"/></property></properties></tool>`
   ("salt to taste", "oil for greasing", "flour for dusting") take the ingredient directly as an input of the task.
 - Tools: `<tool ref="kitchen-scale" soil="none"/>` when weighing (`precision-scale` below 10 g if the user has one);
   optionally the reserved container it goes into (several measures may share one bowl).
-- **Metric only** — never cups, ounces, pounds, sticks, °F or inches:
-  - **grams** (g, kg) first: flour, sugar, butter, fats, chocolate, nuts, grains, rice, pasta, cheese, chopped
-    produce, honey, syrup, oil and other viscous liquids;
+- **Write amounts exactly as the source states them, in its own units** — `1 cup`, `2 tbsp`, `0.5 tsp`, `8 oz`,
+  `1 stick`, `1 lb`, `200 g`, `3 dl`; temperatures `350` `fahrenheit` or `180` `celsius`; pan sizes `9x13 inch`.
+  Never convert volume to weight, ounces to grams or °F to °C yourself, and never round: the deterministic converter
+  (`metricizeRecipeXml`, run by the importer and by `convert_recipe_units`) is the source of truth. It converts with
+  its density table and kitchen rounding and leaves `<!-- converted from 1 cup (all-purpose flour, 0.53 g/ml) -->`
+  next to every changed value. When the source gives both ("1 cup (125 g) flour"), use the metric figure.
+- Unit spellings: `g kg ml dl l tsp tbsp cup fl oz oz lb stick pint quart` (amounts), `celsius fahrenheit`,
+  `inch`/`cm`. Decimals only (`0.5`, not `1/2`). Countables are `pieces` ("3 large eggs" → `3` `pieces`, size as a
+  `size` property).
+- After conversion the recipe follows the metric kitchen policy:
+  - **grams** (g, kg): flour, sugar, butter, fats, chocolate, nuts, grains, rice, pasta, cheese, chopped produce,
+    honey, syrup, oil and other viscous liquids;
   - **ml / dl / l** for thin liquids: water, milk, stock, wine, cream, juice, spirits;
   - **`tsp` (5 ml) / `tbsp` (15 ml)** for small amounts (≤ 1 tbsp, under ~10 g) of salt, spices, baking powder,
     baking soda, yeast, extracts — unless the user has a precision scale: then grams with one decimal;
   - **`pieces`** for countables: eggs, onions, garlic cloves, lemons, fillets, gelatine sheets;
-  - temperatures `celsius`, lengths cm.
-- A deterministic converter fixes leftover units afterwards (cups → g via densities, °F → °C), but write metric
-  yourself.
+  - temperatures `celsius`, lengths cm. A cup is the US cup (236.6 ml).
+  Amounts the converter cannot handle (unknown units, no density) are reported by the unit lint; fix those by hand.
 - **Scaling**: every amount, `parts` and stream `amount` is for the yield the source states (24 cookies, 4
   servings). Never rescale; the scheduler scales the whole recipe.
 
@@ -177,13 +186,14 @@ unit="cookie"/></property></properties></tool>`
 5. Every output consumed or `final="true"`.
 6. One task per per-unit action on the stream; carriers have capacity in the stream unit, ride along into the bake
    as a reserved tool and are returned in `<outputs>` where the units leave them.
-7. One measure per ingredient use, metric, amounts for the stated yield.
+7. One measure per ingredient use, amounts as the source states them (the converter metricizes), for the stated yield.
 8. Holds on degrading results, `<serving>` set, perishables with `storage`.
 
 Mistakes: `name` attributes or amounts on ingredients; preheat tasks; `wait` instead of `rest`/`cool`; `portion` or
 `pieces` as a stream unit; one "shape and bake" task; two inputs to `bake-in-oven`; `<output>` in instructions;
 instructions without any embedded ref; the baking sheet never returned; `<batch>` or nested `<tasks>` (v1,
-rejected); cups/ounces; durations without a unit; stray outputs nobody uses.
+rejected); converting cups/ounces/°F yourself instead of copying the source; fractions like `1/2`; unit words
+the converter does not know (`smidgen`, `knob`); durations without a unit; stray outputs nobody uses.
 
 ## 10. Operations
 

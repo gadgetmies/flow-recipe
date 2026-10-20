@@ -2,19 +2,24 @@
 // the progress screen behaves like the real one. A URL containing "blocked" fails while fetching; `&nollm=1` on the
 // page URL pretends the server has no LLM configured.
 
-import { makeMockCheck, makeMockResult, MOCK_SOURCE_URL, RECIPES_FIXTURE_IDS } from './mockImport.fixture'
+import { RECIPES_FIXTURE } from '../mocks/session.fixture'
+import { makeMockCheck, makeMockResult, MOCK_IMPORTED_RECIPES, MOCK_SOURCE_URL, RECIPES_FIXTURE_IDS } from './mockImport.fixture'
 
 /** Polling interval and mock stage length; tests make them short. */
 export const IMPORT_TIMING = { pollMs: 1000, mockStageMs: 1100 }
 
+// The same `detail` shapes as the real server (importJobs.js + importer/src/import.js): the URL string while fetching,
+// `{ attempt }` objects while writing, converting and checking, `{ attempts, ok }` at the end. Pasted text skips fetching.
 const STAGES = [
-  ['fetching', 'Found schema.org recipe data: 9 ingredients, 8 steps'],
-  ['generating', 'Attempt 1'],
-  ['converting', '7 amounts converted (cups → g, °F → °C)'],
-  ['checking', 'Planning with 1 and 3 cooks'],
-  ['repairing', 'Fixing 1 problem: output "dough" is never used'],
-  ['converting', 'Nothing left to convert'],
-  ['checking', 'Planning with 1 and 3 cooks'],
+  ['queued', () => null],
+  ['fetching', (body) => body.url],
+  ['generating', () => ({ attempt: 1 })],
+  ['converting', () => ({ attempt: 1 })],
+  ['checking', () => ({ attempt: 1 })],
+  ['repairing', () => ({ attempt: 2 })],
+  ['converting', () => ({ attempt: 2 })],
+  ['checking', () => ({ attempt: 2 })],
+  ['done', () => ({ attempts: 2, ok: true })],
 ]
 
 const jobs = new Map()
@@ -51,18 +56,27 @@ export function startImport(body = {}) {
 export function getImportJob(jobId) {
   const job = jobs.get(jobId)
   if (!job) return Promise.reject(new MockError('Import job not found', 404))
+  const stages = job.body.url ? STAGES : STAGES.filter(([stage]) => stage !== 'fetching')
   const step = Math.floor((Date.now() - job.startedAt) / IMPORT_TIMING.mockStageMs)
   const blocked = /blocked/i.test(job.body.url || '')
-  if (blocked && step >= 1) {
-    return delay({ id: jobId, status: 'error', stage: 'fetching', detail: null, attempts: 0, error: 'Fetching the page failed: 403 Forbidden (the site blocks automated requests)' })
+  if (blocked && step >= 2) {
+    return delay({
+      id: jobId,
+      status: 'error',
+      stage: 'fetching',
+      detail: job.body.url,
+      attempts: 0,
+      error: 'The page returned HTTP 403 Forbidden (the site may block automated requests; paste the recipe text instead)',
+    })
   }
-  if (step >= STAGES.length) {
+  if (step >= stages.length) {
     const result = makeMockResult({ precisionScale: !!job.body.precisionScale, url: job.body.url || MOCK_SOURCE_URL })
-    if (job.body.text) result.source = { url: null, title: 'Pasted text', structured: false }
+    if (job.body.text) result.source = { url: null, title: null, structured: false, times: {} }
     return delay({ id: jobId, status: 'done', stage: 'done', detail: null, attempts: 2, result })
   }
-  const [stage, detail] = STAGES[step]
-  return delay({ id: jobId, status: 'running', stage, detail, attempts: step >= 4 ? 2 : 1 })
+  const [stage, detail] = stages[step]
+  const attempts = stage === 'queued' || stage === 'fetching' ? 0 : step >= stages.findIndex(([s]) => s === 'repairing') ? 2 : 1
+  return delay({ id: jobId, status: 'running', stage, detail: detail(job.body), attempts })
 }
 
 export function forgetImportJob(jobId) {
@@ -84,10 +98,26 @@ export function convertRecipe(xml) {
   return delay({ xml, changes: [], warnings: [] })
 }
 
-export function saveRecipe({ xml, id }) {
+// Imported recipes of the simulated server (two "Beef stew" imports show the duplicate-title case).
+const imported = new Map(MOCK_IMPORTED_RECIPES.map((r) => [r.id, { ...r }]))
+
+export function listRecipes() {
+  return delay([...RECIPES_FIXTURE.map((r) => ({ ...r, source: 'builtin' })), ...[...imported.values()].map(clone)])
+}
+
+export function deleteRecipe(id) {
+  if (RECIPES_FIXTURE_IDS.includes(id)) return Promise.reject(new MockError('Built-in recipes cannot be deleted', 403))
+  if (!imported.delete(id)) return Promise.reject(new MockError('Recipe not found', 404))
+  return delay({ id, deleted: true })
+}
+
+export function saveRecipe({ xml, id, overwrite = false }) {
   const finalId = id || idOf(xml)
   if (RECIPES_FIXTURE_IDS.includes(finalId)) {
     return Promise.reject(new MockError(`A built-in recipe already uses the id "${finalId}"`, 409))
   }
+  if (imported.has(finalId) && !overwrite) return Promise.reject(new MockError(`A recipe with the id "${finalId}" already exists`, 409))
+  const ref = (/<recipe\b[^>]*\sref="([^"]*)"/.exec(xml) || [])[1] || null
+  imported.set(finalId, { id: finalId, title: titleOf(xml) || finalId, serving: null, source: 'imported', sourceUrl: ref })
   return delay({ id: finalId, title: titleOf(xml), check: clone(makeMockCheck({ id: finalId, title: titleOf(xml) || undefined })) })
 }

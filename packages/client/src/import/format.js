@@ -39,6 +39,8 @@ const UNIT_LABELS = {
   hours: 'h',
 }
 
+const PIECE_UNITS = new Set(['pieces', 'piece', 'pcs', 'pc'])
+
 const PLURAL_UNITS = new Set(['cup', 'stick', 'pint', 'quart', 'gallon', 'dash', 'pinch', 'clove', 'sheet', 'can'])
 
 /** 285 → "285", 2.5 → "2.5", 0.333333 → "0.33" */
@@ -72,6 +74,7 @@ export function unitLabel(unit, number = 1) {
 /** { number: 250, unit: 'g' } → "250 g" */
 export function fmtAmount(a, { fraction = false } = {}) {
   if (!a) return ''
+  if (PIECE_UNITS.has(String(a.unit || '').toLowerCase())) return `× ${fmtNumber(a.number)}`
   const unit = unitLabel(a.unit, a.number)
   const num = fraction || unit === 'tsp' || unit === 'tbsp' ? fmtFraction(a.number) : fmtNumber(a.number)
   return unit ? `${num} ${unit}` : num
@@ -137,4 +140,86 @@ export function fmtHold(seconds) {
   if (!seconds) return null
   if (seconds >= 3600) return `${fmtNumber(seconds / 3600)} h`
   return `${Math.round(seconds / 60)} min`
+}
+
+/** Host name of a URL without "www.", or null. */
+export function hostOf(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch (e) {
+    return null
+  }
+}
+
+/**
+ * A human line for an import job's `detail`, which the server passes through from the importer: a string (the URL),
+ * a number, or an object such as `{ url }`, `{ text: true }`, `{ attempt }` or `{ attempts, ok }`. Null when there is
+ * nothing worth showing. Never returns an object, so it is always safe to render.
+ */
+export function fmtJobDetail(detail) {
+  if (detail === null || detail === undefined || detail === '') return null
+  if (typeof detail === 'string') return /^https?:\/\//i.test(detail) ? `Reading ${hostOf(detail) || detail}` : detail
+  if (typeof detail === 'number') return Number.isFinite(detail) ? String(detail) : null
+  if (typeof detail !== 'object' || Array.isArray(detail)) return null
+  if (typeof detail.message === 'string' && detail.message) return detail.message
+  if (typeof detail.url === 'string' && detail.url) return `Reading ${hostOf(detail.url) || detail.url}`
+  if (Number.isFinite(detail.attempt)) return detail.attempt > 1 ? `Attempt ${detail.attempt}` : null
+  return null
+}
+
+/** Total time the source itself states, in seconds (`times.total`, else prep + cook), or null. */
+export function sourceTotalSeconds(source) {
+  const t = source?.times
+  if (!t || typeof t !== 'object') return null
+  if (Number.isFinite(t.total) && t.total > 0) return t.total
+  const sum = (Number.isFinite(t.prep) ? t.prep : 0) + (Number.isFinite(t.cook) ? t.cook : 0)
+  return sum > 0 ? sum : null
+}
+
+/** "1 h 30 min" / "45 min", rounded to whole minutes. */
+export function fmtLongDuration(seconds) {
+  if (!Number.isFinite(seconds)) return ''
+  const m = Math.max(1, Math.round(seconds / 60))
+  const h = Math.floor(m / 60)
+  const rest = m % 60
+  if (!h) return `${m} min`
+  return rest ? `${h} h ${rest} min` : `${h} h`
+}
+
+/** "about 1 h 10 min with 1 cook, 45 min with 3 cooks" from the plan runs. */
+export function estimateSentence(runs) {
+  if (!runs?.length) return null
+  const parts = runs.map((r) => `${fmtLongDuration(r.makespanSeconds)} with ${r.participants} ${r.participants === 1 ? 'cook' : 'cooks'}`)
+  return `About ${parts.join(', ')}`
+}
+
+/**
+ * Plan diagnostics without the duplicates of the 1- and 3-cook runs: drops the "3 cooks: " prefix and a trailing
+ * period before comparing, and turns "[CODE] message" into the message.
+ */
+export function dedupeDiagnostics(diagnostics) {
+  const seen = new Set()
+  const out = []
+  for (const d of diagnostics || []) {
+    let text = typeof d === 'string' ? d : d?.message || ''
+    text = String(text)
+      .replace(/^\d+ cooks?: /, '')
+      .replace(/^\[[A-Z0-9_]+\]\s*/, '')
+      .replace(/\.\s*$/, '')
+      .trim()
+    if (!text) continue
+    const key = text.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(`${text}.`)
+  }
+  return out
+}
+
+/** Minutes until serving to suggest for a new session: the 1-cook estimate plus a little slack, rounded up to 5 min. */
+export function suggestedServeInMinutes(plan) {
+  const runs = planRuns(plan)
+  if (!runs.length) return null
+  const one = runs.find((r) => r.participants === 1) || runs[0]
+  return Math.ceil((one.makespanSeconds / 60 + 10) / 5) * 5
 }

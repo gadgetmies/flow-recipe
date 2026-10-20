@@ -17,6 +17,7 @@ import {
   parseAmount,
   formatDuration,
   isValidRecipeId,
+  isServerRecipeId,
   sniffRecipeAttributes,
   kebab,
 } from './format.js'
@@ -222,7 +223,8 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
       else {
         if (!/^https?:\/\//i.test(url)) return errorResult('Only http(s) URLs can be fetched.')
         try {
-          source = await importer.fetchRecipeSource(url, { fetch })
+          // The importer's default fetch pins the SSRF check to the connected address; only pass injected fetches.
+          source = await importer.fetchRecipeSource(url, fetch === globalThis.fetch ? {} : { fetch })
         } catch (error) {
           return errorResult(`Could not fetch ${url}: ${error.message}`, {
             hint: 'The site may block automated requests. Ask the user to paste the recipe text and call fetch_recipe_source with `text`.',
@@ -385,7 +387,7 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     safe(async ({ id }) => {
-      if (!isValidRecipeId(id)) return errorResult(`Invalid recipe id "${id}".`, { hint: 'Ids are lowercase kebab-case; use list_recipes.' })
+      if (!isServerRecipeId(id)) return errorResult(`Invalid recipe id "${id}".`, { hint: 'Ids are letters, digits, - and _; use list_recipes.' })
       if (config.recipesDir) {
         try {
           return textResult(await fs.readFile(path.join(config.recipesDir, `${id}.xml`), 'utf-8'))
@@ -444,7 +446,10 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
         if (existing.includes(recipeId) && !overwrite) {
           return errorResult(`${file} already exists.`, { hint: 'Pass overwrite: true to replace it, or choose another id.' })
         }
-        await fs.writeFile(file, xml.endsWith('\n') ? xml : `${xml}\n`, 'utf-8')
+        // The saved document's root id always matches its file name / id.
+        const { setRootAttributes } = await deps.importer()
+        const stored = typeof setRootAttributes === 'function' ? setRootAttributes(xml, { id: recipeId }) : xml
+        await fs.writeFile(file, stored.endsWith('\n') ? stored : `${stored}\n`, 'utf-8')
         return jsonResult({
           saved: 'local',
           id: recipeId,
@@ -490,7 +495,8 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
         notes: z.string().max(2000).optional().describe('Extra instructions for the LLM'),
         timeoutSeconds: z.number().int().min(5).max(900).optional().describe('How long to wait (default 300)'),
       },
-      annotations: { readOnlyHint: true, openWorldHint: true },
+      // Starts a (possibly paid) LLM job on the server: not read-only.
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
     },
     safe(async ({ url, text, precisionScale = false, servings, notes, timeoutSeconds = 300 }, extra) => {
       if (!url && !text) return errorResult('Pass either `url` or `text`.')
@@ -571,7 +577,8 @@ function compactDensity(entry) {
     names: (entry.names || []).slice(0, 8),
     kind: entry.kind,
     gPerMl: g,
-    ...(typeof g === 'number' ? { gramsPerCup: round(g * 240), gramsPerTbsp: round(g * 15), gramsPerTsp: round(g * 5) } : {}),
+    // US cup (236.6 ml), the same cup the converter uses.
+    ...(typeof g === 'number' ? { gramsPerCup: round(g * 236.5882365), gramsPerTbsp: round(g * 15), gramsPerTsp: round(g * 5) } : {}),
     ...(entry.pieceGrams ? { pieceGrams: entry.pieceGrams } : {}),
     ...(entry.source ? { source: entry.source } : {}),
   }

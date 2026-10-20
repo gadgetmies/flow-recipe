@@ -81,6 +81,18 @@ export function saveRecipe({ xml, id, overwrite = false }, { mock = false, token
   return request('/api/recipes', { method: 'POST', body: { xml, id, overwrite }, token })
 }
 
+/** All recipes `[{ id, title, serving, source: 'builtin' | 'imported', sourceUrl? }]`. */
+export function listRecipes({ mock = false } = {}) {
+  if (mock) return mockApi.listRecipes()
+  return request('/api/recipes')
+}
+
+/** Delete an imported recipe → `{ id, deleted }`; ApiError 403 (built-in), 404, 401 (token needed). */
+export function deleteRecipe(id, { mock = false, token } = {}) {
+  if (mock) return mockApi.deleteRecipe(id)
+  return request(`/api/recipes/${encodeURIComponent(id)}`, { method: 'DELETE', token })
+}
+
 // ---------- browser storage ----------
 
 function readJson(key) {
@@ -128,17 +140,60 @@ export function saveUploadToken(token) {
 
 const escapeXml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-/** Replace the recipe's first `<title>` (or add one after `<recipe ...>`). */
-export function setRecipeTitle(xml, title) {
-  if (!title) return xml
-  if (/<title>[\s\S]*?<\/title>/.test(xml)) return xml.replace(/<title>[\s\S]*?<\/title>/, `<title>${escapeXml(title)}</title>`)
-  return xml.replace(/(<recipe\b[^>]*>)/, `$1\n    <title>${escapeXml(title)}</title>`)
+const unescapeXml = (s) =>
+  String(s)
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+const escapeAttr = (s) => escapeXml(s).replace(/"/g, '&quot;')
+
+// The recipe's own `<title>` is a direct child of `<recipe>`, before `<ingredients>`/`<tasks>` (task titles are attributes).
+const TITLE_RE = /<title>([\s\S]*?)<\/title>/
+const ROOT_RE = /<recipe\b[^>]*>/
+
+/** The recipe title in the XML (unescaped), '' when there is none. */
+export function getRecipeTitle(xml) {
+  const m = TITLE_RE.exec(xml || '')
+  return m ? unescapeXml(m[1].trim()) : ''
 }
 
-/** Set the `id` attribute of the `<recipe>` element. */
+/** The `id` attribute of the `<recipe>` element, '' when there is none. */
+export function getRecipeId(xml) {
+  const tag = (ROOT_RE.exec(xml || '') || [])[0] || ''
+  return unescapeXml((/\sid="([^"]*)"/.exec(tag) || [])[1] || '')
+}
+
+/** Replace the recipe's first `<title>` (or add one after `<recipe ...>`). An empty title empties the element. */
+export function setRecipeTitle(xml, title) {
+  const t = title ?? ''
+  if (TITLE_RE.test(xml)) return xml.replace(TITLE_RE, () => `<title>${escapeXml(t)}</title>`)
+  if (!t) return xml
+  return xml.replace(/(<recipe\b[^>]*>)/, (tag) => `${tag}\n    <title>${escapeXml(t)}</title>`)
+}
+
+function setRootAttribute(xml, name, value) {
+  const re = new RegExp(`\\s${name}="[^"]*"`)
+  return xml.replace(ROOT_RE, (tag) => {
+    const attr = ` ${name}="${escapeAttr(value)}"`
+    if (re.test(tag)) return tag.replace(re, () => attr)
+    return tag.replace(/\s*(\/?)>$/, (end, slash) => `${attr}${slash}>`)
+  })
+}
+
+/** Set the `id` attribute of the `<recipe>` element (an empty id empties it, so the field and the XML agree). */
 export function setRecipeId(xml, id) {
-  if (!id) return xml
-  return xml.replace(/<recipe\b[^>]*>/, (tag) => (/\sid="[^"]*"/.test(tag) ? tag.replace(/\sid="[^"]*"/, ` id="${id}"`) : tag.replace(/>$/, ` id="${id}">`)))
+  if (!id && !/\sid="/.test((ROOT_RE.exec(xml) || [])[0] || '')) return xml
+  return setRootAttribute(xml, 'id', id || '')
+}
+
+/** Set the `ref` (source URL) attribute of the `<recipe>` element unless it already has one. */
+export function ensureRecipeRef(xml, ref) {
+  if (!ref) return xml
+  const tag = (ROOT_RE.exec(xml) || [])[0] || ''
+  if (/\sref="[^"]+"/.test(tag)) return xml
+  return setRootAttribute(xml, 'ref', ref)
 }
 
 export const isValidRecipeId = (id) => /^[a-z0-9][a-z0-9_-]{0,79}$/.test(id || '')

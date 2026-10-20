@@ -24,18 +24,18 @@ Times are epoch milliseconds everywhere.
 Shapes `Source`, `CheckResult`, `ImportResult` are defined by `@flow-recipe/importer` (see its README /
 the design contract); the server loads it with a dynamic `import()` and answers `503` when it is not available.
 Endpoints marked (auth) require `Authorization: Bearer <FLOW_UPLOAD_TOKEN>` when that env variable is set (reads stay
-open). JSON bodies are limited to 2 MB, `xml` and pasted `text` to 1 MB (`413`).
+open). JSON bodies are limited to 2 MB, pasted `text` to 1 MB and `xml` to 256 kB (`FLOW_CHECK_MAX_BYTES`) (`413`).
 
 | Method & path | Body / params | Response |
 |---|---|---|
-| `GET /api/llm` | | `{ server: { provider, model, baseUrl, hasKey } \| null, providers: ['anthropic','openai','openai-compatible','ollama'], available: bool }` — `server` is the env configuration (`FLOW_LLM_PROVIDER`, `FLOW_LLM_MODEL`, `FLOW_LLM_API_KEY`/`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`, `FLOW_LLM_BASE_URL`), never the key; `available` = importer loaded |
+| `GET /api/llm` | | `{ server: { provider, model, baseUrl, hasKey } \| null, providers: ['anthropic','openai','openai-compatible','ollama'], available: bool }` — `server` is the env configuration (`FLOW_LLM_PROVIDER`, `FLOW_LLM_MODEL`, `FLOW_LLM_API_KEY`/`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`, `FLOW_LLM_BASE_URL`), never the key (`baseUrl` without credentials or query); `available` = importer loaded |
 | `GET /api/conversions` | | the density table (`DENSITIES`: `[{ id, names, gPerMl, kind, pieceGrams?, source? }]`) |
-| (auth) `POST /api/import` | `{ url? \| text?, precisionScale?, servings?, notes?, llm?: { provider, model?, apiKey?, baseUrl? } }` | `202 { jobId }`. `llm` (the user's own configuration) wins over the server's; neither → `400 { error: 'No LLM configured' }`. `400` invalid input, `429` too many running jobs (20 in total, 3 per client IP) |
+| (auth) `POST /api/import` | `{ url? \| text?, precisionScale?, servings?, notes?, llm?: { provider, model?, apiKey?, baseUrl? } }` | `202 { jobId }`. `llm` (the user's own configuration) wins over the server's; neither → `400 { error: 'No LLM configured' }`. `400` invalid input or a disallowed `llm.baseUrl` (see below), `429` too many running jobs (20 in total, 3 per client IP) |
 | `GET /api/import/:jobId` | | `{ id, status: 'running'\|'done'\|'error', stage, detail, attempts, createdAt, finishedAt, result?: ImportResult, error? }`; `404` unknown or expired (jobs are kept 1 h after finishing) |
 | (auth) `DELETE /api/import/:jobId` | | cancels a running job → the job view with `status: 'error', error: 'Cancelled'` |
-| `POST /api/recipes/check` | `{ xml, precisionScale?, id?, metricize? }` | `CheckResult`; with `metricize: true` the XML is converted first and the response adds `{ xml, changes, conversionWarnings }` |
-| `POST /api/recipes/convert` | `{ xml, precisionScale? }` | `{ xml, changes, warnings }` (`metricizeRecipeXml`) |
-| (auth) `POST /api/recipes` | `{ xml, id?, overwrite? }` | `201 { id, title, check }`. `id` defaults to `<recipe id>`. `400` invalid id/xml, `409` built-in or reserved id (`operations`, case-insensitive match of a file) or existing id without `overwrite: true`, `422 { error, check }` when the check has errors |
+| `POST /api/recipes/check` | `{ xml, precisionScale?, id?, metricize? }` | `CheckResult`; with `metricize: true` the XML is converted first and the response adds `{ xml, changes, conversionWarnings }`; XML the converter cannot parse → `422 { …CheckResult, error }` |
+| `POST /api/recipes/convert` | `{ xml, precisionScale? }` | `{ xml, changes, warnings }` (`metricizeRecipeXml`); unparsable XML → `422 { error }` |
+| (auth) `POST /api/recipes` | `{ xml, id?, overwrite? }` | `201 { id, title, check }`. `id` defaults to `<recipe id>`; the stored document's root `id` is rewritten to the saved id. `400` invalid id/xml, `409` built-in or reserved id (`operations`, case-insensitive match of a file) or existing id without `overwrite: true`, `422 { error, check }` when the check has errors |
 | (auth) `PUT /api/recipes/:id` | `{ xml }` | `200 { id, title, check }` replaces a user recipe; `404` unknown, `409` built-in, `422 { error, check }` |
 | (auth) `DELETE /api/recipes/:id` | | `200 { id, deleted: true }`; `403` built-in, `404` unknown |
 
@@ -47,6 +47,29 @@ never from private/loopback/link-local addresses (every redirect hop is checked)
 The `mock` LLM provider (`llm: { provider: 'mock', mockResponse }`) is accepted only when `NODE_ENV=test` or
 `FLOW_ALLOW_MOCK_LLM=1`. Other env knobs: `FLOW_IMPORT_MAX_JOBS` (20), `FLOW_IMPORT_MAX_JOBS_PER_IP` (3),
 `FLOW_IMPORT_JOB_TTL_MS` (1 h), `FLOW_IMPORT_JOB_TIMEOUT_MS` (10 min).
+
+**LLM base URLs.** A client-supplied `llm.baseUrl` (and Ollama's `http://localhost:11434/v1` default) must not
+point at a private, loopback or link-local address: the server would otherwise be a proxy into its own network. The
+check runs on the request (`400`) and again on every connection (DNS-rebinding safe). The operator can allow private
+LLM hosts with `FLOW_LLM_ALLOW_PRIVATE=1`; a URL equal to the server's own `FLOW_LLM_BASE_URL` is always allowed.
+**Ollama users:** configure your local Ollama as the server default (`FLOW_LLM_PROVIDER=ollama`,
+`FLOW_LLM_BASE_URL=http://localhost:11434/v1`) — clients can then use it without sending a base URL — or set
+`FLOW_LLM_ALLOW_PRIVATE=1` on a server only you can reach. `llm.baseUrl` must not contain credentials, a query or a
+fragment. Errors from a client-supplied endpoint are reported with the HTTP status only, never the response body.
+
+**Recipe XML safety.** Every check and save refuses documents with elements outside the recipe format, any
+namespace other than `xmlns:xsi`, processing instructions other than the XML declaration (`<?xml-stylesheet?>`) and
+DOCTYPEs. Recipe XML is served with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none';
+sandbox` and `Content-Disposition: inline`.
+
+**Cost limits.** `check`, `convert`, `POST`/`PUT /api/recipes` are rate-limited per client IP
+(`FLOW_CHECK_RATE_LIMIT`, default 30 per minute, `429` with `Retry-After`); a check refuses recipes with more than
+150 tasks or 100 ingredients before the scheduler dry run. Behind a reverse proxy set `FLOW_TRUST_PROXY` (e.g. `1`)
+so per-IP limits see the client address. With a server LLM configured and no `FLOW_UPLOAD_TOKEN`, anyone who can
+reach the server can spend the operator's key (a warning is logged at startup).
+
+Sessions are stored in SQLite and survive a restart (the schema migration no longer drops the session tables on
+boot).
 
 Saving or deleting a user recipe drops the parsed model cached by `services/planning.js` (`forgetRecipe`). Sessions
 can use user recipes like built-in ones (`dishes[].recipeId`).

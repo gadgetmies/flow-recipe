@@ -588,3 +588,13 @@ describe('review 1 regressions: unit spellings, US cup, lint of leftovers', () =
     assert.match(lintRecipeUnits(parseRecipe(spelled, { DOMParser })).filter((l) => l.taskId === 'm-salt').map((l) => l.message).join('\n'), /should be written 'tbsp'/)
   })
 })
+
+describe('review 1 regressions: ingredient matching', () => {
+  test('compound names and parenthetical qualifiers', () => {
+    assert.equal(findDensity('vanilla ice cream'), null)
+    assert.equal(findDensity('water chestnuts'), null)
+    assert.equal(findDensity('kosher salt (Morton)').id, 'salt-kosher-morton')
+    assert.equal(findDensity('brown sugar (packed)').id, 'sugar-brown')
+    assert.equal(findDensity('2 cups (250 g) flour').id, 'flour-all-purpose')
+  })
+})

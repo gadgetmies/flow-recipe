@@ -1,6 +1,7 @@
 // Step 3 of the import: what the AI made of the recipe. Title and id, ingredients with converted amounts, the steps
 // with their unit streams, the scheduler's dry run, problems, the XML, and the Save action.
 
+import { useRef, useState } from 'react'
 import {
   Alert,
   AlertTitle,
@@ -24,9 +25,23 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import GroupsIcon from '@mui/icons-material/Groups'
 import PersonIcon from '@mui/icons-material/Person'
 import ViewWeekIcon from '@mui/icons-material/ViewWeek'
-import { fmtMinutes } from '../utils/time'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
 import { isValidRecipeId } from './importApi'
-import { chainStageNames, conversionFor, conversionTooltip, fmtAmount, fmtHold, fromLabel, planRuns, plural, streamLabel } from './format'
+import {
+  chainStageNames,
+  conversionFor,
+  conversionTooltip,
+  dedupeDiagnostics,
+  fmtAmount,
+  fmtHold,
+  fmtLongDuration,
+  fromLabel,
+  hostOf,
+  planRuns,
+  plural,
+  sourceTotalSeconds,
+  streamLabel,
+} from './format'
 import XmlEditor from './XmlEditor'
 
 function ConvertedChip({ change }) {
@@ -78,13 +93,22 @@ function Ingredients({ ingredients, conversions }) {
 
 function Steps({ tasks, conversions }) {
   if (!tasks?.length) return <Typography color="text.secondary">No steps found.</Typography>
+  // measuring is shown with the ingredients; the steps list starts where the cooking does
+  const measures = tasks.filter((t) => t.operation === 'measure').length
+  const shown = tasks.filter((t) => t.operation !== 'measure')
   return (
+    <>
+    {measures > 0 && (
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        Plus {measures} measuring {measures === 1 ? 'step' : 'steps'}, shown with the ingredients.
+      </Typography>
+    )}
     <Box component="ol" sx={{ listStyle: 'none', p: 0, m: 0 }}>
-      {tasks.map((t, i) => {
+      {shown.map((t, i) => {
         const stream = streamLabel(t)
         const change = conversionFor(conversions, t.id)
         return (
-          <Box component="li" key={t.id || i} sx={{ display: 'flex', gap: 1.5, py: 1, borderBottom: i < tasks.length - 1 ? 1 : 0, borderColor: 'divider' }}>
+          <Box component="li" key={t.id || i} sx={{ display: 'flex', gap: 1.5, py: 1, borderBottom: i < shown.length - 1 ? 1 : 0, borderColor: 'divider' }}>
             <Box
               sx={{
                 flex: '0 0 26px',
@@ -103,6 +127,11 @@ function Steps({ tasks, conversions }) {
             </Box>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography>{t.title || t.operation}</Typography>
+              {typeof t.instructions === 'string' && t.instructions.trim() && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                  {t.instructions.trim()}
+                </Typography>
+              )}
               <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>
                 <Chip size="small" variant="outlined" label={t.operation} sx={{ height: 22 }} />
                 {stream && <Chip size="small" color="secondary" label={stream} sx={{ height: 22 }} />}
@@ -113,43 +142,66 @@ function Steps({ tasks, conversions }) {
         )
       })}
     </Box>
+    </>
   )
 }
 
-function ScheduleCheck({ plan, tasks }) {
+function TimeRow({ icon, label, value }) {
+  return (
+    <Stack direction="row" spacing={1} alignItems="center" sx={{ py: 0.75 }}>
+      {icon}
+      <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontWeight: 600 }}>{value}</Typography>
+    </Stack>
+  )
+}
+
+function ScheduleCheck({ plan, tasks, hasErrors, source }) {
   if (!plan) {
     return (
       <SectionCard title="Schedule check">
-        <Typography color="text.secondary">The scheduler did not try this recipe yet. Re-check to run it.</Typography>
+        <Typography color="text.secondary">
+          {hasErrors ? 'Fix the problems above to run the schedule check.' : 'The scheduler did not try this recipe yet. Re-check to run it.'}
+        </Typography>
       </SectionCard>
     )
   }
   const runs = planRuns(plan)
   const chains = plan.chains || []
+  const sourceTotal = sourceTotalSeconds(source)
+  const diagnostics = dedupeDiagnostics(plan.diagnostics)
   return (
     <SectionCard title="Schedule check" action={<Chip size="small" color={plan.ok ? 'success' : 'error'} label={plan.ok ? 'plans fine' : 'cannot plan'} />}>
       <Stack spacing={2}>
         {plan.error && <Alert severity="error">{plan.error}</Alert>}
         {runs.length > 0 && (
-          <Stack direction="row" spacing={1}>
-            {runs.map((r) => (
-              <Paper key={r.participants} variant="outlined" sx={{ flex: 1, p: 1.5, textAlign: 'center' }}>
-                <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
-                  {r.participants > 1 ? <GroupsIcon fontSize="small" color="action" /> : <PersonIcon fontSize="small" color="action" />}
-                  <Typography variant="body2" color="text.secondary">
-                    {r.participants} {r.participants === 1 ? 'cook' : 'cooks'}
-                  </Typography>
-                </Stack>
-                <Typography variant="h6">{fmtMinutes(r.makespanSeconds)}</Typography>
-              </Paper>
-            ))}
-          </Stack>
-        )}
-        {Number.isFinite(plan.activeSeconds) && (
-          <Typography variant="body2" color="text.secondary">
-            Hands-on work: {fmtMinutes(plan.activeSeconds)}
-            {Number.isFinite(plan.tasks) ? ` · ${plan.tasks} scheduled tasks` : ''}
-          </Typography>
+          <Box>
+            <Typography variant="subtitle2">Estimated time, start to serve</Typography>
+            <Paper variant="outlined" sx={{ px: 1.5, py: 0.5, mt: 0.5 }}>
+              {runs.map((r) => (
+                <TimeRow
+                  key={r.participants}
+                  icon={r.participants > 1 ? <GroupsIcon fontSize="small" color="action" /> : <PersonIcon fontSize="small" color="action" />}
+                  label={`with ${r.participants} ${r.participants === 1 ? 'cook' : 'cooks'}`}
+                  value={`about ${fmtLongDuration(r.makespanSeconds)}`}
+                />
+              ))}
+              {sourceTotal && (
+                <>
+                  <Divider />
+                  <TimeRow icon={<MenuBookIcon fontSize="small" color="action" />} label="the recipe page says" value={fmtLongDuration(sourceTotal)} />
+                </>
+              )}
+            </Paper>
+            {Number.isFinite(plan.activeSeconds) && (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                Hands-on work: about {fmtLongDuration(plan.activeSeconds)}
+                {Number.isFinite(plan.tasks) ? ` · ${plan.tasks} scheduled tasks` : ''}
+              </Typography>
+            )}
+          </Box>
         )}
         <Box>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
@@ -174,21 +226,21 @@ function ScheduleCheck({ plan, tasks }) {
             </Box>
           ))}
         </Box>
-        {plan.diagnostics?.length > 0 && (
-          <Stack spacing={0.5}>
-            {plan.diagnostics.map((d, i) => (
-              <Typography key={i} variant="body2" color="text.secondary">
-                • {typeof d === 'string' ? d : d.message || JSON.stringify(d)}
+        {diagnostics.length > 0 && (
+          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+            {diagnostics.map((d, i) => (
+              <Typography key={i} component="li" variant="body2" color="text.secondary">
+                {d}
               </Typography>
             ))}
-          </Stack>
+          </Box>
         )}
       </Stack>
     </SectionCard>
   )
 }
 
-function Problems({ check }) {
+function Problems({ check, onShow }) {
   const errors = check?.errors || []
   const warnings = [...(check?.warnings || []), ...(check?.unitLint || []).filter((l) => l.level === 'warning').map((l) => l.message)]
   const infos = (check?.unitLint || []).filter((l) => l.level !== 'warning').map((l) => l.message)
@@ -201,7 +253,12 @@ function Problems({ check }) {
           </AlertTitle>
           <Box component="ul" sx={{ m: 0, pl: 2 }}>
             {errors.map((e, i) => (
-              <li key={i}>{e}</li>
+              <li key={i}>
+                {e}{' '}
+                <Link component="button" type="button" variant="body2" onClick={() => onShow(e)} sx={{ verticalAlign: 'baseline' }}>
+                  Show in XML
+                </Link>
+              </li>
             ))}
           </Box>
         </Alert>
@@ -248,6 +305,7 @@ export default function RecipeReview({
   dirty,
   title,
   onTitleChange,
+  duplicateOf,
   id,
   onIdChange,
   busy,
@@ -263,13 +321,59 @@ export default function RecipeReview({
   const finals = summary.finalOutputs || []
   const source = result?.source || {}
   const blocker = saveBlocker({ check, dirty, id, title })
+  const [xmlOpen, setXmlOpen] = useState(false)
+  const xmlRef = useRef(null)
+  const xmlBoxRef = useRef(null)
+
+  // "Show in XML" next to an error: open the editor and select the first task/ingredient/tool id the message names
+  const showInXml = (message) => {
+    setXmlOpen(true)
+    const names = [...String(message).matchAll(/["'“‘`]([A-Za-z0-9][A-Za-z0-9_.-]*)["'”’`]/g)].map((m) => m[1])
+    let start = -1
+    let end = -1
+    for (const n of names) {
+      const at = xml.indexOf(`id="${n}"`)
+      if (at >= 0) {
+        start = xml.lastIndexOf('<', at)
+        end = at + n.length + 5
+        break
+      }
+    }
+    window.setTimeout(() => {
+      const el = xmlRef.current
+      xmlBoxRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+      if (!el || start < 0) return
+      try {
+        el.focus({ preventScroll: true })
+        el.setSelectionRange(start, end)
+        const line = xml.slice(0, start).split('\n').length - 1
+        el.scrollTop = Math.max(0, line * 18 - 36)
+      } catch (e) {
+        // jsdom / old browsers
+      }
+    }, 250)
+  }
 
   return (
     <Stack spacing={2} sx={{ pb: 2 }}>
       <Card>
         <CardContent>
           <Stack spacing={2}>
-            <TextField label="Title" value={title} onChange={(e) => onTitleChange(e.target.value)} fullWidth />
+            <TextField
+              label="Title"
+              value={title}
+              onChange={(e) => onTitleChange(e.target.value)}
+              fullWidth
+              color={duplicateOf ? 'warning' : undefined}
+              focused={duplicateOf ? true : undefined}
+              helperText={
+                duplicateOf
+                  ? `You already have a recipe called “${duplicateOf.title}” (id ${duplicateOf.id}${
+                      hostOf(duplicateOf.sourceUrl) ? `, from ${hostOf(duplicateOf.sourceUrl)}` : ''
+                    }). A different title makes them easier to tell apart.`
+                  : 'Also the <title> in the XML below.'
+              }
+            />
             <TextField
               label="Recipe id"
               size="small"
@@ -289,7 +393,14 @@ export default function RecipeReview({
               {conversions?.length > 0 && <Chip size="small" variant="outlined" icon={<SwapHorizIcon />} label={`${conversions.length} amounts converted`} />}
             </Stack>
             <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
-              {source.url ? (
+              {source.pasted ? (
+                <>
+                  From pasted text, copied from{' '}
+                  <Link href={source.url} target="_blank" rel="noreferrer">
+                    {hostOf(source.url) || source.url}
+                  </Link>
+                </>
+              ) : source.url ? (
                 <>
                   From{' '}
                   <Link href={source.url} target="_blank" rel="noreferrer">
@@ -307,7 +418,7 @@ export default function RecipeReview({
         </CardContent>
       </Card>
 
-      <Problems check={check} />
+      <Problems check={check} onShow={showInXml} />
 
       <SectionCard title="Ingredients">
         <Ingredients ingredients={summary.ingredients} conversions={conversions} />
@@ -317,9 +428,22 @@ export default function RecipeReview({
         <Steps tasks={summary.tasks} conversions={conversions} />
       </SectionCard>
 
-      <ScheduleCheck plan={check?.plan} tasks={summary.tasks} />
+      <ScheduleCheck plan={check?.plan} tasks={summary.tasks} hasErrors={!!check?.errors?.length} source={source} />
 
-      <XmlEditor xml={xml} onChange={onXmlChange} dirty={dirty} busy={busy} onRecheck={onRecheck} onConvert={onConvert} convertMessage={convertMessage} />
+      <Box ref={xmlBoxRef} sx={{ scrollMarginTop: 8 }}>
+        <XmlEditor
+          xml={xml}
+          onChange={onXmlChange}
+          dirty={dirty}
+          busy={busy}
+          onRecheck={onRecheck}
+          onConvert={onConvert}
+          convertMessage={convertMessage}
+          expanded={xmlOpen}
+          onExpandedChange={setXmlOpen}
+          inputRef={xmlRef}
+        />
+      </Box>
 
       <Divider />
       {saveError}

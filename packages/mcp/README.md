@@ -63,7 +63,7 @@ to get the same workflow, or just say "import this recipe into flow-recipe: <url
 | `FLOW_RECIPE_SERVER` | `http://localhost:3001` | Base URL of the flow-recipe server (`yarn start` in the repo). |
 | `FLOW_UPLOAD_TOKEN` | — | Sent as `Authorization: Bearer <token>` on uploads and server imports. Needed when the server sets `FLOW_UPLOAD_TOKEN`. |
 | `FLOW_RECIPES_DIR` | — | When set, `upload_recipe` writes `<dir>/<id>.xml` instead of POSTing, and `list_recipes`/`get_recipe` include that directory. Use `packages/server/src/recipes` to add a built-in recipe. |
-| `FLOW_IMPORT_ALLOW_PRIVATE` | — | `1` lets `fetch_recipe_source` fetch private/loopback addresses (blocked by default). |
+| `FLOW_IMPORT_ALLOW_PRIVATE` | — | `1` lets `fetch_recipe_source` fetch private/loopback addresses (blocked by default; the check is repeated on every connection, so DNS rebinding cannot bypass it). |
 
 ## Tools
 

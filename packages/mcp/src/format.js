@@ -95,6 +95,11 @@ export function isValidRecipeId(id) {
   return typeof id === 'string' && /^[a-z0-9][a-z0-9-]{0,79}$/.test(id)
 }
 
+/** Any id the flow-recipe server accepts (letters, digits, - and _; max 100) — for reading existing recipes. */
+export function isServerRecipeId(id) {
+  return typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(id)
+}
+
 /** Reads `<recipe id="…">` / `<recipe title="…">` / `<title>` without a full parse (best effort). */
 export function sniffRecipeAttributes(xml) {
   const open = String(xml).match(/<recipe\b[^>]*>/)

@@ -1,6 +1,7 @@
 // Phases A and B (spec §5.1, §5.2): Session + Catalogue → Graph (README §5).
 
 import { defaultInventory, toolCapacity, toolCount } from '../inventory.js'
+import { canonicalUnit } from '../units.js'
 import { expandTasks } from './expand.js'
 import { propagateQuantities, streamUnit } from './quantities.js'
 import { computeTaskDurations, optionCelsius } from './timing.js'
@@ -470,21 +471,29 @@ export function topologicalOrder(graph) {
   return order
 }
 
+// The kitchen's capacity wins when it is in the recipe's unit (or the recipe has none); a recipe capacity in another
+// unit (a sheet of 12 cookies vs. the default inventory's 16 buns) is the recipe's own fact and is kept. Units are
+// compared canonically (litre = l, cookies = cookie).
+function pickCapacity(inventoryCapacity, recipeCapacity) {
+  if (!recipeCapacity) return inventoryCapacity ?? null
+  if (!inventoryCapacity) return recipeCapacity
+  return sameUnit(inventoryCapacity.unit, recipeCapacity.unit) ? inventoryCapacity : recipeCapacity
+}
+
+function sameUnit(a, b) {
+  const norm = (u) => {
+    const c = canonicalUnit(u)
+    return c.length > 3 && c.endsWith('s') && !c.endsWith('ss') ? c.slice(0, -1) : c
+  }
+  return norm(a) === norm(b)
+}
+
 /**
  * Build the task graph (Phases A and B) for every dish of a session.
  * @param {object} session Session (README §4); `inventory` defaults to `defaultInventory()`
  * @param {object} catalogue Catalogue (README §3)
  * @returns {object} Graph (README §5)
  */
-// The kitchen's capacity wins when it is in the recipe's unit (or the recipe has none); a recipe capacity in another
-// unit (a sheet of 12 cookies vs. the default inventory's 16 buns) is the recipe's own fact and is kept.
-function pickCapacity(inventoryCapacity, recipeCapacity) {
-  if (!recipeCapacity) return inventoryCapacity ?? null
-  if (!inventoryCapacity) return recipeCapacity
-  const same = String(inventoryCapacity.unit).toLowerCase() === String(recipeCapacity.unit).toLowerCase()
-  return same ? inventoryCapacity : recipeCapacity
-}
-
 export function buildGraph(session, catalogue) {
   const inventory = session.inventory ?? defaultInventory()
   const policy = session.policy ?? {}

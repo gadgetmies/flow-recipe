@@ -304,7 +304,10 @@ describe('flow-recipe MCP server with the importer', () => {
       const body = json(result)
       assert.equal(body.saved, 'local')
       const file = path.join(tmp, 'local-buns.xml')
-      assert.equal(fs.readFileSync(file, 'utf-8').trim(), BUNS.trim())
+      // The root id is rewritten to the id the recipe is saved under (it was "buns").
+      const saved = fs.readFileSync(file, 'utf-8')
+      assert.equal(saved.trim(), BUNS.trim().replace(/(<recipe\b[^>]*\sid=)"buns"/, '$1"local-buns"'))
+      assert.match(saved, /<recipe\b[^>]*\sid="local-buns"/)
 
       const again = await local.callTool({ name: 'upload_recipe', arguments: { xml: BUNS, id: 'local-buns' } })
       assert.equal(again.isError, true)

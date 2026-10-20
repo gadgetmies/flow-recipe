@@ -42,7 +42,7 @@ still false, `canonicalUnit('oz')` is still `'oz'`), the conversions module uses
 
 ```js
 IMPERIAL_MASS   // g:  oz, ounce(s), lb, lbs, pound(s)
-IMPERIAL_VOLUME // ml: 'fl oz', floz, fluid ounce(s), cup(s) 240, pint(s)/pt 473, quart(s)/qt 946, gallon(s)/gal 3785
+IMPERIAL_VOLUME // ml: 'fl oz', floz, fluid ounce(s), cup(s) 236.6 (US cup; VOLUME.cup stays 240), pint(s)/pt 473, quart(s)/qt 946, gallon(s)/gal 3785
 LENGTH          // cm: mm, cm, m (+ long spellings), in, inch, inches, '"'
 BUTTER_STICK_GRAMS = 113, PINCH_GRAMS = 0.3
 imperialKey(unit)                       // 'Fl. Oz.' → 'fl oz'

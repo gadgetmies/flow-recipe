@@ -30,10 +30,15 @@ import { isMockMode } from '../config'
 import {
   checkRecipe,
   convertRecipe,
+  deleteRecipe,
+  ensureRecipeRef,
   forgetImportJob,
   getImportJob,
   getLlmInfo,
+  getRecipeId,
+  getRecipeTitle,
   IMPORT_TIMING,
+  listRecipes,
   loadLlmConfig,
   loadUploadToken,
   saveLlmConfig,
@@ -47,6 +52,8 @@ import { initialLlmValue, resolveLlm } from './LlmSettings'
 import SourceForm, { emptySource } from './SourceForm'
 import ImportProgress from './ImportProgress'
 import RecipeReview from './RecipeReview'
+import ImportedRecipes from './ImportedRecipes'
+import { suggestedServeInMinutes } from './format'
 
 const STEPS = [
   { key: 'source', label: 'Source' },
@@ -100,14 +107,17 @@ export default function ImportPage() {
   const [job, setJob] = useState(null)
   const [startedAt, setStartedAt] = useState(Date.now())
   const pollFailures = useRef(0)
+  const refRef = useRef(null)
 
   const [result, setResult] = useState(null)
   const [xml, setXml] = useState('')
   const [checkedXml, setCheckedXml] = useState('')
   const [check, setCheck] = useState(null)
   const [conversions, setConversions] = useState([])
-  const [title, setTitle] = useState('')
-  const [id, setId] = useState('')
+  // The XML is the single source of truth for the title and the id: the fields show what it says and write into it.
+  const title = getRecipeTitle(xml)
+  const id = getRecipeId(xml)
+  const [recipes, setRecipes] = useState([])
   const [busy, setBusy] = useState(false)
   const [convertMessage, setConvertMessage] = useState(null)
   const [reviewError, setReviewError] = useState(null)
@@ -125,6 +135,13 @@ export default function ImportPage() {
     }
   }, [mock])
 
+  const refreshRecipes = useCallback(() => {
+    listRecipes({ mock })
+      .then((list) => setRecipes(Array.isArray(list) ? list : []))
+      .catch(() => {})
+  }, [mock])
+  useEffect(refreshRecipes, [refreshRecipes])
+
   // remember the user's own LLM configuration only when asked to
   useEffect(() => {
     saveLlmConfig(llmValue.remember ? llmValue.own : null)
@@ -132,14 +149,18 @@ export default function ImportPage() {
 
   const llmState = resolveLlm(llmInfo, llmValue)
 
-  const showReview = useCallback((r) => {
-    setResult(r)
-    setXml(r.xml)
-    setCheckedXml(r.xml)
+  const showReview = useCallback((r, ref) => {
+    // the suggested id (free on the server) wins over the one inside the XML; a missing title comes from the check or page
+    let x = r.xml || ''
+    if (r.id && r.id !== getRecipeId(x)) x = setRecipeId(x, r.id)
+    if (!getRecipeTitle(x) && (r.check?.title || r.source?.title)) x = setRecipeTitle(x, r.check?.title || r.source?.title)
+    // pasted text from a page that blocked us: keep the page as the recipe's source
+    if (ref && !r.source?.url) x = ensureRecipeRef(x, ref)
+    setResult(ref && !r.source?.url ? { ...r, source: { ...(r.source || {}), url: ref, pasted: true } } : r)
+    setXml(x)
+    setCheckedXml(x)
     setCheck(r.check)
     setConversions(r.conversions || [])
-    setTitle(r.check?.title || r.source?.title || '')
-    setId(r.id || r.check?.id || '')
     setConvertMessage(null)
     setReviewError(null)
     setStep('review')
@@ -158,7 +179,7 @@ export default function ImportPage() {
         pollFailures.current = 0
         setJob(j)
         if (j.status === 'done' && j.result) {
-          showReview(j.result)
+          showReview(j.result, refRef.current)
           return
         }
         if (j.status === 'error') return
@@ -189,7 +210,12 @@ export default function ImportPage() {
     setSubmitting(true)
     const body = { precisionScale: !!src.precisionScale }
     if (src.mode === 'url') body.url = src.url.trim()
-    else body.text = src.text
+    else {
+      body.text = src.text
+      // the page the text was copied from; the server may use it as the recipe's `ref`, and the review keeps it either way
+      if (src.ref) body.ref = src.ref
+    }
+    refRef.current = src.mode === 'text' && src.ref ? src.ref : null
     const servings = parseInt(src.servings, 10)
     if (servings > 0) body.servings = servings
     if (src.notes.trim()) body.notes = src.notes.trim()
@@ -226,7 +252,33 @@ export default function ImportPage() {
 
   const pasteInstead = () => {
     cancel()
-    setSource((s) => ({ ...s, mode: 'text' }))
+    setSource((s) => ({ ...s, mode: 'text', ref: s.mode === 'url' && s.url.trim() ? s.url.trim() : s.ref }))
+  }
+
+  const onTitleChange = (t) => {
+    const next = setRecipeTitle(xml, t)
+    setXml(next)
+    // a title or id change does not need a re-check
+    if (xml === checkedXml) setCheckedXml(next)
+  }
+  const onIdChange = (newId) => {
+    const next = setRecipeId(xml, newId)
+    setXml(next)
+    if (xml === checkedXml) setCheckedXml(next)
+  }
+
+  const removeRecipe = async (recipeId) => {
+    try {
+      await deleteRecipe(recipeId, { mock, token })
+    } catch (e) {
+      if (e.status === 401) {
+        setNeedsToken(true)
+        throw new Error('Deleting needs the upload token: enter it above and try again.')
+      }
+      throw e
+    } finally {
+      refreshRecipes()
+    }
   }
 
   const recheck = async (text = xml) => {
@@ -236,7 +288,6 @@ export default function ImportPage() {
       const c = await checkRecipe(text, { precisionScale: source.precisionScale, mock })
       setCheck(c)
       setCheckedXml(text)
-      if (c.title && !title) setTitle(c.title)
     } catch (e) {
       setReviewError(e.message)
     } finally {
@@ -266,11 +317,12 @@ export default function ImportPage() {
   const save = async () => {
     setSaving(true)
     setReviewError(null)
-    const finalXml = setRecipeId(setRecipeTitle(xml, title.trim()), id)
+    const finalXml = setRecipeTitle(xml, title.trim())
     try {
       const r = await saveRecipe({ xml: finalXml, id }, { mock, token })
       setXml(finalXml)
-      setSaved({ id: r.id || id, title: r.title || title })
+      setSaved({ id: r.id || id, title: r.title || title, serveIn: suggestedServeInMinutes(check?.plan) })
+      refreshRecipes()
       setStep('saved')
       scrollTop()
     } catch (e) {
@@ -287,6 +339,8 @@ export default function ImportPage() {
 
   const importAnother = () => {
     setSource((s) => ({ ...emptySource(), mode: s.mode, precisionScale: s.precisionScale }))
+    setXml('')
+    setCheckedXml('')
     setResult(null)
     setSaved(null)
     setJobId(null)
@@ -308,7 +362,10 @@ export default function ImportPage() {
   ) : null
 
   const stepIndex = STEPS.findIndex((s) => s.key === step)
-  const sourceLabel = source.mode === 'url' ? source.url : 'Pasted text'
+  const sourceLabel = source.mode === 'url' ? source.url : source.ref ? `Pasted text from ${source.ref}` : 'Pasted text'
+  const duplicateOf = title.trim()
+    ? recipes.find((r) => r.id !== id && r.title?.trim().toLowerCase() === title.trim().toLowerCase()) || null
+    : null
 
   return (
     <ThemeProvider theme={theme}>
@@ -351,6 +408,7 @@ export default function ImportPage() {
                 submitting={submitting}
                 error={error}
               />
+              <ImportedRecipes recipes={recipes} onDelete={removeRecipe} />
             </>
           )}
 
@@ -359,6 +417,7 @@ export default function ImportPage() {
               job={job}
               fromText={source.mode === 'text'}
               sourceLabel={sourceLabel}
+              sourceUrl={source.mode === 'url' ? source.url.trim() : null}
               startedAt={startedAt}
               onCancel={cancel}
               onRetry={() => begin()}
@@ -375,9 +434,10 @@ export default function ImportPage() {
               onXmlChange={setXml}
               dirty={xml !== checkedXml}
               title={title}
-              onTitleChange={setTitle}
+              onTitleChange={onTitleChange}
+              duplicateOf={duplicateOf}
               id={id}
-              onIdChange={setId}
+              onIdChange={onIdChange}
               busy={busy}
               onRecheck={() => recheck()}
               onConvert={convert}
@@ -403,11 +463,12 @@ export default function ImportPage() {
                   <Typography variant="h5">Saved “{saved.title}”</Typography>
                   <Typography color="text.secondary">
                     It is now in the recipe list of every new session (id <code>{saved.id}</code>).
+                    {saved.serveIn ? ` A new session plans to serve it in about ${saved.serveIn} minutes; you can change that.` : ''}
                   </Typography>
                   <Box sx={{ width: '100%' }}>
                     <Button
                       component={RouterLink}
-                      to={`/?recipe=${encodeURIComponent(saved.id)}${mock ? '&mock=1' : ''}`}
+                      to={`/?recipe=${encodeURIComponent(saved.id)}${saved.serveIn ? `&serveIn=${saved.serveIn}` : ''}${mock ? '&mock=1' : ''}`}
                       variant="contained"
                       size="large"
                       fullWidth
