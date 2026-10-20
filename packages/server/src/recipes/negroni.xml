@@ -1,35 +1,47 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd" ref="https://www.tentoonerum.com/cocktails/negroni/">
+<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd"
+        ref="https://www.tentoonerum.com/cocktails/negroni/" version="2" id="negroni">
     <title>Rum Negroni</title>
+    <serving temperature="cold" hold="5" hold-unit="minutes"/>
     <ingredients>
         <ingredient id="rum">white or dark rum</ingredient>
         <ingredient id="campari">Campari</ingredient>
-        <ingredient id="sweet-vermouth">sweet Vermouth</ingredient>
+        <ingredient id="sweet-vermouth">sweet Vermouth<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="orange-bitters">orange bitters</ingredient>
-        <ingredient id="ice-cubes">ice cubes</ingredient>
+        <ingredient id="ice-cubes">ice cubes<properties><property name="storage" value="freezer"/><property name="out-of-storage"><numeric-value number="5" unit="minutes"/></property></properties></ingredient>
         <ingredient id="orange">orange</ingredient>
-        <ingredient id="large-ice-cube">large ice cube</ingredient>
+        <ingredient id="large-ice-cube">large ice cube<properties><property name="storage" value="freezer"/><property name="out-of-storage"><numeric-value number="5" unit="minutes"/></property></properties></ingredient>
     </ingredients>
     <tools>
-        <tool id="mixing-glass">mixing glass</tool>
+        <tool id="mixing-glass">mixing glass<properties>
+                <property name="capacity">
+                    <numeric-value number="2" unit="drink"/>
+                </property>
+            </properties>
+        </tool>
         <tool id="bar-spoon">bar spoon</tool>
         <tool id="strainer">strainer</tool>
-        <tool id="rocks-glass">rocks glass</tool>
+        <tool id="rocks-glass">rocks glass<properties>
+                <property name="capacity">
+                    <numeric-value number="1" unit="drink"/>
+                </property>
+            </properties>
+        </tool>
         <tool id="peeler">peeler</tool>
     </tools>
     <tasks>
-        <task operation="fill">
+        <task operation="fill" id="fill-mixing-glass">
             <instructions>
                 Fill the
-                <tool ref="mixing-glass"/>
+                <tool ref="mixing-glass" reserved="true"/>
                 with
                 <input ref="ice-cubes"/>
             </instructions>
             <outputs>
-                <output id="filled-mixing-glass">mixing glass with ice</output>
+                <output id="filled-mixing-glass" amount="1" unit="drink">mixing glass with ice</output>
             </outputs>
         </task>
-        <task operation="peel">
+        <task operation="peel" id="peel-orange">
             <inputs>
                 <input ref="orange"/>
             </inputs>
@@ -37,10 +49,10 @@
                 <tool ref="peeler"/>
             </tools>
             <outputs>
-                <output id="orange-peel" amount="6">orange peel</output>
+                <output id="orange-peel" amount="1" unit="drink">strip of orange peel</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-rum">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="oz"/>
@@ -48,13 +60,12 @@
             </options>
             <inputs>
                 <input ref="rum"/>
-                <input ref="filled-mixing-glass"/>
             </inputs>
             <outputs>
-                <output id="measured-rum">rum in mixing glass</output>
+                <output id="measured-rum">rum</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-campari">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="oz"/>
@@ -62,13 +73,12 @@
             </options>
             <inputs>
                 <input ref="campari"/>
-                <input ref="measured-rum"/>
             </inputs>
             <outputs>
-                <output id="measured-campari">ingredients in mixing glass</output>
+                <output id="measured-campari">Campari</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-vermouth">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="oz"/>
@@ -76,13 +86,12 @@
             </options>
             <inputs>
                 <input ref="sweet-vermouth"/>
-                <input ref="measured-campari"/>
             </inputs>
             <outputs>
-                <output id="measured-vermouth">ingredients in mixing glass</output>
+                <output id="measured-vermouth">sweet Vermouth</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-bitters">
             <options>
                 <option name="amount">
                     <numeric-value number="2" unit="dashes"/>
@@ -90,58 +99,78 @@
             </options>
             <inputs>
                 <input ref="orange-bitters"/>
-                <input ref="measured-vermouth"/>
             </inputs>
             <outputs>
-                <output id="ingredients-in-mixing-glass">ingredients in mixing glass</output>
+                <output id="measured-bitters">orange bitters</output>
             </outputs>
         </task>
-        <task operation="stir">
+        <task operation="incorporate" id="build-drink">
             <tools>
-                <tool ref="bar-spoon" reserved="true"/>
+                <tool ref="mixing-glass" reserved="true"/>
+            </tools>
+            <inputs>
+                <input ref="filled-mixing-glass"/>
+                <input ref="measured-rum"/>
+                <input ref="measured-campari"/>
+                <input ref="measured-vermouth"/>
+                <input ref="measured-bitters"/>
+            </inputs>
+            <outputs>
+                <output id="ingredients-in-mixing-glass" amount="1" unit="drink">ingredients in mixing glass</output>
+            </outputs>
+            <instructions>
+                Add the <input ref="measured-rum"/>, <input ref="measured-campari"/>, <input ref="measured-vermouth"/>
+                and <input ref="measured-bitters"/> to the <input ref="filled-mixing-glass"/>.
+            </instructions>
+        </task>
+        <task operation="stir" id="stir-drink">
+            <tools>
+                <tool ref="bar-spoon"/>
+                <tool ref="mixing-glass" reserved="true"/>
             </tools>
             <inputs>
                 <input ref="ingredients-in-mixing-glass"/>
             </inputs>
             <outputs>
-                <output id="stirred-negroni">stirred negroni</output>
+                <output id="stirred-negroni" amount="1" unit="drink" hold="5" hold-unit="minutes">stirred negroni</output>
             </outputs>
         </task>
-        <task operation="strain">
+        <task operation="strain" id="strain-into-glass">
             <instructions>
                 Strain
                 <input ref="stirred-negroni"/>
-                into
-                <tool ref="rocks-glass" amount="1"/>
-                over
+                into a
+                <tool ref="rocks-glass" reserved="true"/>
+                over a
                 <input ref="large-ice-cube"/>
                 using a
                 <tool ref="strainer"/>
             </instructions>
             <outputs>
-                <output id="strained-negroni">negroni in glass</output>
+                <output id="strained-negroni" amount="1" unit="drink">negroni in glass</output>
+                <tool ref="mixing-glass"/>
             </outputs>
         </task>
-        <task operation="express">
+        <task operation="express" id="express-peel">
             <instructions>
-                Express oils from
+                Express oils from the
                 <input ref="orange-peel"/>
-                over
+                over the
                 <input ref="strained-negroni"/>
             </instructions>
             <outputs>
-                <output id="expressed-negroni">negroni with expressed oils</output>
+                <output id="expressed-negroni" amount="1" unit="drink">negroni with expressed oils</output>
             </outputs>
         </task>
-        <task operation="decorate">
+        <task operation="decorate" id="garnish">
             <instructions>
-                Garnish
+                Garnish the
                 <input ref="expressed-negroni"/>
-                with
+                with the
                 <input ref="orange-peel"/>
             </instructions>
             <outputs>
-                <output id="final-negroni">Rum Negroni</output>
+                <output id="finished-negroni" amount="1" unit="drink" hold="5" hold-unit="minutes" final="true">Rum Negroni</output>
             </outputs>
         </task>
     </tasks>

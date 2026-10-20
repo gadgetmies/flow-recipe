@@ -1,0 +1,130 @@
+{
+  "id": "tiramisu",
+  "title": "Tiramisu",
+  "ref": null,
+  "serving": { "temperature": "cold", "hold": 1200 },
+  "ingredients": [
+    { "id": "mascarpone", "name": "mascarpone", "properties": {} },
+    { "id": "sugar", "name": "sugar", "properties": {} },
+    { "id": "cream", "name": "whipping cream", "properties": {} },
+    { "id": "coffee", "name": "strong coffee", "properties": {} },
+    { "id": "ladyfingers", "name": "ladyfingers", "properties": {} },
+    { "id": "cocoa", "name": "cocoa powder", "properties": {} }
+  ],
+  "tools": [
+    { "id": "bowl", "name": "bowl", "type": "bowl", "capacity": { "number": 4, "unit": "l" }, "properties": {} },
+    { "id": "whisk", "name": "whisk", "type": "whisk", "capacity": null, "properties": {} },
+    { "id": "shallow-dish", "name": "shallow dish", "type": "shallow-dish", "capacity": null, "properties": {} },
+    { "id": "square-dish", "name": "square dish", "type": "square-dish", "capacity": null, "properties": {} },
+    { "id": "plate", "name": "plate", "type": "plate", "capacity": null, "properties": {} },
+    { "id": "spoon", "name": "spoon", "type": "spoon", "capacity": null, "properties": {} },
+    { "id": "sieve", "name": "sieve", "type": "sieve", "capacity": null, "properties": {} },
+    { "id": "cling-film", "name": "cling film", "type": "cling-film", "capacity": null, "properties": {} }
+  ],
+  "tasks": [
+    {
+      "id": "measure-mascarpone", "operation": "measure",
+      "options": { "amount": { "number": 250, "unit": "g" } },
+      "inputs": [{ "ref": "mascarpone", "amount": null, "text": null }],
+      "tools": [{ "ref": "bowl", "reserved": true, "amount": 1, "soil": null, "qty": 1 }],
+      "outputs": [{ "id": "measured-mascarpone", "name": "mascarpone", "amount": 250, "unit": "g", "hold": null, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "measure-sugar", "operation": "measure",
+      "options": { "amount": { "number": 50, "unit": "g" } },
+      "inputs": [{ "ref": "sugar", "amount": null, "text": null }],
+      "tools": [],
+      "outputs": [{ "id": "measured-sugar", "name": "sugar", "amount": 50, "unit": "g", "hold": null, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "measure-cream", "operation": "measure",
+      "options": { "amount": { "number": 300, "unit": "ml" } },
+      "inputs": [{ "ref": "cream", "amount": null, "text": null }],
+      "tools": [{ "ref": "bowl", "reserved": true, "amount": 1, "soil": null, "qty": 1 }],
+      "outputs": [{ "id": "measured-cream", "name": "cream", "amount": 300, "unit": "ml", "hold": null, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "measure-coffee", "operation": "measure",
+      "options": { "amount": { "number": 250, "unit": "ml" } },
+      "inputs": [{ "ref": "coffee", "amount": null, "text": null }],
+      "tools": [],
+      "outputs": [{ "id": "measured-coffee", "name": "coffee", "amount": 250, "unit": "ml", "hold": null, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "whip", "operation": "whip",
+      "options": {},
+      "inputs": [{ "ref": "measured-cream", "amount": null, "text": null }],
+      "tools": [{ "ref": "whisk", "reserved": false, "amount": 1, "soil": "wash", "qty": 1 }],
+      "outputs": [{ "id": "whipped-cream", "name": "whipped cream", "amount": null, "unit": null, "hold": 1800, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "cream-base", "operation": "mix",
+      "options": {},
+      "inputs": [{ "ref": "measured-mascarpone", "amount": null, "text": null }, { "ref": "measured-sugar", "amount": null, "text": null }],
+      "tools": [{ "ref": "spoon", "reserved": false, "amount": 1, "soil": null, "qty": 1 }],
+      "outputs": [{ "id": "cream-base", "name": "cream base", "amount": null, "unit": null, "hold": null, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "fold", "operation": "fold",
+      "options": {},
+      "inputs": [{ "ref": "cream-base", "amount": null, "text": null }, { "ref": "whipped-cream", "amount": null, "text": null }],
+      "tools": [{ "ref": "spoon", "reserved": false, "amount": 1, "soil": null, "qty": 1 }],
+      "outputs": [{ "id": "cream-mixture", "name": "cream mixture", "amount": null, "unit": null, "hold": null, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "pour-coffee", "operation": "pour",
+      "options": {},
+      "inputs": [{ "ref": "measured-coffee", "amount": null, "text": null }],
+      "tools": [{ "ref": "shallow-dish", "reserved": true, "amount": 1, "soil": null, "qty": 1 }],
+      "outputs": [{ "id": "coffee-in-dish", "name": "coffee in a dish", "amount": null, "unit": null, "hold": null, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "soak", "operation": "soak",
+      "options": { "duration": { "number": 5, "unit": "seconds" } },
+      "inputs": [{ "ref": "ladyfingers", "amount": 24, "text": null }, { "ref": "coffee-in-dish", "amount": null, "text": null }],
+      "tools": [{ "ref": "plate", "reserved": false, "amount": 1, "soil": null, "qty": 1 }],
+      "outputs": [{ "id": "dipped-ladyfingers", "name": "dipped ladyfingers", "amount": 24, "unit": "ladyfinger", "hold": null, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "layer", "operation": "place",
+      "options": {},
+      "inputs": [{ "ref": "dipped-ladyfingers", "amount": null, "text": null }],
+      "tools": [{ "ref": "square-dish", "reserved": true, "amount": 1, "soil": null, "qty": 1 }],
+      "outputs": [{ "id": "ladyfinger-layer", "name": "layer of ladyfingers", "amount": null, "unit": "ladyfinger", "hold": null, "volume": null, "final": false }],
+      "returnsTools": [{ "ref": "plate", "name": "plate" }], "instructions": null, "requires": []
+    },
+    {
+      "id": "spread", "operation": "spread",
+      "options": {},
+      "inputs": [{ "ref": "ladyfinger-layer", "amount": null, "text": null }, { "ref": "cream-mixture", "amount": null, "text": null }],
+      "tools": [{ "ref": "spoon", "reserved": false, "amount": 1, "soil": null, "qty": 1 }],
+      "outputs": [{ "id": "layered-tiramisu", "name": "layered tiramisu", "amount": null, "unit": null, "hold": null, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "chill", "operation": "chill",
+      "options": { "duration": { "number": 4, "unit": "hours" } },
+      "inputs": [{ "ref": "layered-tiramisu", "amount": null, "text": null }],
+      "tools": [{ "ref": "cling-film", "reserved": true, "amount": 1, "soil": "none", "qty": 1 }],
+      "outputs": [{ "id": "chilled-tiramisu", "name": "chilled tiramisu", "amount": null, "unit": null, "hold": null, "volume": null, "final": false }],
+      "returnsTools": [], "instructions": null, "requires": []
+    },
+    {
+      "id": "dust", "operation": "dust",
+      "options": {},
+      "inputs": [{ "ref": "chilled-tiramisu", "amount": null, "text": null }, { "ref": "cocoa", "amount": null, "text": null }],
+      "tools": [{ "ref": "sieve", "reserved": false, "amount": 1, "soil": null, "qty": 1 }],
+      "outputs": [{ "id": "tiramisu", "name": "tiramisu", "amount": null, "unit": null, "hold": null, "volume": null, "final": true }],
+      "returnsTools": [{ "ref": "square-dish", "name": "square dish" }], "instructions": null, "requires": []
+    }
+  ]
+}

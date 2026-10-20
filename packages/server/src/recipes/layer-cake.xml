@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<recipe ref="https://www.wearesovegan.com/epic-microwave-chocolate-cake/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd">
+<recipe ref="https://www.wearesovegan.com/epic-microwave-chocolate-cake/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="recipe.xsd" version="2" id="layer-cake">
     <title>Epic Microwave Chocolate Cake</title>
+    <serving temperature="ambient"/>
     <ingredients>
-        <ingredient id="soya-milk">soya milk</ingredient>
+        <ingredient id="soya-milk">soya milk<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="cider-vinegar">cider vinegar</ingredient>
         <ingredient id="dark-chocolate">dark chocolate</ingredient>
         <ingredient id="instant-coffee">instant coffee</ingredient>
@@ -13,39 +15,52 @@
         <ingredient id="cocoa-powder">cocoa powder</ingredient>
         <ingredient id="caster-sugar">caster sugar</ingredient>
         <ingredient id="vanilla-extract">vanilla extract</ingredient>
-        <ingredient id="vegan-cream">vegan cream</ingredient>
-        <ingredient id="margarine">margarine</ingredient>
+        <ingredient id="vegan-cream">vegan cream<properties><property name="storage" value="fridge"/></properties></ingredient>
+        <ingredient id="margarine">margarine<properties><property name="storage" value="fridge"/><property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property></properties></ingredient>
         <ingredient id="vegetable-oil">vegetable oil</ingredient>
         <ingredient id="apple-cider-vinegar">apple cider vinegar</ingredient>
     </ingredients>
     <tools>
-        <tool id="silicone-cake-mould">silicone cake mould<properties>
+        <tool id="silicone-cake-mould" type="cake-mould">silicone cake mould<properties>
                 <property name="circumference">
                     <numeric-value number="20" unit="centimeters"/>
                 </property>
+                <property name="capacity">
+                    <numeric-value number="1" unit="cake"/>
+                </property>
             </properties>
         </tool>
-        <tool id="microwave-safe-jug">microwave safe jug</tool>
+        <tool id="microwave-safe-jug" type="jug">microwave safe jug<properties>
+                <property name="capacity">
+                    <numeric-value number="1" unit="l"/>
+                </property>
+            </properties>
+        </tool>
         <tool id="spatula">spatula</tool>
-        <tool id="bowl">bowl</tool>
+        <tool id="bowl">bowl<properties>
+                <property name="capacity">
+                    <numeric-value number="4" unit="l"/>
+                </property>
+            </properties>
+        </tool>
         <tool id="parchment-paper">parchment paper</tool>
         <tool id="frosting-spatula">frosting spatula</tool>
         <tool id="grater">grater</tool>
         <tool id="cooling-rack">cooling rack</tool>
-        <tool id="fridge">fridge</tool>
+        <tool id="baking-sheet">baking sheet</tool>
         <tool id="precision-scale">precision scale</tool>
         <tool id="kitchen-scale">kitchen scale</tool>
         <tool id="plate">plate</tool>
     </tools>
     <tasks>
-        <task operation="measure">
+        <task operation="measure" id="measure-soya-milk">
             <options>
                 <option name="amount">
                     <numeric-value number="300" unit="ml"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="soya-milk"/>
@@ -54,14 +69,14 @@
                 <output id="measured-soya-milk">soya milk</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-vinegar">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="tbsp"/>
                 </option>
             </options>
             <tools>
-                <tool ref="precision-scale"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="apple-cider-vinegar"/>
@@ -70,14 +85,14 @@
                 <output id="measured-apple-cider-vinegar">apple cider vinegar</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-chocolate-for-base">
             <options>
                 <option name="amount">
                     <numeric-value number="100" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="dark-chocolate"/>
@@ -86,14 +101,14 @@
                 <output id="dark-chocolate-for-base">dark chocolate for base</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-coffee">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="tbsp"/>
                 </option>
             </options>
             <tools>
-                <tool ref="precision-scale"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="instant-coffee"/>
@@ -102,14 +117,14 @@
                 <output id="measured-instant-coffee">instant coffee</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-oil">
             <options>
                 <option name="amount">
                     <numeric-value number="200" unit="ml"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="vegetable-oil"/>
@@ -118,14 +133,14 @@
                 <output id="measured-vegetable-oil">vegetable oil</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-flour">
             <options>
                 <option name="amount">
                     <numeric-value number="220" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="flour"/>
@@ -134,14 +149,14 @@
                 <output id="measured-flour">flour</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-baking-powder">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="tsp"/>
                 </option>
             </options>
             <tools>
-                <tool ref="precision-scale"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="baking-powder"/>
@@ -150,14 +165,14 @@
                 <output id="measured-baking-powder">baking powder</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-bicarb">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="tsp"/>
                 </option>
             </options>
             <tools>
-                <tool ref="precision-scale"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="bicarb-of-soda"/>
@@ -166,14 +181,14 @@
                 <output id="measured-bicarb">bicarb of soda</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-cocoa">
             <options>
                 <option name="amount">
                     <numeric-value number="4" unit="tbsp"/>
                 </option>
             </options>
             <tools>
-                <tool ref="precision-scale"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="cocoa-powder"/>
@@ -182,14 +197,14 @@
                 <output id="measured-cocoa-powder">cocoa powder</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-sugar">
             <options>
                 <option name="amount">
                     <numeric-value number="250" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="caster-sugar"/>
@@ -198,14 +213,14 @@
                 <output id="measured-caster-sugar">caster sugar</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-vanilla">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="tbsp"/>
                 </option>
             </options>
             <tools>
-                <tool ref="precision-scale"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="vanilla-extract"/>
@@ -214,14 +229,14 @@
                 <output id="measured-vanilla-extract">vanilla extract</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-chocolate-for-ganache">
             <options>
                 <option name="amount">
                     <numeric-value number="150" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="dark-chocolate"/>
@@ -230,14 +245,14 @@
                 <output id="dark-chocolate-for-ganache">dark chocolate for ganache</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-cream-for-ganache">
             <options>
                 <option name="amount">
                     <numeric-value number="100" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="vegan-cream"/>
@@ -246,14 +261,14 @@
                 <output id="vegan-cream-for-ganache">vegan cream</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-cream-for-glaze">
             <options>
                 <option name="amount">
                     <numeric-value number="200" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="vegan-cream"/>
@@ -262,14 +277,14 @@
                 <output id="vegan-cream-for-glaze">vegan cream for glaze</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-chocolate-for-glaze">
             <options>
                 <option name="amount">
                     <numeric-value number="200" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="dark-chocolate"/>
@@ -278,14 +293,14 @@
                 <output id="chocolate-for-glaze">chocolate for glaze</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-chocolate-for-curls">
             <options>
                 <option name="amount">
                     <numeric-value number="100" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="dark-chocolate"/>
@@ -295,7 +310,7 @@
             </outputs>
         </task>
 
-        <task operation="mix">
+        <task operation="mix" id="make-buttermilk">
             <instructions>
                 Combine the
                 <input ref="measured-soya-milk"/>
@@ -304,23 +319,23 @@
                 in a
                 <tool ref="bowl" reserved="true"/>.
                 Set to side so it turns into
-                <output id="vegan-buttermilk">vegan buttermilk</output> <!-- TODO: is a spatula needed? -->
+                <output id="vegan-buttermilk">vegan buttermilk</output>
             </instructions>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-chocolate-coffee-oil">
             <instructions>
                 Add the<input ref="dark-chocolate-for-base"/>,
                 <input ref="measured-instant-coffee"/>
                 and
                 <input ref="measured-vegetable-oil"/>
-                into
+                into the
                 <tool ref="microwave-safe-jug" reserved="true"/>
             </instructions>
             <outputs>
                 <output id="chocolate-coffee-oil-mixture">chocolate-coffee-oil -mixture</output>
             </outputs>
         </task>
-        <task operation="heat">
+        <task operation="heat" id="heat-chocolate-coffee-oil">
             <options>
                 <option name="temperature">
                     <numeric-value number="60" unit="celsius"/>
@@ -330,16 +345,19 @@
                 </option>
             </options>
             <tools>
-                <tool ref="microwave"/>
+                <tool ref="microwave-safe-jug" reserved="true"/>
             </tools>
             <inputs>
                 <input ref="chocolate-coffee-oil-mixture"/>
             </inputs>
             <outputs>
-                <output id="heated-chocolate-coffee-oil-mixture">heated chocolate-coffee-oil -mixture</output>
+                <output id="heated-chocolate-coffee-oil-mixture" hold="15" hold-unit="minutes">heated chocolate-coffee-oil -mixture</output>
             </outputs>
+            <instructions>
+                Heat the <input ref="chocolate-coffee-oil-mixture"/> in the microwave until the chocolate melts.
+            </instructions>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-dry-ingredients">
             <instructions>
                 Add the
                 <input ref="measured-flour"/>,
@@ -348,17 +366,16 @@
                 <input ref="measured-cocoa-powder"/>
                 and
                 <input ref="measured-caster-sugar"/>
-                to
-                <tool ref="mixing-bowl" reserved="true"/>
+                to a
+                <tool ref="bowl" reserved="true"/>
                 and stir with a
-                <tool ref="spatula" reserved="true"/>.
+                <tool ref="spatula" reserved="true" soil="none"/>.
             </instructions>
             <outputs>
                 <output id="dry-ingredients-in-bowl">dry ingredients</output>
-                <!-- TODO: somehow reference this in the instructions so that it will be evident what the next steps refer to -->
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-batter">
             <instructions>
                 Add
                 <input ref="heated-chocolate-coffee-oil-mixture"/>
@@ -369,32 +386,30 @@
                 Add the
                 <input ref="measured-vanilla-extract"/>
                 and stir with the
-                <tool ref="spatula"/>
+                <tool ref="spatula" reserved="true"/>
                 until smooth.
             </instructions>
             <outputs>
-                <output id="dough">dough</output>
-                <tool ref="bowl"/> <!-- TODO: need to be specific about which bowl is freed! -->
+                <output id="dough" volume="1.2" volume-unit="l">dough</output>
+                <tool ref="bowl" name="buttermilk bowl"/>
                 <tool ref="microwave-safe-jug"/>
             </outputs>
         </task>
 
-        <task operation="grease">
+        <task operation="grease" id="prepare-mould">
             <instructions>
                 Grease the sides of the
-                <tool ref="silicone-cake-mould"
-                      reserved="true"
-                      amount="1"/>
+                <tool ref="silicone-cake-mould" reserved="true"/>
                 with
-                <input ref="margarine"/> <!-- TODO: specify amount? -->
-                and line the base with <!-- TODO: this should be another task? -->
-                <input ref="parchment-paper"/>.
+                <input ref="margarine"/>
+                and line the base with
+                <tool ref="parchment-paper"/>.
             </instructions>
             <outputs>
-                <output id="prepared-cake-mould">prepared cake mould</output>
+                <output id="prepared-cake-mould" amount="1" unit="cake">prepared cake mould</output>
             </outputs>
         </task>
-        <task operation="split">
+        <task operation="split" id="split-dough">
             <options>
                 <option name="parts">
                     <numeric-value number="2"/>
@@ -407,79 +422,84 @@
                 <tool ref="bowl" reserved="true"/>
             </tools>
             <outputs>
-                <output id="split-dough-in-a-bowl">split dough</output>
+                <output id="split-dough-in-a-bowl" amount="2" unit="cake">split dough</output>
             </outputs>
         </task>
-        <task operation="pour">
+        <task operation="pour" id="pour-into-mould">
             <instructions>
                 Pour the
                 <input ref="split-dough-in-a-bowl"/>
                 into the
-                <input ref="prepared-cake-mould">cake mould</input> <!-- TODO: this is a input, but also a tool, so which tag to use? -->
+                <input ref="prepared-cake-mould">cake mould</input>
             </instructions>
+            <tools>
+                <tool ref="silicone-cake-mould" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="dough-in-mould">dough in the mould</output>
+                <output id="dough-in-mould" amount="2" unit="cake">dough in the mould</output>
                 <tool ref="bowl" name="used bowl"/>
+                <tool ref="spatula"/>
             </outputs>
         </task>
-        <task operation="bake-in-microwave"> <!-- operation is identical to heat -->
+        <task operation="bake-in-microwave" id="bake">
             <instructions>
                 Bake the
                 <input ref="dough-in-mould"/>
-                in the
-                <tool ref="microwave"/>
-                for
+                in the microwave for
                 <option name="duration">
                     <numeric-value number="6" unit="minutes"/>
                 </option>
                 or until a toothpick comes out clean.
             </instructions>
             <outputs>
-                <output id="baked-cake">baked cake</output>
+                <output id="baked-cake" amount="2" unit="cake">baked cake</output>
             </outputs>
         </task>
-        <task operation="chill"><!-- should there be a combined take out -operation? -->
+        <task operation="chill" id="cool-in-mould">
             <instructions>
                 Cool the
                 <input ref="baked-cake"/>
                 for
                 <option name="duration">
-                    <numeric-value number="10" unit="minutes"/><!-- TODO: was 10 minutes -->
+                    <numeric-value number="10" unit="minutes"/>
                 </option>
-                in the <tool ref="silicone-cake-mould">mould</tool>.
+                in the <tool ref="silicone-cake-mould" reserved="true">mould</tool>.
             </instructions>
             <outputs>
-                <output id="cooled-cake-in-mould">cooled cake in mould</output>
+                <output id="cooled-cake-in-mould" amount="2" unit="cake">cooled cake in mould</output>
             </outputs>
         </task>
-        <task operation="separate">
+        <task operation="separate" id="turn-out">
             <instructions>
                 Detach the
                 <input ref="cooled-cake-in-mould">cooled cake</input>
                 from the mould by running a
                 <tool ref="spatula"/>
-                around the edges. Turn out the cake from the mould onto a <!-- TODO: cannot refer to the cooled-cake-in-mould in this sentence as it would multiply the inputs -->
-                <tool ref="cooling-rack"/>.
+                around the edges. Turn out the cake from the mould onto a
+                <tool ref="cooling-rack" reserved="true" soil="none"/>.
             </instructions>
             <outputs>
-                <output id="cake-on-the-rack">cake on the rack</output>
+                <output id="cake-on-the-rack" amount="2" unit="cake">cake on the rack</output>
                 <tool ref="silicone-cake-mould" name="used cake mould"/>
             </outputs>
         </task>
-        <task operation="chill">
+        <task operation="chill" id="cool-on-rack">
             <inputs>
                 <input ref="cake-on-the-rack"/>
             </inputs>
             <options>
                 <option name="duration">
-                    <numeric-value number="2" unit="minutes"/> <!-- TODO: was 2 minutes --><!-- TODO: use temperature instead -->
+                    <numeric-value number="2" unit="minutes"/>
                 </option>
             </options>
+            <tools>
+                <tool ref="cooling-rack" reserved="true" soil="none"/>
+            </tools>
             <outputs>
-                <output id="cooled-cake-on-the-rack">cooled cake on the rack</output>
+                <output id="cooled-cake-on-the-rack" amount="2" unit="cake">cooled cake on the rack</output>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-ganache-ingredients">
             <instructions>
                 Add the
                 <input ref="dark-chocolate-for-ganache"/>
@@ -492,7 +512,7 @@
                 <output id="chocolate-cream-mix">chocolate-cream -mix</output>
             </outputs>
         </task>
-        <task operation="melt">
+        <task operation="heat" id="melt-ganache">
             <instructions>
                 Melt
                 <input ref="chocolate-cream-mix"/>
@@ -500,14 +520,16 @@
                 <option name="duration">
                     <numeric-value number="30" unit="seconds"/>
                 </option>
-                in the
-                <tool ref="microwave"/>.
+                in the microwave.
             </instructions>
+            <tools>
+                <tool ref="microwave-safe-jug" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="melted-chocolate-and-cream-mix">melted chocolate and cream mix</output>
+                <output id="melted-chocolate-and-cream-mix" hold="15" hold-unit="minutes">melted chocolate and cream mix</output>
             </outputs>
         </task>
-        <task operation="stir">
+        <task operation="stir" id="stir-ganache">
             <instructions>
                 Stir the
                 <input ref="melted-chocolate-and-cream-mix"/>
@@ -515,121 +537,132 @@
                 <tool ref="spatula" reserved="true"/>
                 until fully melted
             </instructions>
+            <tools>
+                <tool ref="microwave-safe-jug" reserved="true"/>
+            </tools>
             <outputs>
                 <output id="fully-melted-chocolate-and-cream-mix">fully melted chocolate and cream mix</output>
             </outputs>
         </task>
-        <task operation="chill">
+        <task operation="chill" id="cool-ganache">
             <instructions>
                 Cool the
                 <input ref="fully-melted-chocolate-and-cream-mix"/>
-                until at
+                at room temperature for
                 <option name="duration">
-                    <numeric-value number="5" unit="minutes"/> <!-- TODO: was 5 minutes --><!-- TODO: use temperature instead -->
+                    <numeric-value number="5" unit="minutes"/>
                 </option>
             </instructions>
+            <tools>
+                <tool ref="microwave-safe-jug" reserved="true"/>
+            </tools>
             <outputs>
                 <output id="room-temperature-chocolate-cream-mix">room temperature chocolate-cream -mix</output>
             </outputs>
         </task>
-        <task operation="chill">
+        <task operation="chill" id="chill-ganache">
             <instructions>
                 Pop the
                 <input ref="room-temperature-chocolate-cream-mix"/>
-                into the
-                <tool ref="fridge"/>
-                and cool until it is
+                into the fridge and cool it for
                 <option name="duration">
-                    <numeric-value number="5" unit="minutes"/><!-- TODO: was 5 minutes -->
+                    <numeric-value number="5" unit="minutes"/>
                 </option>
-                <!-- TODO
-                <option name="temperature">
-                    <numeric-value number="10" unit="celsius">
-                        runny enough to easily spread, but thick enough, so it doesn't fall down the sides of the cake
-                    </numeric-value>
-                </option>
-                -->
+                until it is runny enough to easily spread, but thick enough so it doesn't fall down the sides of the cake.
             </instructions>
+            <tools>
+                <tool ref="microwave-safe-jug" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="ganache">ganache</output>
+                <output id="ganache" hold="30" hold-unit="minutes">ganache</output>
             </outputs>
         </task>
-        <task operation="fill">
+        <task operation="spread" id="fill-cake">
             <instructions>
                 Place a
-                <input ref="cooled-cake-on-the-rack">the cake and rack</input>
-                on top of a <!-- TODO: need for a way to reference specific parts of a split? -->
-                <tool ref="tray"/>
+                <input ref="cooled-cake-on-the-rack">cake and rack</input>
+                on top of a
+                <tool ref="baking-sheet" reserved="true"/>
                 to collect the ganache glaze which will run down the sides of the cake.
                 Spread the
                 <input ref="ganache"/>
-                over the top of the cake and place a second
-                <input ref="cooled-cake-on-the-rack">cake</input>
-                on top. Make sure the cake remains on top of a cooling rack.
-            </instructions>
-            <outputs>
-                <output id="filled-cake">filled cake</output>
+                over the top of the cake with the
                 <tool ref="spatula"/>
+                and place the second cake on top. Make sure the cake remains on top of the cooling rack.
+            </instructions>
+            <tools>
+                <tool ref="cooling-rack" reserved="true" soil="none"/>
+            </tools>
+            <outputs>
+                <output id="filled-cake" amount="1" unit="cake">filled cake</output>
+                <tool ref="spatula"/>
+                <tool ref="microwave-safe-jug"/>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-glaze-ingredients">
             <instructions>
                 Add the
                 <input ref="chocolate-for-glaze"/>
                 and
                 <input ref="vegan-cream-for-glaze"/>
-                to a
-                <input ref="microwave-safe-jug"/>
+                to the
+                <tool ref="microwave-safe-jug" reserved="true"/>
             </instructions>
             <outputs>
                 <output id="chocolate-and-cream-for-glaze">chocolate and cream for glaze</output>
             </outputs>
         </task>
-        <task operation="heat">
+        <task operation="heat" id="heat-glaze">
             <instructions>
                 Heat the
                 <input ref="chocolate-and-cream-for-glaze"/>
                 for
-                <option name="duration"><!-- TODO: use temperature in recipe, but print out time? -->
+                <option name="duration">
                     <numeric-value number="30" unit="seconds"/>
                 </option>
-                in the<tool ref="microwave"/>.
+                in the microwave.
             </instructions>
+            <tools>
+                <tool ref="microwave-safe-jug" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="heated-chocolate-and-cream-for-glaze">heated chocolate and cream for glaze</output>
+                <output id="heated-chocolate-and-cream-for-glaze" hold="15" hold-unit="minutes">heated chocolate and cream for glaze</output>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="stir-glaze">
             <instructions>
                 Stir the
                 <input ref="heated-chocolate-and-cream-for-glaze"/>
+                with a
+                <tool ref="spatula"/>
                 until fully melted.
             </instructions>
+            <tools>
+                <tool ref="microwave-safe-jug" reserved="true"/>
+            </tools>
             <outputs>
                 <output id="melted-chocolate-and-cream-mix-for-glaze">melted chocolate and cream mix</output>
             </outputs>
         </task>
-        <task operation="chill">
+        <task operation="chill" id="thicken-glaze">
             <instructions>
                 Leave the
                 <input ref="melted-chocolate-and-cream-mix-for-glaze"/>
                 to sit for
                 <option name="duration">
-                    <numeric-value number="10" unit="minutes"/><!-- TODO: was 10 minutes -->
+                    <numeric-value number="10" unit="minutes"/>
                 </option>
-                so that it thickens a bit. The consistency should be
-                <option name="temperature">
-                    <numeric-value number="30" unit="celsius">runny enough so it pours down the side of the cake, but
-                        thick
-                        enough, so it covers the cake easily.
-                    </numeric-value>
-                </option>
+                so that it thickens a bit. The consistency should be runny enough so it pours down the side of the
+                cake, but thick enough so it covers the cake easily.
             </instructions>
+            <tools>
+                <tool ref="microwave-safe-jug" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="glaze">glaze</output>
+                <output id="glaze" hold="15" hold-unit="minutes">glaze</output>
             </outputs>
         </task>
-        <task operation="spread">
+        <task operation="spread" id="glaze-cake">
             <instructions>
                 Pour the
                 <input ref="glaze"/>
@@ -639,34 +672,41 @@
                 <tool ref="frosting-spatula"/>
                 to ease the chocolate around the sides.
             </instructions>
+            <tools>
+                <tool ref="cooling-rack" reserved="true" soil="none"/>
+                <tool ref="baking-sheet" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="frosted-cake">frosted cake</output>
+                <output id="frosted-cake" amount="1" unit="cake">frosted cake</output>
+                <tool ref="microwave-safe-jug"/>
             </outputs>
         </task>
-        <task operation="transfer">
+        <task operation="transfer" id="transfer-to-plate">
             <instructions>
                 Transfer the
                 <input ref="frosted-cake"/>
-                onto a<tool ref="plate" amount="1"/>.
+                onto a
+                <tool ref="plate" reserved="true"/>.
             </instructions>
             <outputs>
-                <output id="cake-on-plate">cake on a plate</output>
-                <tool ref="cooling-rack" reusable="true"/>
+                <output id="cake-on-plate" amount="1" unit="cake">cake on a plate</output>
+                <tool ref="cooling-rack"/>
+                <tool ref="baking-sheet"/>
             </outputs>
         </task>
-        <task operation="grate">
+        <task operation="grate" id="grate-chocolate">
             <inputs>
                 <input ref="chocolate-for-curls"/>
             </inputs>
             <tools>
                 <tool ref="grater"/>
-                <tool ref="bowl"/>
+                <tool ref="bowl" reserved="true"/>
             </tools>
             <outputs>
                 <output id="chocolate-curls">chocolate curls</output>
             </outputs>
         </task>
-        <task operation="sprinkle">
+        <task operation="sprinkle" id="sprinkle-curls">
             <instructions>
                 Sprinkle
                 <input ref="chocolate-curls"/>
@@ -674,7 +714,8 @@
                 <input ref="cake-on-plate">cake</input>
             </instructions>
             <outputs>
-                <output id="finished-cake">finished cake</output>
+                <output id="finished-cake" amount="1" unit="cake" final="true">finished cake</output>
+                <tool ref="bowl"/>
             </outputs>
         </task>
     </tasks>

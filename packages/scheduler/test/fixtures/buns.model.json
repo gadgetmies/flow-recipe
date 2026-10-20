@@ -1,0 +1,1011 @@
+{
+  "id": "buns",
+  "title": "Buns",
+  "ref": null,
+  "serving": {
+    "temperature": "hot",
+    "hold": 600
+  },
+  "ingredients": [
+    {
+      "id": "milk",
+      "name": "milk",
+      "properties": {}
+    },
+    {
+      "id": "yeast",
+      "name": "yeast",
+      "properties": {}
+    },
+    {
+      "id": "egg",
+      "name": "egg",
+      "properties": {}
+    },
+    {
+      "id": "sugar",
+      "name": "sugar",
+      "properties": {}
+    },
+    {
+      "id": "pearl-sugar",
+      "name": "pearl sugar",
+      "properties": {}
+    },
+    {
+      "id": "cardamom",
+      "name": "ground cardamom",
+      "properties": {}
+    },
+    {
+      "id": "flour",
+      "name": "white bread flour",
+      "properties": {}
+    },
+    {
+      "id": "butter",
+      "name": "butter",
+      "properties": {}
+    },
+    {
+      "id": "parchment-paper",
+      "name": "parchment paper",
+      "properties": {}
+    }
+  ],
+  "tools": [
+    {
+      "id": "bowl",
+      "name": "bowl",
+      "type": "bowl",
+      "capacity": {
+        "number": 4,
+        "unit": "l"
+      },
+      "properties": {}
+    },
+    {
+      "id": "large-bowl",
+      "name": "large bowl",
+      "type": "large-bowl",
+      "capacity": {
+        "number": 8,
+        "unit": "l"
+      },
+      "properties": {}
+    },
+    {
+      "id": "towel",
+      "name": "towel",
+      "type": "towel",
+      "capacity": null,
+      "properties": {}
+    },
+    {
+      "id": "kitchen-scale",
+      "name": "kitchen scale",
+      "type": "kitchen-scale",
+      "capacity": null,
+      "properties": {}
+    },
+    {
+      "id": "baking-sheet",
+      "name": "baking sheet",
+      "type": "baking-sheet",
+      "capacity": {
+        "number": 16,
+        "unit": "bun"
+      },
+      "properties": {}
+    },
+    {
+      "id": "cooling-rack",
+      "name": "cooling rack",
+      "type": "cooling-rack",
+      "capacity": {
+        "number": 32,
+        "unit": "bun"
+      },
+      "properties": {}
+    },
+    {
+      "id": "pastry-brush",
+      "name": "pastry brush",
+      "type": "pastry-brush",
+      "capacity": null,
+      "properties": {}
+    },
+    {
+      "id": "microwave",
+      "name": "microwave",
+      "type": "microwave",
+      "capacity": null,
+      "properties": {}
+    }
+  ],
+  "tasks": [
+    {
+      "id": "measure-milk",
+      "operation": "measure",
+      "options": {
+        "amount": {
+          "number": 5,
+          "unit": "dl"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "milk",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "bowl",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "measured-milk",
+          "name": "milk",
+          "amount": 500,
+          "unit": "ml",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "measure-yeast",
+      "operation": "measure",
+      "options": {
+        "amount": {
+          "number": 50,
+          "unit": "g"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "yeast",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "kitchen-scale",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "measured-yeast",
+          "name": "yeast",
+          "amount": 50,
+          "unit": "g",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "measure-sugar",
+      "operation": "measure",
+      "options": {
+        "amount": {
+          "number": 150,
+          "unit": "g"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "sugar",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "kitchen-scale",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "measured-sugar",
+          "name": "sugar",
+          "amount": 150,
+          "unit": "g",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "measure-cardamom",
+      "operation": "measure",
+      "options": {
+        "amount": {
+          "number": 10,
+          "unit": "g"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "cardamom",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "kitchen-scale",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "measured-cardamom",
+          "name": "cardamom",
+          "amount": 10,
+          "unit": "g",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "measure-egg",
+      "operation": "measure",
+      "options": {
+        "amount": {
+          "number": 1,
+          "unit": "pieces"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "egg",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [],
+      "outputs": [
+        {
+          "id": "measured-egg",
+          "name": "egg",
+          "amount": 1,
+          "unit": "pieces",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "measure-flour",
+      "operation": "measure",
+      "options": {
+        "amount": {
+          "number": 1000,
+          "unit": "g"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "flour",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "kitchen-scale",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        },
+        {
+          "ref": "bowl",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "measured-flour",
+          "name": "flour",
+          "amount": 1000,
+          "unit": "g",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "measure-butter",
+      "operation": "measure",
+      "options": {
+        "amount": {
+          "number": 150,
+          "unit": "g"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "butter",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "kitchen-scale",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "measured-butter",
+          "name": "butter",
+          "amount": 150,
+          "unit": "g",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "heat-milk",
+      "operation": "heat",
+      "options": {
+        "temperature": {
+          "number": 37,
+          "unit": "celsius"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "measured-milk",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "microwave",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "warm-milk",
+          "name": "warm milk",
+          "amount": 500,
+          "unit": "ml",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "yeast-milk",
+      "operation": "join",
+      "options": {},
+      "inputs": [
+        {
+          "ref": "measured-yeast",
+          "amount": null,
+          "text": null
+        },
+        {
+          "ref": "warm-milk",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [],
+      "outputs": [
+        {
+          "id": "milk-yeast",
+          "name": "milk and yeast",
+          "amount": null,
+          "unit": null,
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": [],
+      "steps": [
+        {
+          "id": "crumble-yeast",
+          "operation": "crumble",
+          "options": {},
+          "inputs": [
+            {
+              "ref": "measured-yeast",
+              "amount": null,
+              "text": null
+            }
+          ],
+          "tools": [],
+          "outputs": [
+            {
+              "id": "crumbled-yeast",
+              "name": "crumbled yeast",
+              "amount": null,
+              "unit": null,
+              "hold": null,
+              "volume": null,
+              "final": false
+            }
+          ],
+          "returnsTools": [],
+          "instructions": null,
+          "requires": []
+        },
+        {
+          "id": "dissolve-yeast",
+          "operation": "incorporate",
+          "options": {},
+          "inputs": [
+            {
+              "ref": "warm-milk",
+              "amount": null,
+              "text": null
+            },
+            {
+              "ref": "crumbled-yeast",
+              "amount": null,
+              "text": null
+            }
+          ],
+          "tools": [],
+          "outputs": [
+            {
+              "id": "milk-yeast",
+              "name": "milk and yeast",
+              "amount": null,
+              "unit": null,
+              "hold": null,
+              "volume": null,
+              "final": false
+            }
+          ],
+          "returnsTools": [],
+          "instructions": null,
+          "requires": []
+        }
+      ]
+    },
+    {
+      "id": "wet-mix",
+      "operation": "incorporate",
+      "options": {},
+      "inputs": [
+        {
+          "ref": "milk-yeast",
+          "amount": null,
+          "text": null
+        },
+        {
+          "ref": "measured-egg",
+          "amount": null,
+          "text": null
+        },
+        {
+          "ref": "measured-sugar",
+          "amount": null,
+          "text": null
+        },
+        {
+          "ref": "measured-cardamom",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "large-bowl",
+          "reserved": true,
+          "amount": 1,
+          "soil": "wash",
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "wet-mix",
+          "name": "wet mix",
+          "amount": null,
+          "unit": null,
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "mix-flour",
+      "operation": "mix-in-steps",
+      "options": {
+        "task-size": {
+          "number": 1,
+          "unit": "dl"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "wet-mix",
+          "amount": null,
+          "text": null
+        },
+        {
+          "ref": "measured-flour",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [],
+      "outputs": [
+        {
+          "id": "dough-without-butter",
+          "name": "dough",
+          "amount": null,
+          "unit": null,
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "mix-butter",
+      "operation": "incorporate",
+      "options": {},
+      "inputs": [
+        {
+          "ref": "dough-without-butter",
+          "amount": null,
+          "text": null
+        },
+        {
+          "ref": "measured-butter",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [],
+      "outputs": [
+        {
+          "id": "dough",
+          "name": "dough",
+          "amount": 1920,
+          "unit": "g",
+          "hold": null,
+          "volume": {
+            "number": 2.5,
+            "unit": "l"
+          },
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "raise",
+      "operation": "raise",
+      "options": {
+        "duration": {
+          "number": 20,
+          "unit": "minutes"
+        },
+        "temperature": {
+          "number": 30,
+          "unit": "celsius"
+        },
+        "multiplier": {
+          "number": 200,
+          "unit": "percent"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "dough",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "towel",
+          "reserved": true,
+          "amount": 1,
+          "soil": "none",
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "raised-dough",
+          "name": "raised dough",
+          "amount": 1920,
+          "unit": "g",
+          "hold": 900,
+          "volume": {
+            "number": 5,
+            "unit": "l"
+          },
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "split",
+      "operation": "split",
+      "options": {
+        "unit-size": {
+          "number": 30,
+          "unit": "g"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "raised-dough",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "kitchen-scale",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "bun-dough",
+          "name": "dough for bun",
+          "amount": null,
+          "unit": "bun",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "line-sheets",
+      "operation": "line",
+      "options": {},
+      "inputs": [
+        {
+          "ref": "parchment-paper",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "baking-sheet",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 4
+        }
+      ],
+      "outputs": [
+        {
+          "id": "lined-sheets",
+          "name": "lined baking sheets",
+          "amount": null,
+          "unit": null,
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "roll",
+      "operation": "spherify",
+      "options": {},
+      "inputs": [
+        {
+          "ref": "bun-dough",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [],
+      "outputs": [
+        {
+          "id": "dough-sphere",
+          "name": "dough sphere",
+          "amount": null,
+          "unit": "bun",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "place",
+      "operation": "place-on-sheet",
+      "options": {},
+      "inputs": [
+        {
+          "ref": "dough-sphere",
+          "amount": null,
+          "text": null
+        },
+        {
+          "ref": "lined-sheets",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "baking-sheet",
+          "reserved": true,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "bun-on-sheet",
+          "name": "bun on sheet",
+          "amount": null,
+          "unit": "bun",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "brush",
+      "operation": "brush",
+      "options": {},
+      "inputs": [
+        {
+          "ref": "bun-on-sheet",
+          "amount": null,
+          "text": null
+        },
+        {
+          "ref": "egg",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "pastry-brush",
+          "reserved": false,
+          "amount": 1,
+          "soil": "wash",
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "brushed-bun",
+          "name": "brushed bun",
+          "amount": null,
+          "unit": "bun",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "sprinkle",
+      "operation": "sprinkle",
+      "options": {},
+      "inputs": [
+        {
+          "ref": "brushed-bun",
+          "amount": null,
+          "text": null
+        },
+        {
+          "ref": "pearl-sugar",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [],
+      "outputs": [
+        {
+          "id": "oven-ready-bun",
+          "name": "oven-ready bun",
+          "amount": null,
+          "unit": "bun",
+          "hold": null,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "bake",
+      "operation": "bake-in-oven",
+      "options": {
+        "temperature": {
+          "number": 225,
+          "unit": "celsius"
+        },
+        "duration": {
+          "number": 15,
+          "unit": "minutes"
+        }
+      },
+      "inputs": [
+        {
+          "ref": "oven-ready-bun",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "baking-sheet",
+          "reserved": false,
+          "amount": 1,
+          "soil": null,
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "baked-buns",
+          "name": "baked buns",
+          "amount": null,
+          "unit": "bun",
+          "hold": 600,
+          "volume": null,
+          "final": false
+        }
+      ],
+      "returnsTools": [],
+      "instructions": null,
+      "requires": []
+    },
+    {
+      "id": "transfer",
+      "operation": "transfer",
+      "options": {},
+      "inputs": [
+        {
+          "ref": "baked-buns",
+          "amount": null,
+          "text": null
+        }
+      ],
+      "tools": [
+        {
+          "ref": "cooling-rack",
+          "reserved": true,
+          "amount": 1,
+          "soil": "none",
+          "qty": 1
+        }
+      ],
+      "outputs": [
+        {
+          "id": "buns-on-rack",
+          "name": "buns",
+          "amount": null,
+          "unit": "bun",
+          "hold": 600,
+          "volume": null,
+          "final": true
+        }
+      ],
+      "returnsTools": [
+        {
+          "ref": "baking-sheet",
+          "name": "baking sheet"
+        }
+      ],
+      "instructions": null,
+      "requires": []
+    }
+  ]
+}

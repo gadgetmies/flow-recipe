@@ -1,18 +1,23 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd">
+<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd"
+        version="2" id="buns">
     <title>Buns</title>
+    <serving temperature="hot" hold="10" hold-unit="minutes"/>
     <ingredients>
         <ingredient id="milk">milk<properties>
+                <property name="storage" value="fridge"/>
                 <property name="fat-content">
                     <numeric-value number="3" unit="percent"/>
                 </property>
             </properties>
         </ingredient>
         <ingredient id="yeast">yeast<properties>
+                <property name="storage" value="fridge"/>
                 <property name="type" value="dry"/>
             </properties>
         </ingredient>
         <ingredient id="egg">egg<properties>
+                <property name="storage" value="fridge"/>
                 <property name="size" value="medium"/>
             </properties>
         </ingredient>
@@ -34,6 +39,8 @@
         </ingredient>
         <ingredient id="flour">white bread flour</ingredient>
         <ingredient id="butter">butter<properties>
+                <property name="storage" value="fridge"/>
+                <property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property>
                 <property name="salt-content">
                     <numeric-value number="11" unit="milligram"/>
                 </property>
@@ -41,90 +48,124 @@
         </ingredient>
     </ingredients>
     <tools>
-        
+        <!-- The dough is about 2.5 l and doubles while raising, so it needs the big bowl. -->
+        <tool id="large-bowl">large bowl<properties>
+                <property name="capacity">
+                    <numeric-value number="8" unit="l"/>
+                </property>
+            </properties>
+        </tool>
+        <tool id="bowl">bowl<properties>
+                <property name="capacity">
+                    <numeric-value number="4" unit="l"/>
+                </property>
+            </properties>
+        </tool>
+        <tool id="kitchen-scale">kitchen scale</tool>
+        <tool id="fork">fork</tool>
+        <tool id="towel">towel</tool>
+        <tool id="baking-sheet">baking sheet<properties>
+                <property name="capacity">
+                    <numeric-value number="16" unit="bun"/>
+                </property>
+            </properties>
+        </tool>
+        <tool id="parchment-paper">parchment paper</tool>
+        <tool id="pastry-brush">pastry brush</tool>
+        <tool id="cooling-rack">cooling rack<properties>
+                <property name="capacity">
+                    <numeric-value number="32" unit="bun"/>
+                </property>
+            </properties>
+        </tool>
     </tools>
     <tasks>
-        <task operation="measure">
+        <task operation="measure" id="measure-milk">
             <options>
                 <option name="amount">
-                    <numeric-value number="0.5" unit="liters"/>
+                    <numeric-value number="0.5" unit="l"/>
                 </option>
             </options>
             <tools>
-                <tool ref="bowl"/>
-                <!-- TODO: 
-                When selecting the bowl, how to know how big it should be?
-                Perhaps it would be best to just define the right size and scale according to the recipe multiplier?
-                This however would need to take into account the sizes of available bowls and when the dough is raised
-                the bowl should be considerably larger than the volume of the dough. If the size of the dough
-                would be larger than the largest bowl then there needs to be multiple bowls used. 
-                -->
+                <tool ref="large-bowl" reserved="true"/>
             </tools>
             <inputs>
                 <input ref="milk"/>
             </inputs>
             <outputs>
-                <output id="0.5l-milk">milk</output>
+                <output id="milk-for-dough">milk</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-yeast">
             <options>
                 <option name="amount">
-                    <numeric-value number="50" unit="grams"/>
+                    <numeric-value number="50" unit="g"/>
                 </option>
             </options>
+            <tools>
+                <tool ref="kitchen-scale" soil="none"/>
+            </tools>
             <inputs>
                 <input ref="yeast"/>
             </inputs>
             <outputs>
-                <output id="50g-yeast">yeast</output>
+                <output id="yeast-for-dough">yeast</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-sugar">
             <options>
                 <option name="amount">
-                    <numeric-value number="500" unit="grams"/>
+                    <numeric-value number="100" unit="g"/>
                 </option>
             </options>
+            <tools>
+                <tool ref="kitchen-scale" soil="none"/>
+            </tools>
             <inputs>
                 <input ref="sugar"/>
             </inputs>
             <outputs>
-                <output id="500g-sugar">sugar</output>
+                <output id="sugar-for-dough">sugar</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-cardamom">
             <options>
                 <option name="amount">
-                    <numeric-value number="50" unit="grams"/>
+                    <numeric-value number="10" unit="g"/>
                 </option>
             </options>
+            <tools>
+                <tool ref="kitchen-scale" soil="none"/>
+            </tools>
             <inputs>
                 <input ref="cardamom"/>
             </inputs>
             <outputs>
-                <output id="50g-cardamom">cardamom</output>
+                <output id="cardamom-for-dough">cardamom</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-eggs-for-dough">
             <options>
                 <option name="amount">
-                    <numeric-value number="1" unit="pieces"/>
+                    <numeric-value number="2" unit="pieces"/>
                 </option>
             </options>
             <inputs>
                 <input ref="egg"/>
             </inputs>
             <outputs>
-                <output id="egg-for-dough">egg</output>
+                <output id="eggs-for-dough">eggs</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-flour">
             <options>
                 <option name="amount">
-                    <numeric-value number="900" unit="grams"/>
+                    <numeric-value number="900" unit="g"/>
                 </option>
             </options>
+            <tools>
+                <tool ref="kitchen-scale" soil="none"/>
+            </tools>
             <inputs>
                 <input ref="flour"/>
             </inputs>
@@ -132,78 +173,81 @@
                 <output id="flour-for-dough">flour</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-butter">
             <options>
                 <option name="amount">
-                    <numeric-value number="200" unit="grams"/>
+                    <numeric-value number="200" unit="g"/>
                 </option>
             </options>
+            <tools>
+                <tool ref="kitchen-scale" soil="none"/>
+            </tools>
             <inputs>
                 <input ref="butter"/>
             </inputs>
             <outputs>
-                <output id="200g-butter">butter</output>
+                <output id="butter-for-dough">butter</output>
             </outputs>
         </task>
-        <task operation="heat">
+        <task operation="heat" id="heat-milk">
             <options>
                 <option name="temperature">
                     <numeric-value number="30" unit="celsius"/>
                 </option>
             </options>
             <tools>
-                <tool ref="microwave"/>
-                <!-- TODO: Would it be difficult to defer from the use of a microwave that the bowl cannot be metallic? -->
+                <tool ref="large-bowl" reserved="true"/>
             </tools>
             <inputs>
-                <input ref="0.5l-milk"/>
+                <input ref="milk-for-dough"/>
             </inputs>
             <outputs>
-                <output id="warm-milk">warm milk</output>
+                <output id="warm-milk" hold="10" hold-unit="minutes">warm milk</output>
             </outputs>
+            <instructions>
+                Heat the <input ref="milk-for-dough"/> in the microwave to hand warm.
+            </instructions>
         </task>
-        <join>
-            <!-- TODO: preprocess the recipe and replace join with a task that combines the tasks inside it -->
-            <!-- i.e. here the output would be a task that would get the timeline from crumble and incorporate and
-                 also join the instructions.
-                 Will the instructions be clear enough though? Perhaps in here, but is that universal? 
-                 What should the instruction be here? Crumble yeast *and* mix *crumbled* yeast into the warm milk?
-                 A more natural way would be to say to crumble the yeast into the milk and mix it --> 
-            <task operation="crumble">
+        <join id="dissolve-yeast">
+            <task operation="crumble" id="crumble-yeast">
                 <inputs>
-                    <input ref="50g-yeast"/>
+                    <input ref="yeast-for-dough"/>
                 </inputs>
                 <outputs>
                     <output id="crumbled-yeast">crumbled yeast</output>
                 </outputs>
             </task>
-            <task operation="incorporate">
+            <task operation="incorporate" id="stir-yeast-into-milk">
+                <tools>
+                    <tool ref="large-bowl" reserved="true"/>
+                </tools>
                 <inputs>
                     <input ref="warm-milk"/>
                     <input ref="crumbled-yeast"/>
                 </inputs>
                 <outputs>
-                    <output id="milk+yeast">milk and yeast</output>
+                    <output id="milk-and-yeast">milk and yeast</output>
                 </outputs>
             </task>
         </join>
-        <task operation="incorporate">
+        <task operation="incorporate" id="mix-wet-ingredients">
+            <tools>
+                <tool ref="large-bowl" reserved="true" soil="wash"/>
+            </tools>
             <inputs>
-                <input ref="milk+yeast"/>
-                <input ref="egg-for-dough"/>
-                <input ref="500g-sugar"/>
-                <input ref="50g-cardamom"/>
+                <input ref="milk-and-yeast"/>
+                <input ref="eggs-for-dough"/>
+                <input ref="sugar-for-dough"/>
+                <input ref="cardamom-for-dough"/>
             </inputs>
             <outputs>
                 <output id="wet-mix">wet mix</output>
             </outputs>
         </task>
-        <task operation="mix-in-steps">
-            <options>
-                <option name="task-size">
-                    <numeric-value number="1" unit="deciliters"/>
-                </option>
-            </options>
+        <task operation="mix-in-steps" id="mix-in-flour">
+            <tools>
+                <tool ref="large-bowl" reserved="true"/>
+            </tools>
             <inputs>
                 <input ref="wet-mix"/>
                 <input ref="flour-for-dough"/>
@@ -211,58 +255,45 @@
             <outputs>
                 <output id="dough-without-butter">dough</output>
             </outputs>
+            <instructions>
+                Add the <input ref="flour-for-dough"/> to the <input ref="wet-mix"/> about a deciliter at a time,
+                mixing until the dough comes together.
+            </instructions>
         </task>
-        <task operation="incorporate">
+        <task operation="incorporate" id="knead-in-butter">
+            <tools>
+                <tool ref="large-bowl" reserved="true"/>
+            </tools>
             <inputs>
                 <input ref="dough-without-butter"/>
-                <input ref="200g-butter"/>
+                <input ref="butter-for-dough"/>
             </inputs>
             <outputs>
-                <output id="dough">dough</output>
+                <output id="dough" volume="2.5" volume-unit="l">dough</output>
             </outputs>
         </task>
-        <task operation="raise">
-            <!-- multiplier for volume? would need to somehow calculate the volume of the dough from the ingredients -->
+        <task operation="raise" id="raise-dough">
             <options>
                 <option name="duration">
-                    <numeric-value number="20" unit="minutes"/> <!-- time calculation from the multiplier? -->
-                </option>
-                <option name="multiplier">
-                    <numeric-value number="200" unit="percent"/>
-                </option>
-                <option name="temperature">
-                    <numeric-value number="30" unit="celcius"/>
+                    <numeric-value number="20" unit="minutes"/>
                 </option>
             </options>
             <tools>
-                <tool ref="towel"/>
-                <!-- TODO: how to refer to the towel from the instructions? -->
+                <tool ref="large-bowl" reserved="true"/>
+                <tool ref="towel" reserved="true" soil="none"/>
             </tools>
             <inputs>
                 <input ref="dough"/>
             </inputs>
             <outputs>
-                <output id="raised-dough">raised dough</output>
-                <!-- TODO: should there be a timer output? -->
+                <output id="raised-dough" hold="15" hold-unit="minutes" volume="5" volume-unit="l">raised dough</output>
             </outputs>
+            <instructions>
+                Cover the <input ref="dough"/> with a <tool ref="towel" reserved="true" soil="none"/> and let it raise
+                in a warm place until doubled in size.
+            </instructions>
         </task>
-        <!-- TODO: is this a good way to express this?
-        Would need to somehow be able to express that there are multiple batches produced, which can then be processed
-        in parallel + processing can start when the first batch is ready 
-        -->
-        
-        <!-- 
-        There would need to be a calculation of what utilities are available to know how many batches could be
-        processed in parallel.
-        When going back from the end result, it is not possible to know how many batches should be created as the
-        inputs have not been calculated yet. Perhaps another pass in the opposite direction is needed i.e. start
-        from the "branches" calculating the grams and when encountering a batch operation, calculate how many
-        batches should be created.
-        Would it though be possible to define a certain formula for the recipe that would define the amount of 
-        batches? i.e. 1kg dough would result in 4 batches (i.e. sheets) of 20 buns. Scaling the dough would scale
-        the amount of batches proportionally as would scaling the sheet size.  
-        -->
-        <task operation="measure">
+        <task operation="measure" id="measure-egg-for-brushing">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="pieces"/>
@@ -275,122 +306,126 @@
                 <output id="egg-for-brushing">egg</output>
             </outputs>
         </task>
-        <task operation="beat">
+        <task operation="beat" id="beat-egg">
+            <tools>
+                <tool ref="bowl" reserved="true" soil="wash"/>
+                <tool ref="fork" soil="wash"/>
+            </tools>
             <inputs>
                 <input ref="egg-for-brushing"/>
             </inputs>
             <outputs>
-                <output id="beaten-egg">beaten egg</output>
+                <output id="beaten-egg" hold="60" hold-unit="minutes">beaten egg</output>
             </outputs>
         </task>
-
-        <task operation="split">
+        <task operation="line" id="line-sheets">
+            <!-- One task for all sheets; the sheet count (4 at scale 1) does not follow the scale automatically. -->
+            <inputs>
+                <input ref="parchment-paper"/>
+            </inputs>
+            <tools>
+                <tool ref="baking-sheet" reserved="true"/>
+            </tools>
+            <outputs>
+                <output id="lined-baking-sheet" amount="4" unit="sheet">lined baking sheet</output>
+            </outputs>
+            <instructions>
+                Line the <tool ref="baking-sheet" reserved="true"/> with <input ref="parchment-paper"/>.
+            </instructions>
+        </task>
+        <task operation="split" id="split-dough">
             <options>
                 <option name="unit-size">
-                    <!-- TODO: would it be better to just express this as number of batches? -->
-                    <!-- The recipe will anyway be defined with as certain amounts instead of ratios -->
-                    <!-- although it would be great if the batches could be weighed. Perhaps however the
-                    best thing would be to define the size and amount of the outputs, which would define
-                    the batch sizes. The problem there however is that it might be difficult to estimate
-                    the amount of buns that fit on a single sheet. Perhaps it would be possible to define
-                    some kind of bun size to sheet area mapping still and have that scale logarithmically
-                    (or exponentially)? 
-                    -->
-                    <numeric-value number="30" unit="grams"/>
+                    <numeric-value number="30" unit="g"/>
                 </option>
             </options>
             <inputs>
-                <input ref="raised-dough" />
+                <input ref="raised-dough"/>
             </inputs>
             <outputs>
-                <output id="single-bun-dough">dough for bun</output><!-- TODO: replace: (batch of) dough for (single) bun -->
+                <output id="bun-dough" amount="64" unit="bun">dough for one bun</output>
+                <tool ref="large-bowl"/>
+                <tool ref="towel"/>
             </outputs>
         </task>
-        <task operation="line"> <!-- line -> combine? -->
+        <task operation="spherify" id="roll-buns">
+            <inputs>
+                <input ref="bun-dough"/>
+            </inputs>
+            <outputs>
+                <output id="dough-ball" amount="64" unit="bun">dough ball</output>
+            </outputs>
+            <instructions>
+                Roll each <input ref="bun-dough"/> into a smooth ball between your palms.
+            </instructions>
+        </task>
+        <task operation="place-on-sheet" id="place-on-sheet">
             <tools>
-                <tool ref="baking-sheet" />
+                <tool ref="baking-sheet" reserved="true"/>
             </tools>
             <inputs>
-                <input ref="parchment-paper" />
+                <input ref="dough-ball"/>
+                <input ref="lined-baking-sheet"/>
             </inputs>
             <outputs>
-                <output id="lined-baking-sheet" />
+                <output id="bun-on-sheet" amount="64" unit="bun">bun on sheet</output>
             </outputs>
         </task>
-        <task operation="batch">
+        <task operation="brush" id="brush-buns">
+            <tools>
+                <tool ref="pastry-brush" soil="wash"/>
+            </tools>
             <inputs>
-                <input ref="single-bun-dough" />
-                <input ref="lined-baking-sheet" />
+                <input ref="bun-on-sheet"/>
+                <input ref="beaten-egg"/>
             </inputs>
-            <tasks>
-                <task operation="spherify">
-                    <inputs>
-                        <input ref="single-bun-dough"/>
-                    </inputs>
-                    <outputs>
-                        <output id="dough-sphere">dough sphere</output>
-                    </outputs>
-                </task>
-                <task operation="place-on-sheet"> <!-- add batch size limit here? -->
-                    <tools>
-                        <tool ref="sheet"/>
-                    </tools>
-                    <inputs>
-                        <input ref="dough-sphere"/>
-                    </inputs>
-                    <outputs>
-                        <output id="bun-on-sheet">bun on sheet</output>
-                    </outputs>
-                </task>
-                <task operation="brush">
-                    <inputs>
-                        <input ref="bun-on-sheet"/>
-                        <input ref="beaten-egg"/>
-                    </inputs>
-                    <outputs>
-                        <output id="brushed-bun">brushed bun</output>
-                    </outputs>
-                </task>
-                <!-- TODO: how to calculate this in the shopping list? -->
-                <task operation="sprinkle">
-                    <inputs>
-                        <input ref="brushed-bun"/>
-                        <input ref="pearl-sugar"/>
-                    </inputs>
-                    <outputs>
-                        <output id="oven-ready-bun">oven ready bun</output>
-                    </outputs>
-                </task>
-            </tasks>
             <outputs>
-                <output id="oven-ready-bun-batch" />
+                <output id="brushed-bun" amount="64" unit="bun">brushed bun</output>
             </outputs>
         </task>
-
-        <task operation="bake"> <!-- continue when previous have finished. get end signal from previous steps? -->
-            <!-- TODO: 
-            add a sequence meta task, that takes the inputs of the parent task and forwards those to the first task, of which outputs will be the inputs of the next one. 
-            How will the next tasks know which inputs to use though? Need to generate automatic ids and expect a certain order? -->
-            <!-- TODO: 
-            add interrupt i.e. suspend other operations when this finishes and split their processing time 
-            -->
+        <task operation="sprinkle" id="sprinkle-pearl-sugar">
+            <inputs>
+                <input ref="brushed-bun"/>
+                <input ref="pearl-sugar"/>
+            </inputs>
+            <outputs>
+                <output id="oven-ready-bun" amount="64" unit="bun" hold="30" hold-unit="minutes">oven ready bun</output>
+            </outputs>
+        </task>
+        <task operation="bake-in-oven" id="bake-buns" requires="oven">
             <options>
                 <option name="temperature">
-                    <numeric-value number="250" unit="celcius"/>
+                    <numeric-value number="225" unit="celsius"/>
                 </option>
                 <option name="duration">
                     <numeric-value number="15" unit="minutes"/>
                 </option>
             </options>
             <tools>
-                <tool ref="oven"/>
+                <!-- the sheet goes into the oven with the buns: this is what makes the oven rounds derivable -->
+                <tool ref="baking-sheet" reserved="true" soil="none"/>
             </tools>
             <inputs>
-                <input ref="oven-ready-bun-batch"/>
+                <input ref="oven-ready-bun"/>
             </inputs>
             <outputs>
-                <output id="baked-bun-batch">baked buns</output>
+                <output id="baked-bun" amount="64" unit="bun" hold="10" hold-unit="minutes">baked bun</output>
             </outputs>
+        </task>
+        <task operation="transfer" id="transfer-to-rack">
+            <tools>
+                <tool ref="cooling-rack" reserved="true" soil="none"/>
+            </tools>
+            <inputs>
+                <input ref="baked-bun"/>
+            </inputs>
+            <outputs>
+                <output id="finished-buns" amount="64" unit="bun" hold="10" hold-unit="minutes" final="true">buns</output>
+                <tool ref="baking-sheet"/>
+            </outputs>
+            <instructions>
+                Move the <input ref="baked-bun"/> from the sheet onto a <tool ref="cooling-rack" reserved="true" soil="none"/>.
+            </instructions>
         </task>
     </tasks>
 </recipe>

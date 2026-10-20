@@ -1,38 +1,42 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<recipe ref="https://www.wearesovegan.com/epic-microwave-chocolate-cake/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd">
+<recipe ref="https://www.wearesovegan.com/epic-microwave-chocolate-cake/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="recipe.xsd" version="2" id="debug-cake">
     <title>Epic Microwave Chocolate Cake</title>
+    <serving temperature="ambient"/>
     <ingredients>
-        <ingredient id="soya-milk">soya milk</ingredient>
+        <ingredient id="soya-milk">soya milk<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="dark-chocolate">dark chocolate</ingredient>
     </ingredients>
     <tools>
-        <tool id="silicone-cake-mould">silicone cake mould<properties>
+        <tool id="silicone-cake-mould" type="cake-mould">silicone cake mould<properties>
                 <property name="circumference">
                     <numeric-value number="20" unit="centimeters"/>
                 </property>
+                <property name="capacity">
+                    <numeric-value number="1" unit="cake"/>
+                </property>
             </properties>
         </tool>
-        <tool id="microwave-safe-jug">microwave safe jug</tool>
-        <tool id="spatula">spatula</tool>
-        <tool id="bowl">bowl</tool>
-        <tool id="parchment-paper">parchment paper</tool>
-        <tool id="frosting-spatula">frosting spatula</tool>
-        <tool id="grater">grater</tool>
+        <tool id="bowl">bowl<properties>
+                <property name="capacity">
+                    <numeric-value number="4" unit="l"/>
+                </property>
+            </properties>
+        </tool>
         <tool id="cooling-rack">cooling rack</tool>
-        <tool id="fridge">fridge</tool>
-        <tool id="precision-scale">precision scale</tool>
+        <tool id="baking-sheet">baking sheet</tool>
         <tool id="kitchen-scale">kitchen scale</tool>
-        <tool id="plate">plate</tool>
+        <tool id="frosting-spatula">frosting spatula</tool>
     </tools>
     <tasks>
-        <task operation="measure">
+        <task operation="measure" id="measure-soya-milk">
             <options>
                 <option name="amount">
                     <numeric-value number="300" unit="ml"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="soya-milk"/>
@@ -41,14 +45,14 @@
                 <output id="measured-soya-milk">soya milk</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-chocolate">
             <options>
                 <option name="amount">
                     <numeric-value number="100" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="kitchen-scale"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="dark-chocolate"/>
@@ -57,7 +61,7 @@
                 <output id="dark-chocolate-for-base">dark chocolate for base</output>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-dough">
             <instructions>
                 Combine the
                 <input ref="measured-soya-milk"/>
@@ -66,10 +70,10 @@
                 in a
                 <tool ref="bowl" reserved="true"/>.
                 Set to side so it turns into
-                <output id="dough">vegan buttermilk</output> <!-- TODO: is a spatula needed? -->
+                <output id="dough" volume="0.5" volume-unit="l">vegan buttermilk</output>
             </instructions>
         </task>
-        <task operation="split">
+        <task operation="split" id="split-dough">
             <options>
                 <option name="parts">
                     <numeric-value number="2"/>
@@ -82,51 +86,60 @@
                 <tool ref="bowl" reserved="true"/>
             </tools>
             <outputs>
-                <output id="split-dough-in-a-bowl">split dough</output>
+                <output id="split-dough-in-a-bowl" amount="2" unit="cake">split dough</output>
             </outputs>
         </task>
-        <task operation="pour">
+        <task operation="pour" id="pour-into-mould">
             <instructions>
                 Pour the
                 <input ref="split-dough-in-a-bowl"/>
-                into the mould
+                into the
+                <tool ref="silicone-cake-mould" reserved="true"/>
             </instructions>
             <outputs>
-                <output id="dough-in-mould">dough in the mould</output>
+                <output id="dough-in-mould" amount="2" unit="cake">dough in the mould</output>
                 <tool ref="bowl" name="used bowl"/>
             </outputs>
         </task>
-        <task operation="bake-in-microwave"> <!-- operation is identical to heat -->
+        <task operation="bake-in-microwave" id="bake">
             <instructions>
                 Bake the
                 <input ref="dough-in-mould"/>
-                in the
-                <tool ref="microwave"/>
-                for
+                in the microwave for
                 <option name="duration">
                     <numeric-value number="6" unit="minutes"/>
                 </option>
                 or until a toothpick comes out clean.
             </instructions>
             <outputs>
-                <output id="baked-cake">baked cake</output>
+                <output id="baked-cake" amount="2" unit="cake">baked cake</output>
             </outputs>
         </task>
-        <task operation="fill">
+        <task operation="separate" id="turn-out">
             <instructions>
-                Place a
-                <input ref="baked-cake">the cake and rack</input>
-                on top of a <!-- TODO: need for a way to reference specific parts of a split? -->
-                <tool ref="tray"/>
-                to collect the ganache glaze which will run down the sides of the cake.
-                Spread the foo
-                over the top of the cake and place a second
-                <input ref="baked-cake">cake</input>
-                on top. Make sure the cake remains on top of a cooling rack.
+                Turn the
+                <input ref="baked-cake"/>
+                out of the mould onto a
+                <tool ref="cooling-rack" reserved="true" soil="none"/>.
             </instructions>
             <outputs>
-                <output id="filled-cake">filled cake</output>
-                <tool ref="spatula"/>
+                <output id="cake-on-rack" amount="2" unit="cake">cake on the rack</output>
+                <tool ref="silicone-cake-mould"/>
+            </outputs>
+        </task>
+        <task operation="fill" id="fill-cake">
+            <instructions>
+                Place a
+                <input ref="cake-on-rack">cake and rack</input>
+                on top of a
+                <tool ref="baking-sheet"/>
+                to collect the ganache glaze which will run down the sides of the cake.
+                Spread the foo over the top of the cake with a <tool ref="frosting-spatula"/> and place the second
+                cake on top. Make sure the cake remains on top of the cooling rack.
+            </instructions>
+            <outputs>
+                <output id="filled-cake" amount="1" unit="cake" final="true">filled cake</output>
+                <tool ref="cooling-rack"/>
             </outputs>
         </task>
     </tasks>

@@ -1,38 +1,61 @@
 const Database = require('better-sqlite3');
 const path = require('path');
-const fs = require('fs');
 
-const dbPath = path.join(__dirname, 'database.sqlite');
+const dbPath = process.env.FLOW_DB_PATH || path.join(__dirname, 'database.sqlite');
 let db = null;
 
+// Schema per API.md "Database". Legacy columns (scale, mise_en_place, session_started, recipe_name) stay on
+// sessions for old clients during the transition; new code reads status/dishes.
 const EXPECTED_SCHEMAS = {
   sessions: `CREATE TABLE IF NOT EXISTS sessions (
   session_id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
-  recipe_name TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  start_time INTEGER,
+  inventory_json TEXT,
+  policy_json TEXT,
+  plan_json TEXT,
   scale REAL DEFAULT 1,
   mise_en_place BOOLEAN DEFAULT 0,
-  session_started BOOLEAN DEFAULT 0
+  session_started BOOLEAN DEFAULT 0,
+  recipe_name TEXT
+)`,
+  dishes: `CREATE TABLE IF NOT EXISTS dishes (
+  id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  recipe_id TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  scale REAL NOT NULL DEFAULT 1,
+  serve_time INTEGER NOT NULL,
+  early_tolerance INTEGER NOT NULL DEFAULT 0,
+  late_tolerance INTEGER NOT NULL DEFAULT 300000,
+  position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (session_id, id),
+  FOREIGN KEY (session_id) REFERENCES sessions(session_id)
 )`,
   participants: `CREATE TABLE IF NOT EXISTS participants (
   session_id TEXT NOT NULL,
   participant_id TEXT NOT NULL,
-  socket_id TEXT NOT NULL,
+  socket_id TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL DEFAULT '',
   joined_at TEXT NOT NULL,
   is_spectator BOOLEAN NOT NULL DEFAULT 1,
+  connected BOOLEAN NOT NULL DEFAULT 0,
+  placeholder BOOLEAN NOT NULL DEFAULT 0,
+  profile_json TEXT,
   PRIMARY KEY (session_id, participant_id),
   FOREIGN KEY (session_id) REFERENCES sessions(session_id)
 )`,
-  completed_tasks: `CREATE TABLE IF NOT EXISTS completed_tasks (
+  events: `CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL,
-  participant_id TEXT NOT NULL,
-  task_uuid TEXT NOT NULL,
-  completed_at TEXT NOT NULL,
-  FOREIGN KEY (session_id) REFERENCES sessions(session_id),
-  FOREIGN KEY (session_id, participant_id) REFERENCES participants(session_id, participant_id),
-  UNIQUE(session_id, participant_id, task_uuid)
+  participant_id TEXT,
+  type TEXT NOT NULL,
+  uuid TEXT,
+  units REAL,
+  payload_json TEXT,
+  at INTEGER NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES sessions(session_id)
 )`,
   help_requests: `CREATE TABLE IF NOT EXISTS help_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +66,7 @@ const EXPECTED_SCHEMAS = {
   FOREIGN KEY (session_id) REFERENCES sessions(session_id),
   FOREIGN KEY (session_id, participant_id) REFERENCES participants(session_id, participant_id),
   UNIQUE(session_id, participant_id)
-)`
+)`,
 };
 
 function normalizeSchema(sql) {
@@ -64,7 +87,7 @@ function initDatabase() {
 
   for (const [tableName, expectedSchema] of Object.entries(EXPECTED_SCHEMAS)) {
     const actualTable = db.prepare(`
-      SELECT sql FROM sqlite_master 
+      SELECT sql FROM sqlite_master
       WHERE type='table' AND name=?
     `).get(tableName);
 
@@ -87,6 +110,8 @@ function initDatabase() {
     db.exec(`
       DROP TABLE IF EXISTS help_requests;
       DROP TABLE IF EXISTS completed_tasks;
+      DROP TABLE IF EXISTS events;
+      DROP TABLE IF EXISTS dishes;
       DROP TABLE IF EXISTS participants;
       DROP TABLE IF EXISTS sessions;
     `);
@@ -96,12 +121,14 @@ function initDatabase() {
 
   db.exec(createTablesSql + `
 
+    CREATE INDEX IF NOT EXISTS idx_dishes_session ON dishes(session_id);
     CREATE INDEX IF NOT EXISTS idx_participants_session ON participants(session_id);
-    CREATE INDEX IF NOT EXISTS idx_completed_tasks_session ON completed_tasks(session_id);
+    CREATE INDEX IF NOT EXISTS idx_participants_socket ON participants(socket_id);
+    CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
     CREATE INDEX IF NOT EXISTS idx_help_requests_session ON help_requests(session_id);
   `);
 
-  console.log('Database initialized');
+  console.log(`Database initialized (${dbPath})`);
 }
 
 function getDatabase() {
@@ -111,8 +138,16 @@ function getDatabase() {
   return db;
 }
 
+function closeDatabase() {
+  if (db) {
+    db.close();
+    db = null;
+  }
+}
+
 module.exports = {
   initDatabase,
   getDatabase,
+  closeDatabase,
+  dbPath,
 };
-

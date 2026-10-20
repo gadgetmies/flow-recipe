@@ -1,17 +1,19 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd">
+<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd"
+        version="2" id="cheese-cake">
     <title>Cheese cake</title>
+    <serving temperature="cold" hold="20" hold-unit="minutes"/>
     <ingredients>
         <ingredient id="cookies">cookies</ingredient>
-        <ingredient id="butter">butter</ingredient>
+        <ingredient id="butter">butter<properties><property name="storage" value="fridge"/><property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property></properties></ingredient>
         <ingredient id="gelatin">gelatin</ingredient>
         <ingredient id="cold-water">cold water</ingredient>
-        <ingredient id="cream">cream</ingredient>
+        <ingredient id="cream">cream<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="cinnamon">cinnamon<properties>
                 <property name="type" value="ground"/>
             </properties>
         </ingredient>
-        <ingredient id="cinnamon-plum-quark">cinnamon plum quark</ingredient>
+        <ingredient id="cinnamon-plum-quark">cinnamon plum quark<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="sugar">sugar</ingredient>
         <ingredient id="glogg">glogg</ingredient>
     </ingredients>
@@ -20,51 +22,67 @@
                 <property name="circumference">
                     <numeric-value number="20" unit="centimeters"/>
                 </property>
+                <property name="capacity">
+                    <numeric-value number="1" unit="cake"/>
+                </property>
             </properties>
         </tool>
-        <tool id="baking-parchment">baking parchment</tool>
+        <tool id="parchment-paper">baking parchment</tool>
         <tool id="cling-film">cling film</tool>
-        <tool id="bowl1">bowl</tool>
-        <tool id="bowl2">bowl</tool>
-        <tool id="bowl3">bowl</tool>
-        <tool id="bowl4">bowl</tool>
-        <tool id="cup">cup</tool>
-        <tool id="plate1">plate</tool>
-        <tool id="plate2">plate</tool>
-        <tool id="cup2">cup</tool>
-        <tool id="cup3">cup</tool>
+        <tool id="bowl">bowl<properties>
+                <property name="capacity">
+                    <numeric-value number="4" unit="l"/>
+                </property>
+            </properties>
+        </tool>
+        <tool id="cup">cup<properties>
+                <property name="capacity">
+                    <numeric-value number="0.3" unit="l"/>
+                </property>
+            </properties>
+        </tool>
+        <tool id="plate">plate</tool>
+        <tool id="whisk">whisk</tool>
+        <tool id="spoon">spoon</tool>
+        <tool id="kitchen-scale">kitchen scale</tool>
+        <tool id="serving-plate">serving plate</tool>
     </tools>
     <tasks>
-        <task operation="measure">
+        <task operation="measure" id="measure-cookies">
             <options>
                 <option name="amount">
-                    <numeric-value number="150" unit="grams"/>
+                    <numeric-value number="150" unit="g"/>
                 </option>
             </options>
+            <tools>
+                <tool ref="kitchen-scale" soil="none"/>
+                <tool ref="bowl" reserved="true"/>
+            </tools>
             <inputs>
                 <input ref="cookies"/>
             </inputs>
             <outputs>
-                <output id="150g-cookies">cookies</output>
+                <output id="cookies-for-base">cookies</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-butter">
             <options>
                 <option name="amount">
-                    <numeric-value number="50" unit="grams"/>
+                    <numeric-value number="50" unit="g"/>
                 </option>
             </options>
             <inputs>
                 <input ref="butter"/>
             </inputs>
             <tools>
-                <tool ref="cup"/>
+                <tool ref="kitchen-scale" soil="none"/>
+                <tool ref="cup" reserved="true"/>
             </tools>
             <outputs>
-                <output id="50g-butter">butter</output>
+                <output id="butter-for-base">butter</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-gelatin-for-filling">
             <options>
                 <option name="amount">
                     <numeric-value number="4" unit="sheets"/>
@@ -77,103 +95,100 @@
                 <output id="gelatin-for-filling">gelatin</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-water-for-filling-gelatin">
             <options>
                 <option name="amount">
-                    <numeric-value number="2" unit="deciliters"/>
+                    <numeric-value number="2" unit="dl"/>
                 </option>
             </options>
             <inputs>
                 <input ref="cold-water"/>
             </inputs>
             <tools>
-                <tool ref="plate1"/>
+                <tool ref="plate" reserved="true"/>
             </tools>
             <outputs>
-                <output id="cold-water-for-soaking1">cold water</output>
+                <output id="cold-water-for-soaking-filling-gelatin">cold water</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-cream">
             <options>
                 <option name="amount">
-                    <numeric-value number="2" unit="deciliters"/>
+                    <numeric-value number="2" unit="dl"/>
                 </option>
             </options>
             <inputs>
                 <input ref="cream"/>
             </inputs>
             <tools>
-                <tool ref="bowl2"/>
+                <tool ref="bowl" reserved="true" soil="wash"/>
             </tools>
             <outputs>
-                <output id="2dl-cream">cream</output>
+                <output id="cream-for-filling">cream</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-cinnamon">
             <options>
                 <option name="amount">
-                    <numeric-value number="1" unit="teaspoons"/>
+                    <numeric-value number="1" unit="tsp"/>
                 </option>
             </options>
             <inputs>
                 <input ref="cinnamon"/>
-                <!-- TODO: having to specify the target is probelmatic as it will fix the order the ingredients are measured and mixed.
-                 Would be better to combine the measure and mix -->
-                <input ref="whipped-cream"/>
             </inputs>
             <outputs>
-                <output id="whipped-cream+cinnamon">whipped cream and cinnamon</output>
+                <output id="cinnamon-for-cream">cinnamon</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-glogg-for-filling">
             <options>
                 <option name="amount">
-                    <numeric-value number="2" unit="tablespoons"/>
+                    <numeric-value number="2" unit="tbsp"/>
                 </option>
             </options>
             <inputs>
                 <input ref="glogg"/>
             </inputs>
             <tools>
-                <tool ref="cup2"/>
+                <tool ref="cup" reserved="true"/>
             </tools>
             <outputs>
                 <output id="glogg-for-filling">glogg</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-cold-glogg-for-glaze">
             <options>
                 <option name="amount">
-                    <numeric-value number="2.5" unit="deciliters"/>
+                    <numeric-value number="2.5" unit="dl"/>
                 </option>
             </options>
             <inputs>
                 <input ref="glogg"/>
             </inputs>
             <tools>
-                <tool ref="bowl4"/>
+                <tool ref="bowl" reserved="true"/>
             </tools>
             <outputs>
                 <output id="cold-glogg-for-glaze">cold glogg</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-glogg-to-heat-for-glaze">
             <options>
                 <option name="amount">
-                    <numeric-value number="0.5" unit="deciliters"/>
+                    <numeric-value number="0.5" unit="dl"/>
                 </option>
             </options>
             <inputs>
                 <input ref="glogg"/>
             </inputs>
             <tools>
-                <tool ref="cup3"/>
+                <tool ref="cup" reserved="true"/>
             </tools>
             <outputs>
                 <output id="glogg-to-be-heated-for-glaze">glogg</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-gelatin-for-glaze">
             <options>
                 <option name="amount">
                     <numeric-value number="3" unit="sheets"/>
@@ -186,119 +201,169 @@
                 <output id="gelatin-for-glaze">gelatin for glaze</output>
             </outputs>
         </task>
-        <task operation="melt">
+        <task operation="melt" id="melt-butter">
             <inputs>
-                <input ref="50g-butter"/>
+                <input ref="butter-for-base"/>
             </inputs>
+            <tools>
+                <tool ref="cup" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="melted-butter">melted butter</output>
+                <output id="melted-butter" hold="15" hold-unit="minutes">melted butter</output>
             </outputs>
+            <instructions>
+                Melt the <input ref="butter-for-base"/>.
+            </instructions>
         </task>
-        <join>
-            <task operation="crumble">
+        <join id="make-base">
+            <task operation="crumble" id="crumble-cookies">
                 <inputs>
-                    <input ref="150g-cookies"/>
+                    <input ref="cookies-for-base"/>
                 </inputs>
+                <tools>
+                    <tool ref="bowl" reserved="true"/>
+                </tools>
                 <outputs>
                     <output id="crumbled-cookies">crumbled cookies</output>
                 </outputs>
             </task>
-            <task operation="incorporate">
+            <task operation="incorporate" id="mix-butter-into-crumbs">
                 <inputs>
                     <input ref="melted-butter"/>
                     <input ref="crumbled-cookies"/>
                 </inputs>
+                <tools>
+                    <tool ref="bowl" reserved="true"/>
+                </tools>
                 <outputs>
-                    <output id="butter+cookies">butter and cookies</output>
+                    <output id="butter-and-cookies">butter and cookies</output>
                 </outputs>
             </task>
         </join>
-        <task operation="line">
+        <task operation="line" id="line-tin">
             <inputs>
-                <input ref="baking-tin"/>
-                <input ref="baking-parchment"/>
+                <input ref="parchment-paper"/>
             </inputs>
+            <tools>
+                <tool ref="baking-tin" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="lined-tin">lined baking tin</output>
+                <output id="lined-tin" amount="1" unit="cake">lined baking tin</output>
             </outputs>
+            <instructions>
+                Line the base of the <tool ref="baking-tin" reserved="true"/> with <input ref="parchment-paper"/>.
+            </instructions>
         </task>
-        <task operation="press">
+        <task operation="press" id="press-base">
             <inputs>
                 <input ref="lined-tin"/>
-                <input ref="butter+cookies"/>
+                <input ref="butter-and-cookies"/>
             </inputs>
+            <tools>
+                <tool ref="baking-tin" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="butter+cookies-in-tin">butter and cookies in tin</output>
+                <output id="base-in-tin" amount="1" unit="cake">butter and cookies in tin</output>
+                <tool ref="bowl"/>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-water-for-glaze-gelatin">
             <options>
                 <option name="amount">
-                    <numeric-value number="2" unit="deciliters"/>
+                    <numeric-value number="2" unit="dl"/>
                 </option>
             </options>
             <inputs>
                 <input ref="cold-water"/>
             </inputs>
             <tools>
-                <tool ref="plate2"/>
+                <tool ref="plate" reserved="true"/>
             </tools>
             <outputs>
-                <output id="cold-water-for-soaking2">cold water</output>
+                <output id="cold-water-for-soaking-glaze-gelatin">cold water</output>
             </outputs>
         </task>
-        <task operation="soak">
+        <task operation="soak" id="soak-gelatin-for-filling">
+            <options>
+                <option name="duration">
+                    <numeric-value number="5" unit="minutes"/>
+                </option>
+            </options>
             <inputs>
                 <input ref="gelatin-for-filling"/>
-                <input ref="cold-water-for-soaking1"/>
+                <input ref="cold-water-for-soaking-filling-gelatin"/>
             </inputs>
+            <tools>
+                <tool ref="plate" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="soaked-gelatin-for-filling">soaked gelatin</output>
+                <output id="soaked-gelatin-for-filling" hold="30" hold-unit="minutes">soaked gelatin</output>
             </outputs>
         </task>
-        <task operation="soak">
+        <task operation="soak" id="soak-gelatin-for-glaze">
+            <options>
+                <option name="duration">
+                    <numeric-value number="5" unit="minutes"/>
+                </option>
+            </options>
             <inputs>
                 <input ref="gelatin-for-glaze"/>
-                <input ref="cold-water-for-soaking2"/>
+                <input ref="cold-water-for-soaking-glaze-gelatin"/>
             </inputs>
+            <tools>
+                <tool ref="plate" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="soaked-gelatin-for-glaze">soaked gelatin for glaze</output>
+                <output id="soaked-gelatin-for-glaze" hold="30" hold-unit="minutes">soaked gelatin for glaze</output>
             </outputs>
         </task>
-        <task operation="whip">
+        <task operation="whip" id="whip-cream">
             <inputs>
-                <input ref="2dl-cream"/>
+                <input ref="cream-for-filling"/>
             </inputs>
+            <tools>
+                <tool ref="whisk" soil="wash"/>
+                <tool ref="bowl" reserved="true" soil="wash"/>
+            </tools>
             <outputs>
-                <output id="whipped-cream">whipped cream</output>
+                <output id="whipped-cream" hold="30" hold-unit="minutes">whipped cream</output>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-cinnamon-into-cream">
             <inputs>
-                <input ref="whipped-cream+cinnamon"/>
+                <input ref="whipped-cream"/>
+                <input ref="cinnamon-for-cream"/>
             </inputs>
+            <tools>
+                <tool ref="bowl" reserved="true" soil="wash"/>
+            </tools>
             <outputs>
-                <output id="cinnamon-whipped-cream">cream with cinnamon</output>
+                <output id="cinnamon-whipped-cream" hold="30" hold-unit="minutes">cream with cinnamon</output>
             </outputs>
         </task>
-        <task operation="boil">
+        <task operation="boil" id="boil-glogg-for-filling" requires="hot-pan">
             <inputs>
                 <input ref="glogg-for-filling"/>
             </inputs>
             <outputs>
-                <output id="boiling-glogg-for-filling">boiling glogg</output>
+                <output id="boiling-glogg-for-filling" hold="5" hold-unit="minutes">boiling glogg</output>
+                <tool ref="cup"/>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="dissolve-gelatin-for-filling">
             <inputs>
                 <input ref="boiling-glogg-for-filling"/>
                 <input ref="soaked-gelatin-for-filling"/>
             </inputs>
+            <tools>
+                <tool ref="spoon"/>
+            </tools>
             <outputs>
                 <output id="glogg-with-gelatin-for-filling">glogg with gelatin</output>
+                <tool ref="plate"/>
             </outputs>
         </task>
-        <task operation="chill">
+        <task operation="chill" id="cool-glogg-for-filling">
             <options>
                 <option name="duration">
                     <numeric-value number="3" unit="minutes"/>
@@ -308,84 +373,119 @@
                 <input ref="glogg-with-gelatin-for-filling"/>
             </inputs>
             <outputs>
-                <output id="cooled-glogg-with-gelatin-for-filling">cooled glogg</output>
+                <output id="cooled-glogg-with-gelatin-for-filling" hold="10" hold-unit="minutes">cooled glogg</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-quark">
             <options>
                 <option name="amount">
-                    <numeric-value number="400" unit="grams"/>
+                    <numeric-value number="400" unit="g"/>
                 </option>
             </options>
             <inputs>
                 <input ref="cinnamon-plum-quark"/>
             </inputs>
             <tools>
-                <tool ref="bowl3"/>
+                <tool ref="kitchen-scale" soil="none"/>
+                <tool ref="bowl" reserved="true" soil="wash"/>
             </tools>
             <outputs>
-                <output id="400g-quark">quark</output>
+                <output id="quark-for-filling">quark</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-sugar">
             <options>
                 <option name="amount">
-                    <numeric-value number="3" unit="tablespoons"/>
+                    <numeric-value number="3" unit="tbsp"/>
                 </option>
             </options>
             <inputs>
                 <input ref="sugar"/>
-                <input ref="400g-quark"/>
             </inputs>
             <outputs>
-                <output id="quark+sugar">quark and sugar</output>
+                <output id="sugar-for-filling">sugar</output>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-quark-and-sugar">
             <inputs>
-                <input ref="quark+sugar"/>
+                <input ref="quark-for-filling"/>
+                <input ref="sugar-for-filling"/>
+            </inputs>
+            <tools>
+                <tool ref="bowl" reserved="true" soil="wash"/>
+                <tool ref="spoon" soil="wash"/>
+            </tools>
+            <outputs>
+                <output id="quark-and-sugar">quark and sugar</output>
+            </outputs>
+        </task>
+        <task operation="mix" id="mix-glogg-into-quark">
+            <inputs>
+                <input ref="quark-and-sugar"/>
                 <input ref="cooled-glogg-with-gelatin-for-filling"/>
             </inputs>
+            <tools>
+                <tool ref="bowl" reserved="true" soil="wash"/>
+                <tool ref="spoon" soil="wash"/>
+            </tools>
             <outputs>
-                <output id="glogg-and-quark">glogg and quark</output>
+                <output id="glogg-and-quark" hold="15" hold-unit="minutes">glogg and quark</output>
             </outputs>
         </task>
-        <task operation="fold">
+        <task operation="fold" id="fold-cream-into-filling">
             <inputs>
                 <input ref="glogg-and-quark"/>
                 <input ref="cinnamon-whipped-cream"/>
             </inputs>
+            <tools>
+                <tool ref="bowl" reserved="true" soil="wash"/>
+                <tool ref="spoon" soil="wash"/>
+            </tools>
             <outputs>
-                <output id="filling">filling</output>
+                <output id="filling" hold="15" hold-unit="minutes">filling</output>
             </outputs>
         </task>
-        <task operation="add-on-top">
+        <task operation="add-on-top" id="fill-tin">
             <inputs>
-                <input ref="butter+cookies-in-tin"/>
+                <input ref="base-in-tin"/>
                 <input ref="filling"/>
             </inputs>
+            <tools>
+                <tool ref="baking-tin" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="cake">cake</output>
+                <output id="cake" amount="1" unit="cake">cake</output>
+                <tool ref="bowl"/>
             </outputs>
         </task>
-        <task operation="level">
+        <task operation="level" id="level-cake">
             <inputs>
                 <input ref="cake"/>
             </inputs>
+            <tools>
+                <tool ref="spoon" soil="wash"/>
+                <tool ref="baking-tin" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="leveled-cake">cake</output>
+                <output id="leveled-cake" amount="1" unit="cake">cake</output>
             </outputs>
         </task>
-        <task operation="cover">
+        <task operation="cover" id="cover-cake">
             <inputs>
-                <input ref="cling-film"/>
                 <input ref="leveled-cake"/>
+                <input ref="cling-film"/>
             </inputs>
+            <tools>
+                <tool ref="baking-tin" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="covered-cake">covered-cake</output>
+                <output id="covered-cake" amount="1" unit="cake">covered cake</output>
             </outputs>
+            <instructions>
+                Cover the <input ref="leveled-cake"/> with <input ref="cling-film"/>.
+            </instructions>
         </task>
-        <task operation="chill">
+        <task operation="chill" id="chill-cake">
             <options>
                 <option name="duration">
                     <numeric-value number="4" unit="hours"/>
@@ -394,54 +494,63 @@
             <inputs>
                 <input ref="covered-cake"/>
             </inputs>
+            <tools>
+                <tool ref="baking-tin" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="chilled-cake">chilled cake</output>
+                <output id="chilled-cake" amount="1" unit="cake">chilled cake</output>
             </outputs>
         </task>
-        <task operation="soak">
-            <inputs>
-                <input ref="gelatin-for-glaze"/>
-            </inputs>
-            <outputs>
-                <output id="soaked-gelatin-for-glaze">soaked gelatin</output>
-            </outputs>
-        </task>
-        <task operation="boil">
+        <task operation="boil" id="boil-glogg-for-glaze" requires="hot-pan">
             <inputs>
                 <input ref="glogg-to-be-heated-for-glaze"/>
             </inputs>
             <outputs>
-                <output id="boiling-glogg-for-glaze">boiling glogg</output>
+                <output id="boiling-glogg-for-glaze" hold="5" hold-unit="minutes">boiling glogg</output>
+                <tool ref="cup"/>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="dissolve-gelatin-for-glaze">
             <inputs>
                 <input ref="boiling-glogg-for-glaze"/>
                 <input ref="soaked-gelatin-for-glaze"/>
             </inputs>
+            <tools>
+                <tool ref="spoon"/>
+            </tools>
             <outputs>
                 <output id="glogg-with-gelatin-for-glaze">glogg with gelatin</output>
+                <tool ref="plate"/>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-glaze">
             <inputs>
                 <input ref="glogg-with-gelatin-for-glaze"/>
                 <input ref="cold-glogg-for-glaze"/>
             </inputs>
+            <tools>
+                <tool ref="bowl" reserved="true"/>
+                <tool ref="spoon"/>
+            </tools>
             <outputs>
-                <output id="glaze">glaze</output>
+                <output id="glaze" hold="20" hold-unit="minutes">glaze</output>
             </outputs>
         </task>
-        <task operation="spoon">
+        <task operation="spoon" id="glaze-cake">
             <inputs>
                 <input ref="chilled-cake"/>
                 <input ref="glaze"/>
             </inputs>
+            <tools>
+                <tool ref="spoon"/>
+                <tool ref="baking-tin" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="glazed-cake">glazed cake</output>
+                <output id="glazed-cake" amount="1" unit="cake">glazed cake</output>
+                <tool ref="bowl"/>
             </outputs>
         </task>
-        <task operation="chill">
+        <task operation="chill" id="set-glaze">
             <options>
                 <option name="duration">
                     <numeric-value number="1" unit="hours"/>
@@ -450,9 +559,28 @@
             <inputs>
                 <input ref="glazed-cake"/>
             </inputs>
+            <tools>
+                <tool ref="baking-tin" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="finished-cake"/>
+                <output id="set-cake" amount="1" unit="cake">cake with set glaze</output>
             </outputs>
+        </task>
+        <task operation="separate" id="unmould-cake">
+            <inputs>
+                <input ref="set-cake"/>
+            </inputs>
+            <tools>
+                <tool ref="serving-plate" reserved="true"/>
+            </tools>
+            <outputs>
+                <output id="finished-cheese-cake" amount="1" unit="cake" hold="20" hold-unit="minutes" final="true">cheese cake</output>
+                <tool ref="baking-tin"/>
+            </outputs>
+            <instructions>
+                Open the ring of the tin, peel off the <tool ref="parchment-paper"/> and move the
+                <input ref="set-cake"/> onto a <tool ref="serving-plate" reserved="true"/>.
+            </instructions>
         </task>
     </tasks>
 </recipe>

@@ -1,1880 +1,366 @@
-/*
-
-TODO:
-* Link multi outputs
-* Remove duplication from cucumber grating
-* Instructions (collaborate, measure into a bowl)
-* Tool for measure
-* Numbering for measurements -> number cups
-* Multiple end results -> jokes (gt, sandwich) (perhaps a virtual last step?)
-* Automatically generated shared final step (enjoy)
-  * Generate final output name from recipe
-* Fix scaling
-
-*/
-
 import './reset.css'
 import './App.css'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import GraphViewPage from './GraphViewPage'
-import { findFinalOutputId, findTaskProducing, getInstructions } from './recipeTools'
-import { calculateShoppingList } from './shoppingListGenerator'
-import { expandNode, scheduleItemsInTimelines } from './timelineScheduler'
 import { v4 as uuidV4 } from 'uuid'
-import { io } from 'socket.io-client'
-import ForceGraph2D from 'react-force-graph-2d'
-import * as R from 'ramda'
-import QRCodeSVG from 'qrcode.react'
-import confetti from 'canvas-confetti'
-import {
-  Alert,
-  BottomNavigation,
-  BottomNavigationAction,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Checkbox,
-  Container,
-  createTheme,
-  CssBaseline,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  Fab,
-  FormControl,
-  FormControlLabel,
-  FormLabel,
-  Grid2,
-  List,
-  ListItem,
-  Paper,
-  Radio,
-  RadioGroup,
-  Stack,
-  TextField,
-  ThemeProvider,
-  Typography,
-  Link,
-  Chip,
-} from '@mui/material'
+import { Alert, BottomNavigation, BottomNavigationAction, Box, Card, CardContent, Chip, Container, CssBaseline, Paper, Stack, ThemeProvider, Typography } from '@mui/material'
 import SettingsIcon from '@mui/icons-material/Settings'
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart'
 import ChecklistIcon from '@mui/icons-material/Checklist'
-import WavingHandIcon from '@mui/icons-material/WavingHand'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
 import ShareIcon from '@mui/icons-material/Share'
-import { pink, purple } from '@mui/material/colors'
+import InsightsIcon from '@mui/icons-material/Insights'
+import theme from './theme'
+import { getQueryParams, isMockMode, HOST_ID } from './config'
+import useSession, { appendSessionSettings, getGlobalSettings, getSettings, setGlobalSettings } from './hooks/useSession'
+import GraphViewPage from './GraphViewPage'
+import HostSettings from './components/HostSettings'
+import ShoppingList from './components/ShoppingList'
+import Invite from './components/Invite'
+import InitDialog from './components/InitDialog'
+import DraftPlan from './components/DraftPlan'
+import PlanLanes from './components/PlanLanes'
+import TaskCard from './components/TaskCard'
+import Timers from './components/Timers'
+import InterruptAlert from './components/InterruptAlert'
+import { CelebrationPopup, FoodParticleAnimation, GoPopup } from './components/Celebration'
+import { allDone, allItems, currentItem, describeChange, diffFor, laneFor, laneItems } from './utils/plan'
 
-const getSettings = (sessionId) => JSON.parse(window.localStorage.getItem(sessionId)) || {}
-const appendSessionSettings = (sessionId, settings) => {
-  window.localStorage.setItem(sessionId, JSON.stringify({ ...getSettings(sessionId), ...settings }))
+const GraphView = lazy(() => import('./components/GraphView'))
+const DemoPage = lazy(() => import('./demo/DemoPage'))
+
+const scrollToTask = (uuid) => {
+  document.getElementById('lane-item-' + uuid)?.scrollIntoView?.({ inline: 'center', block: 'nearest' })
+  window.setTimeout(() => document.getElementById('task-' + uuid)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 100)
 }
-
-const SERVER_URL = process.env.REACT_APP_SERVER_URL || 
-  (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3001')
-
-const InitDialog = ({ name, setName, isSpectator: defaultIsSpectator, handleParticipationStatusChange, setNameSet, updateName, sessionId }) => {
-  const [isSpectator, _setIsSpectator] = useState(defaultIsSpectator)
-  return (
-  <Grid2 container padding={2} direction="column" alignItems="center" justify="center" style={{ minHeight: '100vh' }}>
-    <Grid2 item xs={3}>
-      <Card>
-        <CardContent>
-          <Stack spacing={2}>
-            <Typography gutterBottom variant="h5" component="div">
-              Set your name
-            </Typography>
-            <TextField name={'name'} label="name" onChange={(e) => setName(e.target.value)} value={name} />
-            <FormControl component="fieldset">
-              <FormLabel component="legend">Participation</FormLabel>
-              <RadioGroup
-                row
-                value={isSpectator === undefined ? undefined : isSpectator ? 'spectate' : 'participate'}
-                onChange={(e) => _setIsSpectator(e.target.value === 'spectate')}
-              >
-                <FormControlLabel value="participate" control={<Radio />} label="Participate" />
-                <FormControlLabel value="spectate" control={<Radio />} label="Spectate" />
-              </RadioGroup>
-            </FormControl>
-            <Button
-              variant="contained"
-              disabled={name === '' || isSpectator === undefined}
-              onClick={() => {
-                setNameSet(true)
-                appendSessionSettings(sessionId, { name, isSpectator })
-                window.localStorage.setItem('global-settings', JSON.stringify({ defaultName: name }))
-                updateName(name)
-                handleParticipationStatusChange(isSpectator)
-              }}
-            >
-              Join
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
-    </Grid2>
-  </Grid2>
-  )
-}
-
-function Settings({
-  title,
-  setupDone,
-  connections,
-  name,
-  setName,
-  updateName,
-  restart,
-  isHost,
-  connectionId,
-  recipeName,
-  scale,
-  onScaleChange,
-  isSpectator,
-  onParticipationStatusChange,
-  hostId,
-  baseUrl,
-  miseEnPlace,
-  onMiseEnPlaceChange,
-  sessionStarted,
-  onStartSession
-}) {
-  return (
-    <Box paddingBottom={9}>
-      <Stack spacing={2}>
-        <Typography variant="h6">Recipe: {title}</Typography>
-        <Card>
-          <CardContent>
-            <Typography variant="h6">Participants</Typography>
-            <List>
-              {!setupDone
-                ? 'Connecting...'
-                : connections.map(({ name: connectionName, id, isSpectator: connIsSpectator }) => (
-                    <ListItem key={id}>
-                      {connectionId === id ? (
-                        <Stack spacing={1} sx={{ width: '100%' }}>
-                          <TextField
-                            name="name"
-                            label="your name"
-                            value={name}
-                            onChange={(e) => {
-                              const newName = e.target.value
-                              console.log({ name: newName })
-                              setName(newName)
-                              updateName(newName)
-                            }}
-                          />
-                          <Stack direction="row" spacing={1} flexWrap="wrap">
-                            {isHost && <Chip label="Host" color="secondary" size="small" />}
-                            {connIsSpectator !== undefined && (
-                              <Chip 
-                                label={connIsSpectator ? 'Spectator' : 'Participant'} 
-                                color={connIsSpectator ? 'default' : 'primary'}
-                                size="small"
-                              />
-                            )}
-                          </Stack>
-                        </Stack>
-                      ) : (
-                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                          <Typography>
-                            {connectionName}
-                          </Typography>
-                          {id === hostId && <Chip label="Host" color="secondary" size="small" />}
-                          {connIsSpectator && <Chip label="Spectator" size="small" />}
-                        </Stack>
-                      )}
-                    </ListItem>
-                  ))}
-            </List>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent>
-            <Typography variant="h6">Options</Typography>
-            {isHost ? (
-              <TextField
-                name="scale"
-                label="Scale"
-                type="number"
-                inputProps={{
-                  min: 1,
-                  step: 1,
-                  onInput: (e) => {
-                    console.log('onScaleChange', e.target.value)
-                    const newScale = parseInt(e.target.value)
-                    if (!isNaN(newScale) && newScale > 0) {
-                      onScaleChange(newScale)
-                    }
-                  },
-                }}
-                value={scale}
-                onChange={(e) => {
-                  console.log('onScaleChange', e.target.value)
-                  const newScale = parseInt(e.target.value)
-                  if (!isNaN(newScale) && newScale > 0) {
-                    onScaleChange(newScale)
-                  }
-                }}
-              />
-            ) : (
-              <Typography>Scale: {scale}</Typography>
-            )}
-            {isHost ? (
-              <Stack spacing={2} sx={{ mt: 2 }}>
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={miseEnPlace}
-                      onChange={(e) => onMiseEnPlaceChange(e.target.checked)}
-                    />
-                  }
-                  label="Mise en place (move measurement tasks to beginning)"
-                />
-              </Stack>
-            ) : (
-              <Typography sx={{ mt: 2 }}>Mise en place: {miseEnPlace ? 'Enabled' : 'Disabled'}</Typography>
-            )}
-            <Stack spacing={2} sx={{ mt: 2 }}>
-              <Typography variant="subtitle1">Participation Status</Typography>
-              <Typography>Current: {isSpectator ? 'Spectator' : 'Participant'}</Typography>
-              <Button
-                variant="contained"
-                onClick={() => {
-                  const newIsSpectator = !isSpectator
-                  onParticipationStatusChange(newIsSpectator)
-                }}
-              >
-                {isSpectator ? 'Join Session' : 'Leave Session'}
-              </Button>
-            </Stack>
-            {isHost && (
-              <Stack spacing={2} sx={{ mt: 2 }}>
-                <Typography variant="subtitle1">Session Control</Typography>
-                <Typography>Status: {sessionStarted ? 'Started' : 'Not Started'}</Typography>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  disabled={sessionStarted || connections.filter(c => !c.isSpectator).length < 1}
-                  onClick={onStartSession}
-                >
-                  {sessionStarted ? 'Session Started' : 'Start Session'}
-                </Button>
-              </Stack>
-            )}
-          </CardContent>
-        </Card>
-      </Stack>
-      <p>
-        {isHost && (
-          <>
-          <Button variant="contained" onClick={() => restart()}>
-            Restart
-          </Button><br/>
-          <Link variant="contained" href={`${baseUrl}?recipe=${recipeName}`}>
-            New session with recipe: {recipeName}
-          </Link>
-        </>
-        )}
-      </p>
-    </Box>
-  )
-}
-
-function Shopping({ shoppingList }) {
-  return (
-    <Box>
-      {shoppingList ? (
-        <List>
-          {Object.entries(shoppingList).map(([name, { amount, unit }], i) => (
-            <ListItem key={`${name}-${i}`}>
-              {amount} {unit} {name}
-            </ListItem>
-          ))}
-        </List>
-      ) : null}
-    </Box>
-  )
-}
-
-function Invite({ joinSessionLink, setShareLinkCopied, shareLinkCopied }) {
-  return (
-    <Box paddingBottom={9} sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 'calc(100vh - 200px)' }}>
-      <Card
-        padding={2}
-        color="primary"
-        variant="solid"
-        sx={{ borderRadius: 2, width: 'fit-content', backgroundColor: 'primary.main' }}
-      >
-        <CardContent>
-          <Stack justifyContent="center" alignItems="center" spacing={2}>
-            <Typography variant="h6" color="white">
-              Join the fun!
-            </Typography>
-            <QRCodeSVG value={joinSessionLink} fgColor={'white'} bgColor={'transparent'} />
-            <Button
-              variant="outlined"
-              sx={{ color: 'white', borderColor: 'white' }}
-              onClick={() => {
-                navigator.clipboard.writeText(joinSessionLink)
-                setShareLinkCopied(true)
-                window.setTimeout(() => setShareLinkCopied(false), 2000)
-              }}
-            >
-              {shareLinkCopied ? 'Link copied!' : 'Copy link'}
-            </Button>
-          </Stack>
-        </CardContent>
-      </Card>
-    </Box>
-  )
-}
-
-export function GraphView({ dependencyGraph, completedTasks }) {
-  const graphRef = useRef()
-  
-  if (!dependencyGraph || dependencyGraph.nodes.length === 0) {
-    return (
-      <Box padding={2}>
-        <Typography>No graph data available</Typography>
-      </Box>
-    )
-  }
-
-  return (
-    <Box sx={{ height: 'calc(100vh - 120px)', width: '100%' }}>
-      <ForceGraph2D
-        ref={graphRef}
-        graphData={dependencyGraph}
-        nodeLabel={(node) => node.title || node.id}
-        nodeColor={(node) => completedTasks.includes(node.id) ? '#1ee9a5' : '#e91e63'}
-        linkColor={() => 'rgba(0,0,0,0.2)'}
-        linkDirectionalArrowLength={6}
-        linkDirectionalArrowRelPos={1}
-        linkDirectionalArrowColor={() => 'rgba(0,0,0,0.3)'}
-        nodeVal={(node) => {
-          const incomingLinks = dependencyGraph.links.filter(l => l.target === node.id).length
-          return Math.max(3, Math.sqrt(incomingLinks + 1) * 3)
-        }}
-        cooldownTicks={100}
-        onNodeClick={(node) => {
-          const nodeElement = document.getElementById('task' + node.id)
-          if (nodeElement) {
-            nodeElement.scrollIntoView({ behavior: 'smooth', block: 'center' })
-          }
-        }}
-        nodeCanvasObject={(node, ctx, globalScale) => {
-          const label = node.title || node.id
-          const fontSize = 10 / globalScale
-          const inputFontSize = 8 / globalScale
-          ctx.font = `${fontSize}px Sans-Serif`
-          const textWidth = ctx.measureText(label).width
-          
-          const inputNames = node.inputNames || []
-          const inputText = inputNames.length > 0 ? inputNames.join(', ') : ''
-          let inputTextWidth = 0
-          if (inputText) {
-            ctx.font = `${inputFontSize}px Sans-Serif`
-            inputTextWidth = ctx.measureText(inputText).width
-          }
-          
-          const maxWidth = Math.max(textWidth, inputTextWidth)
-          const totalHeight = fontSize + (inputText ? inputFontSize + fontSize * 0.1 : 0)
-          const bckgDimensions = [maxWidth, totalHeight].map((n) => n + fontSize * 0.2)
-
-          ctx.fillStyle = completedTasks.includes(node.id) ? 'rgba(30, 233, 165, 0.9)' : 'rgba(255, 255, 255, 0.9)'
-          ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
-
-          ctx.textAlign = 'center'
-          ctx.textBaseline = 'middle'
-          ctx.fillStyle = '#333'
-          
-          const verticalOffset = inputText ? -inputFontSize / 2 : 0
-          ctx.font = `${fontSize}px Sans-Serif`
-          ctx.fillText(label, node.x, node.y + verticalOffset)
-          
-          if (inputText) {
-            ctx.font = `${inputFontSize}px Sans-Serif`
-            ctx.fillStyle = '#666'
-            ctx.fillText(inputText, node.x, node.y + fontSize / 2 + inputFontSize / 2 + fontSize * 0.05)
-          }
-
-          node.__bckgDimensions = bckgDimensions
-        }}
-        nodePointerAreaPaint={(node, color, ctx) => {
-          ctx.fillStyle = color
-          const bckgDimensions = node.__bckgDimensions
-          bckgDimensions &&
-            ctx.fillRect(node.x - bckgDimensions[0] / 2, node.y - bckgDimensions[1] / 2, ...bckgDimensions)
-        }}
-      />
-    </Box>
-  )
-}
-
-function Task(props) {
-  if (props === undefined) return ''
-  const {
-    task,
-    timelines,
-    isDone,
-    isCurrent,
-    inputsReady,
-    pendingInputs,
-    inputsForTask,
-    recipe,
-    setTasksInProgress,
-    tasksInProgress,
-    markTaskDone,
-    markCurrentTaskDone,
-    startTimer,
-    jumpToNextTask,
-    isHost,
-    isSpectator,
-    formatTime,
-    sessionStarted,
-  } = props
-  const id = 'task' + task.uuid
-  return (
-    <Card sx={{ opacity: isCurrent || isSpectator ? 1 : 0.5 }} id={id} style={{ scrollMarginTop: 50 }} key={id}>
-      {/*TODO: Why does the scroll margin top not work?*/}
-      <CardContent>
-        <Typography variant="h4" gutterBottom>
-          {task?.title} {isCurrent && '👈'}
-          {isDone && <CheckCircleIcon sx={{ verticalAlign: 'middle', ml: 1, color: 'success.main' }} />}
-        </Typography>
-        <Stack spacing={2}>
-          {isCurrent && !inputsReady && (
-            <>
-              Wait for: <br />
-              <ul>
-                {pendingInputs
-                  .map(({ uuid: pi }) => inputsForTask.find((i) => i.uuid === pi))
-                  .map(({ input, participant }) => (
-                    <li key={input}>
-                      {input} {participant !== null && `from ${participant}`}
-                    </li>
-                  ))}
-              </ul>
-            </>
-          )}
-          {isCurrent && inputsForTask.length > 0 && (
-            <>
-              Get: <br />
-              <ul>
-                {inputsForTask.map(({ participant, input }) => (
-                  <li key={input}>
-                    {input} {participant !== null && `from ${participant}`}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          <p>{getInstructions(recipe, task)}</p>
-          {!isDone && <Typography variant="subtitle2">Estimated task duration: {formatTime(task.duration)}</Typography>}
-          {/* isCurrent && <Typography variant="subtitle2">Time until finished: {timeUntilFinished}</Typography> */}
-          {!isDone && (isHost || (!isSpectator && isCurrent && inputsReady && sessionStarted)) && (
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'center',
-              }}
-            >
-              <Button
-                variant="contained"
-                onClick={async () => {
-                  if (isHost) {
-                    const [timeline, taskIndex] = timelines.flatMap((timeline, i) => {
-                      const taskIndex = timeline.indexOf(task)
-                      return taskIndex !== -1 ? [i, taskIndex] : []
-                    })
-                    markTaskDone(timeline, taskIndex)
-                  } else if (task.timer) {
-                    startTimer(task)
-                    setTasksInProgress([...tasksInProgress, task.uuid])
-                    jumpToNextTask()
-                  } else {
-                    await markCurrentTaskDone()
-                  }
-                }}
-              >
-                {isHost ? 'Mark done' : task.timer ? 'Start timer' : 'Done, next!'}
-              </Button>
-            </div>
-          )}
-        </Stack>
-      </CardContent>
-    </Card>
-  )
-}
-
-function Timeline(props) {
-  if (props === undefined) return ''
-  const {
-    width,
-    height,
-    timelines,
-    connections,
-    ownLane,
-    setCurrentTimeline,
-    setSelectedTask,
-    scrollToIndex,
-    currentTask,
-    selectedTimeline,
-    selectedTask,
-    completedTasks,
-    zoom,
-    laneHeight,
-    isHost,
-  } = props
-  return (
-    <Box
-      sx={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        pb: 7,
-        background: 'white',
-        borderTop: '1px solid #eee',
-        boxShadow: 3,
-      }}
-      padding={2}
-    >
-      <div style={{ overflowX: 'auto' }} className={'hide-scrollbar'}>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox={`0 0 ${width} ${height}`}
-          style={{
-            width: width * zoom,
-            height: `100%`,
-            border: '0px solid black',
-            marginBottom: 5,
-          }}
-        >
-          {timelines.map((timeline, timelineNumber) => {
-            const y = timelineNumber * laneHeight
-
-            return [
-              <text
-                x={0}
-                y={y + laneHeight / 2 + 10}
-                style={{ fontSize: Math.round(laneHeight / 3) }}
-                key={timelineNumber + connections[timelineNumber]?.name}
-              >
-                {connections[timelineNumber]?.name}
-              </text>,
-              timeline.map(({ start, end, title, uuid }, i) => {
-                const currentTimelineIsOwn = timelineNumber === ownLane
-                return (
-                  <rect
-                    id={'timeline' + uuid}
-                    key={'timeline' + uuid}
-                    width={end - start - 10}
-                    height={laneHeight - 10}
-                    x={width + start}
-                    y={y}
-                    onClick={() => {
-                      setCurrentTimeline(timelineNumber)
-                      setSelectedTask({
-                        task: i,
-                        timeline: timelineNumber,
-                      })
-                      scrollToIndex(i)
-                    }}
-                    style={{
-                      fill: completedTasks.includes(uuid)
-                        ? '#1ee9a5'
-                        : currentTimelineIsOwn && i === currentTask
-                        ? '#e91e63'
-                        : currentTimelineIsOwn
-                        ? 'rgba(233, 30, 99, 0.5)'
-                        : !isHost && timelineNumber === selectedTimeline && i === selectedTask.task
-                        ? 'rgb(255,200,200)'
-                        : 'rgb(217,217,217)',
-                      rx: 10,
-                      ry: 10,
-                    }}
-                  />
-                )
-              }),
-            ]
-          })}
-        </svg>
-      </div>
-    </Box>
-  )
-}
-
-function Timers({
-  timers,
-  scrollToTask,
-  clearTimer,
-  completedTasks,
-  markTaskCompleted,
-  setHelpRequest,
-  helpRequested,
-  helpRequests,
-  ownName,
-  formatTime,
-  isHost,
-}) {
-  const [currentTime, setCurrentTime] = useState(Date.now())
-
-  useEffect(() => {
-    timers
-      .filter(({ end }) => end - currentTime < 0)
-      .map(({ taskUuid }) => !completedTasks.includes(taskUuid) && markTaskCompleted(taskUuid))
-
-    const intervalId = setInterval(() => {
-      setCurrentTime(Date.now())
-    }, 1000)
-
-    return () => clearInterval(intervalId)
-  }, [currentTime, timers, completedTasks, markTaskCompleted])
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 70,
-        right: 10,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-end',
-      }}
-    >
-      {timers.map(({ title, end, taskUuid }, i) => {
-        const timeLeft = Math.max(0, (end - currentTime) / 1000)
-        return (
-          <div
-            key={`timer-${taskUuid}`}
-            className={timeLeft === 0 ? 'wiggle' : ''}
-            style={{
-              width: '7em',
-              background: timeLeft === 0 ? '#f99' : 'white',
-              borderRadius: 6,
-              marginBottom: '0.5em',
-              padding: '0.5em',
-              boxShadow: '2px 2px 10px rgba(0, 0, 0, 0.2)',
-              textAlign: 'center',
-              cursor: 'pointer',
-            }}
-            onClick={() => {
-              if (timeLeft === 0) {
-                clearTimer(i)
-                // TODO: Need to jump to a previous task, if the current is blocked and a previous is unlocked
-              } else {
-                scrollToTask(taskUuid)
-              }
-            }}
-          >
-            <div style={{ fontSize: '75%' }}>{title}</div>
-            <div>
-              {timeLeft === 0 ? (
-                <>
-                  <div>Ready!</div>
-                  <div style={{ fontSize: '75%' }}>Click to clear</div>
-                </>
-              ) : (
-                formatTime(timeLeft)
-              )}
-            </div>
-          </div>
-        )
-      })}
-      {Array.from(helpRequests)
-        .filter((name) => name !== ownName)
-        .map((name) => (
-          <Fab color="primary" aria-label="add" className={'wiggle'} variant="extended" sx={{ margin: 1 }}>
-            <WavingHandIcon sx={{ mr: 1 }} />
-            {name}
-          </Fab>
-        ))}
-      {!isHost && (
-        <Fab
-          color={helpRequested ? 'primary' : 'white'}
-          aria-label="add"
-          onClick={(e) => {
-            e.target.blur()
-            return setHelpRequest(!helpRequested)
-          }}
-          className={helpRequested ? 'wiggle' : ''}
-        >
-          <WavingHandIcon />
-        </Fab>
-      )}
-    </div>
-  )
-}
-
-const foodEmojis = ['🍰', '🍪', '🎂', '🍕', '🌮', '🍔', '🥐', '🍓', '🍇', '🍎', '🥑', '🍉', '🍌', '🥝', '🍑', '🥨', '🧁', '🥧']
-
-function FoodParticleAnimation({ active, restartKey }) {
-  const canvasRef = useRef(null)
-  const confettiInstanceRef = useRef(null)
-
-  useEffect(() => {
-    if (!active) {
-      if (canvasRef.current && canvasRef.current.parentNode) {
-        canvasRef.current.parentNode.removeChild(canvasRef.current)
-        canvasRef.current = null
-        confettiInstanceRef.current = null
-      }
-      return
-    }
-
-    if (!canvasRef.current) {
-      const canvas = document.createElement('canvas')
-      canvas.style.position = 'fixed'
-      canvas.style.top = '0'
-      canvas.style.left = '0'
-      canvas.style.width = '100%'
-      canvas.style.height = '100%'
-      canvas.style.pointerEvents = 'none'
-      canvas.style.zIndex = '1600'
-      document.body.appendChild(canvas)
-      canvasRef.current = canvas
-
-      confettiInstanceRef.current = confetti.create(canvas, {
-        resize: true,
-        useWorker: false
-      })
-    }
-
-    const scalar = 6
-    const defaults = {
-      spread: 360,
-      ticks: 50,
-      gravity: 2,
-      decay: 0.96,
-      flat: true,
-      startVelocity: 25,
-      shapes: foodEmojis.map(emoji => confetti.shapeFromText({ text: emoji, scalar })),
-      scalar
-    }
-
-    if (confettiInstanceRef.current) {
-      confettiInstanceRef.current({
-        ...defaults,
-      })
-    }
-
-    return () => {
-      // Cleanup is handled in the main effect when active becomes false
-    }
-  }, [active, restartKey])
-
-  return null
-}
-
-function CelebrationPopup({ open, onClose, onRestartAnimation }) {
-  const handleClose = (event, reason) => {
-    if (reason && reason === 'backdropClick') {
-      return
-    }
-    onClose()
-  }
-
-  const handleCelebrate = () => {
-    if (onRestartAnimation) {
-      onRestartAnimation()
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onClose={handleClose}
-      maxWidth="sm"
-      fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: 4,
-          textAlign: 'center',
-          padding: 2,
-          position: 'relative',
-          zIndex: 1500,
-        },
-      }}
-    >
-      <DialogTitle>
-        <Typography 
-          component="div" 
-          sx={{ 
-            fontWeight: 'bold', 
-            color: 'primary.main',
-            fontSize: { xs: '1.1rem', sm: '2rem', md: '2.5rem' },
-            whiteSpace: 'nowrap',
-            px: { xs: 0.5, sm: 2 }
-          }}
-        >
-          🎉 Congratulations! 🎉
-        </Typography>
-      </DialogTitle>
-      <DialogContent>
-        <Typography variant="h5" sx={{ mb: 2 }}>
-          All tasks completed!
-        </Typography>
-        <Typography variant="body1" sx={{ mb: 3 }}>
-          Great teamwork! You've successfully completed the recipe together.
-        </Typography>
-        <Stack direction="row" spacing={2} justifyContent="center">
-          <Button variant="contained" color="primary" onClick={handleCelebrate} size="large">
-            Celebrate!
-          </Button>
-          <Button variant="outlined" color="primary" onClick={handleClose} size="large">
-            Dismiss
-          </Button>
-        </Stack>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function GoPopup({ open }) {
-  return (
-    <Dialog
-      open={open}
-      maxWidth="sm"
-      fullWidth
-      disableEscapeKeyDown
-      hideBackdrop={false}
-      PaperProps={{
-        sx: {
-          borderRadius: 4,
-          textAlign: 'center',
-          padding: 4,
-          position: 'relative',
-          zIndex: 1500,
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          animation: open ? 'goBounce 0.6s ease-out' : 'none',
-          '@keyframes goBounce': {
-            '0%': {
-              transform: 'scale(0.3)',
-              opacity: 0,
-            },
-            '50%': {
-              transform: 'scale(1.1)',
-            },
-            '70%': {
-              transform: 'scale(0.9)',
-            },
-            '100%': {
-              transform: 'scale(1)',
-              opacity: 1,
-            },
-          },
-        },
-      }}
-    >
-      <DialogContent sx={{ padding: 0 }}>
-        <Typography
-          variant="h1"
-          component="div"
-          sx={{
-            fontWeight: 'bold',
-            color: 'white',
-            fontSize: { xs: '4rem', sm: '6rem', md: '8rem' },
-            textShadow: '0 4px 20px rgba(0,0,0,0.3)',
-            letterSpacing: '0.1em',
-            animation: open ? 'goPulse 1s ease-in-out infinite' : 'none',
-            '@keyframes goPulse': {
-              '0%, 100%': {
-                transform: 'scale(1)',
-              },
-              '50%': {
-                transform: 'scale(1.05)',
-              },
-            },
-          }}
-        >
-          GO!
-        </Typography>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-const theme = createTheme({
-  palette: {
-    background: {
-      default: '#e7ecf8',
-    },
-    primary: pink,
-    secondary: purple,
-  },
-})
 
 function MainApp() {
-  const formatTime = (seconds) => (seconds ? new Date(seconds * 1000).toISOString().substr(11, 8) : 0)
-  const laneHeight = 80
-  const zoom = 0.4
-
-  const queryParams = new Proxy(new URLSearchParams(window.location.search), {
-    get: (searchParams, prop) => searchParams.get(prop),
-  })
-
+  const queryParams = useMemo(() => getQueryParams(), [])
+  const mock = useMemo(() => isMockMode(), [])
   const baseUrl = window.location.href.split(/[?#]/)[0]
-  const sessionId = queryParams.session || uuidV4()
+  const sessionId = useMemo(() => queryParams.session || (mock ? 'mock-session' : uuidV4()), [queryParams.session, mock])
 
-  let storedParticipantId = getSettings(sessionId).participantId
-  if (!storedParticipantId) {
-    storedParticipantId = queryParams.session ? uuidV4() : '0'
-    appendSessionSettings(sessionId, { participantId: storedParticipantId })
-  }
-
-  const participantId = storedParticipantId
-  const isHost = participantId === '0'
-
-  const ownId = `recipes-${sessionId}-${participantId}`
-  const hostId = `recipes-${sessionId}-0`
+  const participantId = useMemo(() => {
+    let stored = getSettings(sessionId).participantId
+    if (!stored) {
+      stored = queryParams.session ? uuidV4() : HOST_ID
+      appendSessionSettings(sessionId, { participantId: stored })
+    }
+    return stored
+  }, [sessionId, queryParams.session])
+  const isHost = participantId === HOST_ID
 
   useEffect(() => {
-    window.history.replaceState({ sessionId }, 'Flow Recipe', `${baseUrl}?session=${sessionId}`)
-  }, [sessionId, baseUrl])
+    const url = `${baseUrl}?session=${sessionId}${mock ? '&mock=1' : ''}`
+    window.history.replaceState({ sessionId }, 'Flow Recipe', url)
+  }, [sessionId, baseUrl, mock])
 
-  const settings = getSettings(sessionId)
-
-  const [title, setTitle] = useState('')
-  const [shoppingList, setShoppingList] = useState([])
-  const [timelines, setTimelines] = useState([[]])
-  const [currentTask, setCurrentTask] = useState(0)
-  const [selectedTask, setSelectedTask] = useState({ timeline: 0, task: 0 })
-  const [ownLane, setOwnLane] = useState(0)
-  const [currentTimeline, setCurrentTimeline] = useState(0)
-  const [recipe, setRecipe] = useState()
-  const [recipeName, setRecipeName] = useState(isHost ? queryParams.recipe || 'bday-cake' : null)
-  let globalSettings = JSON.parse(window.localStorage.getItem('global-settings'))
-  const [name, setName] = useState(settings?.name || globalSettings?.defaultName || '')
-  const defaultIsSpectator = settings?.isSpectator
-  const [isSpectator, setIsSpectator] = useState(defaultIsSpectator)
-  const [nameSet, setNameSet] = useState(name !== '' && settings?.isSpectator !== undefined)
-  const [shareLinkCopied, setShareLinkCopied] = useState(false)
-  const [currentState, setCurrentState] = useState(settings.tab || isHost ? 'settings' : 'cooking')
-  const [errorMessage, setErrorMessage] = useState(null)
-
-  const connectionsRef = useRef([{ id: hostId, name, isSpectator: false }])
-  const [connections, _setConnections] = useState(connectionsRef.current)
-  const [setupDone, setSetupDone] = useState(isHost)
-  const completedTasksRef = useRef(settings.completedTasks || [])
-  const [completedTasks, _setCompletedTasks] = useState(completedTasksRef.current)
-  const [tasksInProgress, setTasksInProgress] = useState(settings.tasksInProgress || [])
-  const [timers, setTimers] = useState([])
-  const [scale, setScale] = useState(1)
-  const [miseEnPlace, setMiseEnPlace] = useState(false)
-  const [sessionStarted, setSessionStarted] = useState(false)
-  const [showGoPopup, setShowGoPopup] = useState(false)
-  const previousSessionStartedRef = useRef(false)
-  const sessionStartedInitializedRef = useRef(false)
-
-  const helpRequestsRef = useRef(new Set())
-  const [helpRequests, _setHelpRequests] = useState(helpRequestsRef.current)
-  const [helpRequested, setHelpRequested] = useState(false)
-
-  const [allUsersCompleted, setAllUsersCompleted] = useState(false)
+  const settings = useMemo(() => getSettings(sessionId), [sessionId])
+  const [name, setName] = useState(settings.name || getGlobalSettings().defaultName || '')
+  const [isSpectator, setIsSpectator] = useState(settings.isSpectator)
+  const [nameSet, setNameSet] = useState(name !== '' && settings.isSpectator !== undefined)
+  const [tab, setTab] = useState(settings.tab || (isHost ? 'settings' : 'cooking'))
+  const [selected, setSelected] = useState(null) // { uuid, participantId }
+  const [dismissedDiff, setDismissedDiff] = useState(null)
   const [celebrationShown, setCelebrationShown] = useState(false)
   const celebrationDismissedRef = useRef(false)
   const [animationRestartKey, setAnimationRestartKey] = useState(0)
+  const [showGoPopup, setShowGoPopup] = useState(false)
+  const previousStatusRef = useRef(null)
 
-  const timelinesRef = useRef(timelines)
-  const ownLaneRef = useRef(ownLane)
-  const selectedTaskRef = useRef(selectedTask)
-  const tasksInProgressRef = useRef(settings.tasksInProgress || [])
+  const {
+    session,
+    plan,
+    helpRequests,
+    interrupt,
+    error,
+    clearError,
+    updateName,
+    updateParticipant,
+    addPlaceholder,
+    removePlaceholder,
+    updateDishes,
+    updateInventory,
+    updatePolicy,
+    startSession,
+    restart,
+    sendEvent,
+    askForHelp,
+  } = useSession({
+    sessionId,
+    participantId,
+    name,
+    isSpectator,
+    enabled: nameSet,
+    mock,
+    createIfMissing: isHost && !queryParams.session && !mock ? { recipeId: queryParams.recipe || null } : null,
+  })
 
-  const selectTab = (tab) => {
-    setCurrentState(tab)
-    appendSessionSettings(sessionId, { tab })
-  }
-
-  const setTasksCompleted = useCallback((completed) => {
-    // TODO: use uuids
-    appendSessionSettings(sessionId, { completedTasks: completed })
-    completedTasksRef.current = completed
-    _setCompletedTasks(completed)
-  }, [sessionId])
-
-  const concatCompletedTasks = useCallback((completed) => {
-    const merged = Array.from(new Set([...completedTasksRef.current, ...completed]))
-    setTasksCompleted(merged)
-  }, [setTasksCompleted])
-
-  const scrollToTask = useCallback((uuid) => {
-    console.log(
-      'scrolling to ' + uuid,
-      document.getElementById('task' + uuid),
-      document.getElementById('timeline' + uuid)
-    )
-
-    // TODO: how to enable smooth scrolling for both?
-    // TODO: why does this fail without .? on reset?
-    document.getElementById('timeline' + uuid)?.scrollIntoView({ inline: 'center' })
-    setTimeout(
-      () =>
-        document.getElementById('task' + uuid)?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' }),
-      100
-    )
-  }, [])
-
-  const scrollToIndex = useCallback((taskIndex, timeline = selectedTaskRef.current.timeline) => {
-    if (!timelinesRef.current?.[timeline]?.[taskIndex]) return;
-    const uuid = timelinesRef.current[timeline][taskIndex].uuid
-    scrollToTask(uuid)
-  }, [scrollToTask])
-
-  const socketRef = useRef(null)
-
-  const startTimer = ({ timer: { duration, title }, uuid }) => {
-    const newTimers = [{ end: Date.now() + duration * 1000, taskUuid: uuid, title }, ...timers]
-    setTimers(newTimers)
-  }
-
-  const clearTimer = async (index) => {
-    let newTimers = timers.slice()
-    newTimers.splice(index, 1)
-    setTimers(newTimers)
-  }
-
-  const sendTaskCompleted = useCallback((taskId) => {
-    if (socketRef.current) {
-      socketRef.current.emit('taskCompleted', {
-        sessionId,
-        participantId,
-        taskUuid: taskId,
-      })
-    }
-  }, [sessionId, participantId])
-
-  const markTaskCompleted = useCallback(async (uuid) => {
-    setTasksCompleted([...completedTasksRef.current, uuid])
-    setTasksInProgress(R.without([uuid], tasksInProgress))
-    sendTaskCompleted(uuid)
-  }, [tasksInProgress, setTasksCompleted, sendTaskCompleted])
-
-  const findNextTask = useCallback((timeline) => {
-    if (!timelinesRef.current?.[timeline]) return -1;
-    const startedTasks = [...completedTasksRef.current, ...tasksInProgressRef.current]
-    const nextTask = R.findLastIndex((taskItem) => !startedTasks.includes(taskItem.uuid), timelinesRef.current[timeline])
-    console.log({ nextTask })
-    return nextTask
-  }, [])
-
-  const markTaskDone = async (timeline, task) => {
-    if (!timelinesRef.current?.[timeline]?.[task]) return -1;
-    const taskItem = timelinesRef.current[timeline][task]
-    await markTaskCompleted(taskItem.uuid)
-    // TODO: Need to jump to next task not completed
-    const nextTask = findNextTask(timeline)
-    scrollToIndex(nextTask, timeline)
-    return nextTask
-  }
-
-  const markCurrentTaskDone = async () => {
-    const nextTask = await markTaskDone(currentTimeline, currentTask)
-    setCurrentTask(nextTask)
-    setSelectedTask({ task: nextTask, timeline: ownLane })
-  }
-
-  const setConnections = (newConnections) => {
-    connectionsRef.current = newConnections
-    _setConnections(newConnections)
-  }
-
-  const setHelpRequests = (newHelpRequests) => {
-    const helpSet = Array.isArray(newHelpRequests) ? new Set(newHelpRequests) : newHelpRequests
-    helpRequestsRef.current = helpSet
-    _setHelpRequests(helpSet)
-  }
-
-  const setHelpRequest = async (requested) => {
-    setHelpRequested(requested)
-    if (socketRef.current) {
-      socketRef.current.emit('askForHelp', {
-        sessionId,
-        participantId,
-        requested,
-      })
-    }
-  }
-
-  const restart = async () => {
-    setTasksCompleted([])
-    appendSessionSettings(sessionId, { completedTasks: [] })
-    setCelebrationShown(false)
-    setAllUsersCompleted(false)
-    celebrationDismissedRef.current = false
-    setShowGoPopup(false)
-    previousSessionStartedRef.current = false
-    sessionStartedInitializedRef.current = false
-    if (socketRef.current) {
-      socketRef.current.emit('restart', { sessionId })
-    }
-  }
-
+  // keep the spectator flag in sync with what the server says about me
+  const me = session?.participants?.find((p) => p.id === participantId)
   useEffect(() => {
-    timelinesRef.current = timelines
-  }, [timelines])
+    if (me && me.isSpectator !== undefined && me.isSpectator !== isSpectator) {
+      setIsSpectator(me.isSpectator)
+      appendSessionSettings(sessionId, { isSpectator: me.isSpectator })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.isSpectator])
 
+  const status = session?.status || 'draft'
+  const isRunning = status === 'running' || status === 'done'
+
+  // GO popup when the host starts the session (cooks only)
   useEffect(() => {
-    ownLaneRef.current = ownLane
-  }, [ownLane])
+    const previous = previousStatusRef.current
+    previousStatusRef.current = status
+    if (previous === 'draft' && status === 'running' && !isHost && !isSpectator) {
+      setShowGoPopup(true)
+      const t = setTimeout(() => setShowGoPopup(false), 2500)
+      return () => clearTimeout(t)
+    }
+    return undefined
+  }, [status, isHost, isSpectator])
 
+  // celebration when every lane item is done
+  const everythingDone = allDone(plan)
   useEffect(() => {
-    selectedTaskRef.current = selectedTask
-  }, [selectedTask])
-
-  useEffect(() => {
-    tasksInProgressRef.current = tasksInProgress
-  }, [tasksInProgress])
-
-  useEffect(() => {
-    /*
-    try {
-      navigator.wakeLock.request('screen').catch((err) => {
-        console.error(`${err.name}, ${err.message}`)
-      })
-    } catch (err) {
-      console.error(`${err.name}, ${err.message}`)
-    }*/
-  }, [])
-
-  useEffect(() => {
-    const createSessionIfNeeded = async () => {
-      if (isHost && !queryParams.session) {
-        try {
-          const response = await fetch(`${SERVER_URL}/api/sessions`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              sessionId,
-              recipeName,
-            }),
-          })
-
-          if (!response.ok) {
-            if (response.status === 409) {
-              console.log('Session already exists, continuing...')
-              return
-            }
-            const errorData = await response.json()
-            throw new Error(errorData.error || 'Failed to create session')
-          }
-
-          const data = await response.json()
-          console.log('Session created:', data)
-        } catch (error) {
-          console.error('Error creating session:', error)
-          setErrorMessage(error.message || 'Failed to create session')
-        }
-      }
-    }
-
-    createSessionIfNeeded()
-  }, [recipeName, isHost, sessionId, queryParams.session])
-
-  useEffect(() => {
-    const socket = io(SERVER_URL)
-    socketRef.current = socket
-
-    socket.on('connect', () => {
-      console.log('Connected to server')
-      socket.emit('joinSession', {
-        sessionId,
-        participantId,
-        name: name || '',
-        isSpectator,
-      })
-    })
-
-    socket.on('recipeName', (recipeName) => {
-      console.log('Received recipe name from server:', recipeName)
-      setRecipeName(recipeName)
-    })
-
-    socket.on('connections', (participants) => {
-      console.log('Received connections:', participants)
-      const connectionsList = participants.map((p) => ({
-        id: p.id === '0' ? hostId : `recipes-${sessionId}-${p.id}`,
-        name: p.name,
-        isSpectator: p.isSpectator || false,
-      }))
-      setConnections(connectionsList)
-      const ownConnection = connectionsList.find((c) => c.id === ownId)
-      if (ownConnection) {
-        setIsSpectator(ownConnection.isSpectator)
-      }
-      setSetupDone(true)
-    })
-
-    socket.on('completedTasks', (completedTaskUuids) => {
-      console.log('Received completed tasks:', completedTaskUuids)
-      setTasksCompleted(completedTaskUuids)
-      if (completedTaskUuids.length === 0) {
-        setTasksInProgress([])
-        setTimers([])
-        const currentOwnLane = ownLaneRef.current
-        if (timelinesRef.current?.[currentOwnLane]) {
-          const firstTaskIndex = findNextTask(currentOwnLane)
-          setCurrentTask(firstTaskIndex)
-          setSelectedTask({ task: firstTaskIndex, timeline: currentOwnLane })
-          appendSessionSettings(sessionId, { completedTasks: [] })
-          scrollToIndex(firstTaskIndex, currentOwnLane)
-        }
-      }
-    })
-
-    socket.on('helpRequests', (requests) => {
-      console.log('Received help requests:', requests)
-      setHelpRequests(new Set(requests))
-    })
-
-    socket.on('scale', (scaleValue) => {
-      console.log('Received scale from server:', scaleValue)
-      setScale(scaleValue || 1)
-    })
-
-    socket.on('miseEnPlace', (miseEnPlaceValue) => {
-      console.log('Received mise en place from server:', miseEnPlaceValue)
-      setMiseEnPlace(miseEnPlaceValue || false)
-    })
-
-    socket.on('sessionStarted', (started) => {
-      console.log('Received session started from server:', started)
-      const previousValue = previousSessionStartedRef.current
-      setSessionStarted(started)
-      previousSessionStartedRef.current = started
-      if (!sessionStartedInitializedRef.current) {
-        sessionStartedInitializedRef.current = true
-      } else if (started && !previousValue && !isSpectator && !isHost) {
-        setShowGoPopup(true)
-        setTimeout(() => setShowGoPopup(false), 2500)
-      }
-    })
-
-    socket.on('error', (error) => {
-      console.error('Socket error:', error)
-      setErrorMessage(error.message || 'An error occurred')
-    })
-
-    socket.on('disconnect', () => {
-      console.log('Disconnected from server')
-    })
-
-    return () => {
-      socket.disconnect()
-    }
-  }, [name, findNextTask, scrollToIndex, isSpectator, hostId, isHost, ownId, participantId, sessionId, setTasksCompleted])
-
-  const handleScaleChange = (newScale) => {
-    console.log('handleScaleChange', newScale)
-    if (socketRef.current && isHost) {
-      socketRef.current.emit('updateScale', {
-        sessionId,
-        participantId,
-        scale: newScale,
-      })
-    }
-  }
-
-  const handleMiseEnPlaceChange = (enabled) => {
-    if (socketRef.current && isHost) {
-      socketRef.current.emit('updateMiseEnPlace', {
-        sessionId,
-        participantId,
-        miseEnPlace: enabled,
-      })
-    }
-  }
-
-  const handleStartSession = () => {
-    if (socketRef.current && isHost) {
-      socketRef.current.emit('startSession', {
-        sessionId,
-        participantId,
-      })
-    }
-  }
-
-  const updateName = (newName) => {
-    if (socketRef.current) {
-      socketRef.current.emit('updateName', {
-        sessionId,
-        participantId,
-        name: newName,
-      })
-    }
-  }
-
-  const handleParticipationStatusChange = (newIsSpectator) => {
-    setIsSpectator(newIsSpectator)
-    appendSessionSettings(sessionId, { isSpectator: newIsSpectator })
-    if (socketRef.current && socketRef.current.connected) {
-      socketRef.current.emit('updateParticipationStatus', {
-        sessionId,
-        participantId,
-        isSpectator: newIsSpectator,
-      })
-    }
-  }
-
-  useEffect(() => {
-    if (!recipeName) {
-      return
-    }
-
-    const loadRecipe = async () => {
-      try {
-        const response = await fetch(`${SERVER_URL}/api/recipes/${recipeName}`)
-        if (!response.ok) {
-          throw new Error(`Failed to load recipe: ${response.statusText}`)
-        }
-        const xmlText = await response.text()
-        const parser = new DOMParser()
-        const recipe = parser.parseFromString(xmlText, 'text/xml')
-        setRecipe(recipe)
-      } catch (error) {
-        console.error('Failed to load recipe:', error)
-      }
-    }
-    loadRecipe()
-  }, [recipeName])
-
-  useEffect(() => {
-    if (!recipe) {
-      return
-    }
-    const title = recipe.querySelector('title').innerHTML
-    setTitle(title)
-  }, [recipe])
-
-  useEffect(() => {
-    if (timelines.length === 0 || timelines.every(t => t.length === 0)) {
-      return
-    }
-    setShoppingList(calculateShoppingList(timelines))
-  }, [timelines])
-
-  useEffect(() => {
-    if (!recipe || connections.length < 2) {
-      return
-    }
-
-    const hostConnection = connections[0]
-    const isHostSpectating = hostConnection?.isSpectator ?? false
-    const activeParticipants = connections.filter((c, i) => i === 0 || !c.isSpectator)
-    
-    if (activeParticipants.length < 2) {
-      return
-    }
-
-    let newTimelines = []
-    if (!isHostSpectating) {
-      newTimelines.push([])
-    }
-    for (let i = 1; i < activeParticipants.length; ++i) {
-      newTimelines.push([])
-    }
-    const finalOutputId = findFinalOutputId(recipe)
-    const lastTask = findTaskProducing(recipe, finalOutputId)
-
-    let xPathResult = recipe.evaluate('(//task)', recipe, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null)
-    for (let i = 0; i < xPathResult.snapshotLength; ++i) {
-      const node = xPathResult.snapshotItem(i)
-      expandNode(recipe, node, scale)
-    }
-
-    xPathResult = recipe.evaluate(
-      '(//task|//ingredient|//tool|//ns:task)',
-      recipe,
-      function (prefix) {
-        if (prefix === 'ns') {
-          return 'http://www.w3.org/1999/xhtml'
-        } else {
-          return null
-        }
-      },
-      XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-      null
-    )
-    for (let i = 0; i < xPathResult.snapshotLength; ++i) {
-      const node = xPathResult.snapshotItem(i)
-      node.setAttribute('uuid', i)
-    }
-
-    //console.log('recipe', new XMLSerializer().serializeToString(recipe))
-
-    const ingredientsAndTools = []
-    xPathResult = recipe.evaluate(
-      '(//ingredient|//tool)[@uuid]',
-      recipe,
-      null,
-      XPathResult.UNORDERED_NODE_ITERATOR_TYPE,
-      null
-    )
-    let node = xPathResult.iterateNext()
-    while (node) {
-      ingredientsAndTools.push(node.getAttribute('uuid'))
-      node = xPathResult.iterateNext()
-    }
-    concatCompletedTasks([ingredientsAndTools])
-
-    console.log(`Calculating graph starting from ${lastTask.getAttribute('operation')}`, newTimelines)
-
-    // TODO: The pour operation is duplicated in the timeline!
-    scheduleItemsInTimelines(
-      recipe,
-      [{ uuid: finalOutputId, task: lastTask, amountsLeft: { [finalOutputId]: scale } }],
-      newTimelines,
-      0,
-      miseEnPlace
-    )
-
-    const duplicates = newTimelines
-      .reduce((acc, curr) => [...curr, ...acc], [])
-      .reduce(
-        ({ duplicates, rest }, curr) => {
-          if (rest.find(({ uuid }) => uuid === curr.uuid)) duplicates.push(curr)
-          else rest.push(curr)
-          return { duplicates, rest }
-        },
-        { duplicates: [], rest: [] }
-      )
-    if (duplicates.duplicates.length > 0) {
-      console.error('Duplicate tasks found!', duplicates)
-    }
-
-    console.log({ newTimelines })
-
-    setTimelines(newTimelines)
-    setShoppingList(calculateShoppingList(newTimelines))
-    const startedTasks = [...completedTasksRef.current, ...tasksInProgress]
-    if (isHost) {
-      if (!isHostSpectating) {
-        setOwnLane(0)
-        setCurrentTimeline(0)
-        if (newTimelines[0] && newTimelines[0].length > 0) {
-          const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[0])
-          setCurrentTask(nextTask)
-          setSelectedTask({ task: nextTask, timeline: 0 })
-        } else {
-          setCurrentTask(0)
-          setSelectedTask({ task: 0, timeline: 0 })
-        }
-      } else {
-        setOwnLane(undefined)
-        setCurrentTimeline(0)
-        if (newTimelines.length > 0 && newTimelines[0] && newTimelines[0].length > 0) {
-          const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[0])
-          setCurrentTask(nextTask)
-          setSelectedTask({ task: nextTask, timeline: 0 })
-        }
-      }
-    } else {
-      if (!isSpectator) {
-        const participantIndex = activeParticipants.findIndex(({ id }) => id === ownId)
-        if (participantIndex < 0) {
-          console.warn('Own id not found in active participants')
-          return
-        }
-        const newOwnLane = isHostSpectating ? participantIndex - 1 : participantIndex
-        if (newOwnLane < 0) {
-          console.warn('Calculated lane index is negative')
-          return
-        }
-        setOwnLane(newOwnLane)
-        setCurrentTimeline(newOwnLane)
-        // Only try to find next task if the timeline exists and has tasks
-        if (newTimelines[newOwnLane] && newTimelines[newOwnLane].length > 0) {
-          const nextTask = R.findLastIndex((task) => !startedTasks.includes(task.uuid), newTimelines[newOwnLane])
-          setCurrentTask(nextTask)
-          setSelectedTask({ task: nextTask, timeline: newOwnLane })
-        } else {
-          // If no timeline exists yet, set to first task
-          setCurrentTask(0)
-          setSelectedTask({ task: 0, timeline: newOwnLane })
-        }
-      }
-    }
-
-    setSetupDone(true)
-  }, [recipe, connections, concatCompletedTasks, tasksInProgress, scale, isSpectator, miseEnPlace, isHost, ownId])
-
-  useEffect(() => {
-    if (timelines.length === 0 || timelines.every(t => t.length === 0)) {
-      setAllUsersCompleted(false)
-      return
-    }
-
-    const allCompleted = timelines.every(timeline => {
-      if (timeline.length === 0) return true
-      return timeline.every(task => completedTasks.includes(task.uuid))
-    })
-
-    setAllUsersCompleted(allCompleted)
-
-    if (allCompleted && !celebrationShown && !celebrationDismissedRef.current) {
-      setCelebrationShown(true)
-    } else if (!allCompleted) {
+    if (everythingDone && !celebrationShown && !celebrationDismissedRef.current) setCelebrationShown(true)
+    if (!everythingDone) {
       setCelebrationShown(false)
       celebrationDismissedRef.current = false
     }
-  }, [timelines, completedTasks, celebrationShown])
+  }, [everythingDone, celebrationShown])
 
-  const dependencyGraph = timelines.reduce(
-    (g, timeline) => {
-      timeline.forEach(({ uuid, title, dependencies, task }) => {
-        const dependencyInputNames = dependencies.map(d => d.input?.name).filter(Boolean)
-        
-        const ingredientInputNames = []
-        if (task && recipe) {
-          const inputs = task.querySelectorAll('input')
-          inputs.forEach((input) => {
-            const inputId = input.getAttribute('ref')
-            const referencedElement = recipe.getElementById(inputId)
-            if (referencedElement && referencedElement.tagName === 'ingredient') {
-              const ingredientName = Array.from(referencedElement.childNodes)
-                .filter((node) => node.nodeType === Node.TEXT_NODE)
-                .map((node) => node.textContent)
-                .join('')
-                .trim()
-              if (ingredientName) {
-                ingredientInputNames.push(ingredientName)
-              }
-            }
-          })
-        }
-        
-        const inputNames = [...new Set([...dependencyInputNames, ...ingredientInputNames])]
-        g?.nodes.push({ id: uuid, title: `${uuid}-${title}`, inputNames })
-        dependencies.forEach(({ uuid: iuuid }) => g?.links.push({ source: iuuid, target: uuid }))
-      })
-      return g
-    },
-    { nodes: [], links: [] }
-  )
-
-  console.log({ dependencyGraph })
-
-  const nameLabelWidth = 200
-  const width = Math.max(...(timelines?.map((timeline) => -(timeline?.[timeline?.length - 1]?.start ?? 0)) ?? [0])) + nameLabelWidth
-
-  const selectedTimeline = selectedTask.timeline
-  let selectedTaskData = timelines?.[selectedTimeline]?.[selectedTask.task]
-
-  const height = laneHeight * (timelines?.length ?? 0)
-  
-  let timeline
-  let tasks
-
-  if (isHost || isSpectator) {
-    timeline = timelines?.flat() ?? []
-    tasks = timeline.sort(({ start: a }, { start: b }) => a - b)
-    if (selectedTaskData && selectedTaskData.uuid) {
-      const flatTask = timeline.find(t => t.uuid === selectedTaskData.uuid)
-      if (flatTask) {
-        selectedTaskData = flatTask
-      }
-    } else if (tasks.length > 0) {
-      selectedTaskData = tasks[0]
-    }
-  } else {
-    timeline = timelines?.[selectedTimeline] ?? []
-    tasks = R.reverse(timeline)
+  const selectTab = (t) => {
+    setTab(t)
+    appendSessionSettings(sessionId, { tab: t })
   }
-  
-  const task = selectedTaskData
-  const pendingInputs = task?.dependencies?.filter(({ uuid }) => !completedTasks.includes(uuid)) ?? []
-  // TODO: get participants and outputs for inputs
-  const inputsForTask = task?.dependencies?.map(({ uuid, input: { name } }) => {
-    let uuidMatches = (s) => s.uuid === uuid
-    const timelineIndex = timelines.findIndex((t) => t.some(uuidMatches)) // This should probably use the uuid instead of the id
-    // Perhaps it would be possible to fetch the output name from the task?
-    // How to ensure the referenced output is the correct one?
-    return {
-      uuid,
-      input: name,
-      participant: timelineIndex === ownLane ? null : connections[timelineIndex + 1]?.name,
-    }
-  })
-  const joinSessionLink = `${baseUrl}?session=${sessionId}`
-  const inputsReady = pendingInputs?.length === 0
 
-  console.log({ timelines, selectedTimeline, selectedTask, currentTask, ownLane })
-  // const debug = queryParams.query?.debug !== undefined
+  const handleNameChange = (newName) => {
+    setName(newName)
+    appendSessionSettings(sessionId, { name: newName })
+    setGlobalSettings({ defaultName: newName })
+    updateName(newName)
+  }
+
+  const handleSelect = useCallback((item, laneParticipantId) => {
+    setSelected({ uuid: item.uuid, participantId: laneParticipantId })
+    scrollToTask(item.uuid)
+  }, [])
+
+  const ownLane = laneFor(plan, participantId)
+  const ownCurrent = currentItem(ownLane)
+  const seesAllLanes = isHost || isSpectator
+  const listedItems = useMemo(() => {
+    if (seesAllLanes) return allItems(plan)
+    return laneItems(ownLane).map((i) => ({ ...i, participantId }))
+  }, [plan, ownLane, seesAllLanes, participantId])
+  const expandedUuid = selected?.uuid && listedItems.some((i) => i.uuid === selected.uuid) ? selected.uuid : ownCurrent?.uuid || listedItems.find((i) => i.status !== 'done')?.uuid
+
+  const myDiff = diffFor(plan, participantId)
+  const diffKey = plan ? `${plan.computedAt}` : null
+  const showDiff = myDiff && myDiff.changes?.length > 0 && dismissedDiff !== diffKey
+
+  const joinSessionLink = `${baseUrl}?session=${sessionId}${mock ? '&mock=1' : ''}`
+  const ownAllDone = ownLane && laneItems(ownLane).length > 0 && laneItems(ownLane).every((i) => i.status === 'done')
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Container sx={{ minHeight: '100vh' }}>
-        {errorMessage && (
+        {error && (
           <Box sx={{ mt: 2, mb: 2 }}>
-            <Alert severity="error" onClose={() => setErrorMessage(null)}>
-              {errorMessage}
+            <Alert severity="error" onClose={clearError}>
+              {error}
             </Alert>
           </Box>
         )}
 
         {!nameSet ? (
-          <InitDialog {...{ setName, name, isSpectator, handleParticipationStatusChange, updateName, setNameSet, sessionId }} />
+          <InitDialog
+            name={name}
+            setName={setName}
+            isSpectator={isSpectator}
+            onJoin={({ name: newName, isSpectator: spectator }) => {
+              setIsSpectator(spectator)
+              setNameSet(true)
+              appendSessionSettings(sessionId, { name: newName, isSpectator: spectator })
+              setGlobalSettings({ defaultName: newName })
+              updateName(newName)
+              updateParticipant(participantId, { isSpectator: spectator })
+            }}
+          />
         ) : (
           <>
-            <div>
-              {currentState === 'settings' && (
-                <Settings
-                  {...{
-                    title,
-                    setupDone,
-                    connections,
-                    name,
-                    setName,
-                    updateName,
-                    restart,
-                    isHost,
-                    connectionId: ownId,
-                    recipeName,
-                    scale,
-                    onScaleChange: handleScaleChange,
-                    isSpectator,
-                    onParticipationStatusChange: handleParticipationStatusChange,
-                    hostId,
-                    baseUrl,
-                    miseEnPlace,
-                    onMiseEnPlaceChange: handleMiseEnPlaceChange,
-                    sessionStarted,
-                    onStartSession: handleStartSession
+            <Box sx={{ pt: 2 }}>
+              {tab === 'settings' && (
+                <HostSettings
+                  session={session}
+                  plan={plan}
+                  ownParticipantId={participantId}
+                  isHost={isHost}
+                  mock={mock}
+                  name={name}
+                  onNameChange={handleNameChange}
+                  baseUrl={baseUrl}
+                  onUpdateParticipant={(id, patch) => {
+                    if (id === participantId && patch.isSpectator !== undefined) {
+                      setIsSpectator(patch.isSpectator)
+                      appendSessionSettings(sessionId, { isSpectator: patch.isSpectator })
+                    }
+                    updateParticipant(id, patch)
+                  }}
+                  onAddPlaceholder={addPlaceholder}
+                  onRemovePlaceholder={removePlaceholder}
+                  onUpdateDishes={updateDishes}
+                  onUpdateInventory={updateInventory}
+                  onUpdatePolicy={updatePolicy}
+                  onStart={startSession}
+                  onRestart={() => {
+                    celebrationDismissedRef.current = false
+                    setCelebrationShown(false)
+                    setSelected(null)
+                    restart()
                   }}
                 />
               )}
-              {currentState === 'shopping' && <Shopping {...{ shoppingList }} />}
-              {currentState === 'invite' && <Invite {...{ joinSessionLink, setShareLinkCopied, shareLinkCopied }} />}
-              {currentState === 'tools' && <></>}
-              {currentState === 'graph' && <GraphView {...{ dependencyGraph, completedTasks }} />}
-              {currentState === 'cooking' && (
+              {tab === 'shopping' && <ShoppingList shoppingList={plan?.shoppingList} />}
+              {tab === 'invite' && <Invite joinSessionLink={joinSessionLink} />}
+              {tab === 'plan' && <DraftPlan plan={plan} session={session} ownParticipantId={participantId} selectedUuid={selected?.uuid} onSelect={handleSelect} />}
+              {tab === 'graph' && (
+                <Suspense fallback={<Typography sx={{ p: 2 }}>Loading graph…</Typography>}>
+                  <GraphView plan={plan} onSelect={(uuid) => setSelected({ uuid })} />
+                </Suspense>
+              )}
+              {tab === 'cooking' && (
                 <>
-                  <Box sx={{ pb: 20 }}>
-                    <Box paddingY={2}>
-                      {timelines[0]?.length === 0 ? (
-                        'Waiting for participants to join...'
-                      ) : (
-                        <Stack spacing={2}>
-                          <Card>
-                            <CardContent>
-                              <Typography variant="h4" gutterBottom>
-                                Instructions
-                              </Typography>
-                              <Stack spacing={2}>
-                                <p>
-                                  Your task is to create something wonderful with your friends by following the steps
-                                  below. Please note that this is not a test of speed or skills, but of collaboration.
-                                </p>
-                                <p>
-                                  In case you need assistance, you can raise your hand virtually by pressing the ✋
-                                  -button in the bottom right corner.
-                                </p>
-                                <p>
-                                  Remeber to wash your hands before starting 💦👏😊! 
-                                </p>
-                                <p>Happy baking, have fun! 🧑‍🍳</p>
-                              </Stack>
-                            </CardContent>
-                          </Card>
-                          {!sessionStarted && !isSpectator && (
-                            <Card>
-                              <CardContent>
-                                <Stack spacing={2} alignItems="center">
-                                  <Typography variant="h4" gutterBottom>
-                                    Waiting for host to start the session...
-                                  </Typography>
-                                  <Typography variant="body1">
-                                    Please wait while the host prepares to begin.
-                                  </Typography>
-                                </Stack>
-                              </CardContent>
-                            </Card>
-                          )}
-                          {/*}
-                        <Typography variant="h1">
-                          {ownLaneSelected ? 'My tasks' : isHost ? 'Tasks' : `${selectedTimelineOwner}'s tasks`}
-                        </Typography>*/}
-                          {(sessionStarted || isSpectator || isHost) && tasks.map((task, i) => {
-                            const currentTaskIndex = (isHost || isSpectator) ? i : (timelines[selectedTimeline]?.length ?? 0) - currentTask - 1
-                            const isCurrentTask = !(isHost || isSpectator) && i === currentTaskIndex
-                            return (
-                              <Task
-                                key={task.uuid}
-                                {...{
-                                  task,
-                                  timelines,
-                                  isDone: completedTasks.includes(task.uuid),
-                                  isCurrent: isCurrentTask,
-                                  inputsReady: isCurrentTask ? inputsReady : false,
-                                  pendingInputs: isCurrentTask ? pendingInputs : [],
-                                  inputsForTask: isCurrentTask ? inputsForTask : [],
-                                  recipe,
-                                  setTasksInProgress,
-                                  tasksInProgress,
-                                  completedTasks,
-                                  markCurrentTaskDone,
-                                  markTaskDone,
-                                  startTimer,
-                                  currentTask,
-                                  setCurrentTask,
-                                  isHost,
-                                  isSpectator,
-                                  formatTime,
-                                  sessionStarted,
-                                  jumpToNextTask: () => {
-                                    const nextTask = R.findLastIndex(
-                                      (task) => ![...completedTasksRef.current, ...tasksInProgress].includes(task.uuid),
-                                      timelines[ownLane] ?? []
-                                    )
-                                    setCurrentTask(nextTask)
-                                    setSelectedTask({ task: nextTask, timeline: ownLane })
-                                    scrollToIndex(nextTask)
-                                  },
-                                }}
-                              />
-                            )
-                          })}
-                          {(sessionStarted || isSpectator || isHost) && (() => {
-                            if (ownLane !== undefined && timelines[ownLane]) {
-                              const userTimeline = timelines[ownLane]
-                              if (userTimeline && userTimeline.length > 0) {
-                                const allUserTasksCompleted = userTimeline.every(task => completedTasks.includes(task.uuid))
-                                if (allUserTasksCompleted) {
-                                  return (
-                                    <Card sx={{ bgcolor: 'success.light', color: 'success.contrastText' }}>
-                                      <CardContent>
-                                        <Stack direction="row" spacing={2} alignItems="center">
-                                          <CheckCircleIcon sx={{ fontSize: 40 }} />
-                                          <Typography variant="h5">
-                                            You've completed all your tasks!
-                                          </Typography>
-                                        </Stack>
-                                      </CardContent>
-                                    </Card>
-                                  )
-                                }
-                              }
-                            }
-                            return null
-                          })()}
-                        </Stack>
+                  <Box sx={{ pb: `${(plan?.lanes?.length || 1) * 34 + 120}px` }}>
+                    <Stack spacing={2}>
+                      {showDiff && (
+                        <Alert severity="info" onClose={() => setDismissedDiff(diffKey)}>
+                          <Stack spacing={0.5}>
+                            {myDiff.changes.map((c, i) => (
+                              <span key={`${c.uuid}-${c.field}-${i}`}>{describeChange(c)}</span>
+                            ))}
+                          </Stack>
+                        </Alert>
                       )}
-                    </Box>
-                    <Timeline
-                      {...{
-                        width,
-                        height,
-                        timelines,
-                        connections: [
-                          ...(connections[0] && !connections[0].isSpectator ? [connections[0]] : []),
-                          ...connections.slice(1).filter(c => !c.isSpectator)
-                        ],
-                        ownLane,
-                        setCurrentTimeline,
-                        setSelectedTask,
-                        scrollToIndex,
-                        currentTask,
-                        selectedTimeline,
-                        selectedTask,
-                        completedTasks,
-                        zoom,
-                        laneHeight,
-                        isHost,
-                      }}
-                    />
-                  </Box>{' '}
+                      <Card>
+                        <CardContent>
+                          <Typography variant="h4" gutterBottom>
+                            Instructions
+                          </Typography>
+                          <Stack spacing={2}>
+                            <p>
+                              Your task is to create something wonderful with your friends by following the steps below. Please note that this is not a
+                              test of speed or skills, but of collaboration.
+                            </p>
+                            <p>In case you need assistance, you can raise your hand virtually by pressing the ✋ -button in the bottom right corner.</p>
+                            <p>Remember to wash your hands before starting 💦👏😊!</p>
+                            <p>Happy cooking, have fun! 🧑‍🍳</p>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                      {!plan && (
+                        <Card>
+                          <CardContent>
+                            <Typography>Waiting for the plan…</Typography>
+                          </CardContent>
+                        </Card>
+                      )}
+                      {plan && !isRunning && (
+                        <Card>
+                          <CardContent>
+                            <Stack spacing={1} alignItems="center">
+                              <Typography variant="h5" gutterBottom>
+                                {isHost ? 'This is the draft plan' : 'Waiting for the host to start the session…'}
+                              </Typography>
+                              <Typography variant="body1" color="text.secondary">
+                                {isHost ? 'Press Start in Settings when everyone is here.' : 'You can already read your tasks below.'}
+                              </Typography>
+                              <Chip size="small" label="draft" />
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      )}
+                      {listedItems.map((item) => {
+                        const own = item.participantId === participantId
+                        const canAct = isHost || (own && isRunning && !isSpectator)
+                        return (
+                          <TaskCard
+                            key={item.uuid}
+                            item={item}
+                            session={session}
+                            ownParticipantId={participantId}
+                            laneParticipantId={item.participantId}
+                            isCurrent={own && ownCurrent?.uuid === item.uuid}
+                            expanded={item.uuid === expandedUuid}
+                            canAct={canAct}
+                            actAs={isHost && !own ? item.participantId : null}
+                            onToggle={() => setSelected({ uuid: item.uuid, participantId: item.participantId })}
+                            onEvent={sendEvent}
+                          />
+                        )
+                      })}
+                      {ownAllDone && (
+                        <Card sx={{ bgcolor: 'success.light', color: 'success.contrastText' }}>
+                          <CardContent>
+                            <Stack direction="row" spacing={2} alignItems="center">
+                              <CheckCircleIcon sx={{ fontSize: 40 }} />
+                              <Typography variant="h5">You've completed all your tasks!</Typography>
+                            </Stack>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </Stack>
+                  </Box>
+                  <PlanLanes plan={plan} session={session} ownParticipantId={participantId} selectedUuid={selected?.uuid} onSelect={handleSelect} />
                   <Timers
-                    {...{
-                      timers,
-                      scrollToTask,
-                      clearTimer,
-                      markTaskCompleted,
-                      completedTasks,
-                      setHelpRequest,
-                      helpRequested,
-                      helpRequests,
-                      ownName: name,
-                      formatTime,
-                      isHost,
+                    lane={ownLane}
+                    session={session}
+                    ownParticipantId={participantId}
+                    isHost={isHost}
+                    helpRequests={helpRequests}
+                    onAskForHelp={askForHelp}
+                    onScrollTo={(uuid) => {
+                      setSelected({ uuid, participantId })
+                      scrollToTask(uuid)
                     }}
                   />
                 </>
               )}
-            </div>
+            </Box>
 
-            <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0 }} elevation={3}>
+            <Paper sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 4 }} elevation={3}>
               <BottomNavigation
-                sx={{
-                  '& .Mui-selected': {
-                    '& .MuiSvgIcon-root, & .MuiBottomNavigationAction-label': {
-                      color: 'primary.main',
-                    },
-                  },
-                }}
+                sx={{ '& .Mui-selected': { '& .MuiSvgIcon-root, & .MuiBottomNavigationAction-label': { color: 'primary.main' } } }}
                 showLabels
-                value={currentState}
-                onChange={(event, newValue) => {
-                  console.log({ newValue })
-                  selectTab(newValue)
-                }}
+                value={tab}
+                onChange={(event, newValue) => selectTab(newValue)}
               >
                 <BottomNavigationAction label="Settings" value="settings" icon={<SettingsIcon />} />
                 <BottomNavigationAction label="Shopping" value="shopping" icon={<ShoppingCartIcon />} />
                 <BottomNavigationAction label="Invite" value="invite" icon={<ShareIcon />} />
-                {/*<BottomNavigationAction label="Tools" value="tools" icon={<HandymanIcon />} />*/}
+                <BottomNavigationAction label="Plan" value="plan" icon={<InsightsIcon />} />
                 <BottomNavigationAction label="Tasks" value="cooking" icon={<ChecklistIcon />} />
                 {isHost && <BottomNavigationAction label="Graph" value="graph" icon={<AccountTreeIcon />} />}
               </BottomNavigation>
             </Paper>
           </>
         )}
-        {/*
-      <div className={'nav'}>
-        <div
-          className={`nav-item clickable ${currentState === 'settings' ? 'nav-item_current' : ''}`}
-          onClick={() => selectTab('settings')}
-        >
-          Settings
-        </div>
-        <div
-          className={`nav-item clickable ${currentState === 'shopping' ? 'nav-item_current' : ''}`}
-          onClick={() => selectTab('shopping')}
-        >
-          Shopping list
-        </div>
-        <div
-          className={`nav-item clickable ${currentState === 'tools' ? 'nav-item_current' : ''}`}
-          onClick={() => selectTab('tools')}
-        >
-          Tools
-        </div>
-        <div
-          className={`nav-item clickable ${currentState === 'cooking' ? 'nav-item_current' : ''}`}
-          onClick={() => selectTab('cooking')}
-        >
-          Tasks
-        </div>
-      </div>
-      */}
       </Container>
+      <InterruptAlert interrupt={interrupt} plan={plan} onAcknowledge={(i) => sendEvent('appointmentAcknowledged', i.appointmentUuid)} />
       <CelebrationPopup
-        open={allUsersCompleted && celebrationShown}
+        open={everythingDone && celebrationShown}
         onClose={() => {
           setCelebrationShown(false)
           celebrationDismissedRef.current = true
         }}
-        onRestartAnimation={() => {
-          setAnimationRestartKey(prev => prev + 1)
-        }}
+        onRestartAnimation={() => setAnimationRestartKey((k) => k + 1)}
       />
       <GoPopup open={showGoPopup} />
-      <FoodParticleAnimation active={allUsersCompleted && celebrationShown} restartKey={animationRestartKey} />
+      <FoodParticleAnimation active={everythingDone && celebrationShown} restartKey={animationRestartKey} />
     </ThemeProvider>
   )
 }
@@ -1883,6 +369,14 @@ function App() {
   return (
     <Routes>
       <Route path="/graph" element={<GraphViewPage />} />
+      <Route
+        path="/demo"
+        element={
+          <Suspense fallback={<Typography sx={{ p: 2 }}>Loading…</Typography>}>
+            <DemoPage />
+          </Suspense>
+        }
+      />
       <Route path="*" element={<MainApp />} />
     </Routes>
   )

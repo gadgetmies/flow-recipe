@@ -1,8 +1,0 @@
-bake ->
-sequence:
-- preheat
-- put into oven
-- bake
-- take out
-
-Possible to add items in between steps

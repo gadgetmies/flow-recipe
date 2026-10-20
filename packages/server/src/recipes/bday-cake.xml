@@ -1,39 +1,53 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<recipe ref="https://www.wearesovegan.com/epic-microwave-chocolate-cake/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd">
+<recipe ref="https://www.wearesovegan.com/epic-microwave-chocolate-cake/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="recipe.xsd" version="2" id="bday-cake">
     <title>Birthday cake</title>
+    <serving temperature="ambient"/>
     <ingredients>
-        <ingredient id="oat-milk">oat milk</ingredient>
+        <ingredient id="oat-milk">oat milk<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="white-chocolate-spread">white chocolate spread</ingredient>
         <ingredient id="instant-coffee">instant coffee</ingredient>
         <ingredient id="flour">flour</ingredient>
         <ingredient id="baking-powder">baking powder</ingredient>
         <ingredient id="caster-sugar">caster sugar</ingredient>
-        <ingredient id="vegan-cream">vegan cream</ingredient>
-        <ingredient id="vegan-yoghurt">vegan yoghurt</ingredient>
-        <ingredient id="margarine">margarine</ingredient>
+        <ingredient id="vegan-cream">vegan cream<properties><property name="storage" value="fridge"/></properties></ingredient>
+        <ingredient id="vegan-yoghurt">vegan yoghurt<properties><property name="storage" value="fridge"/></properties></ingredient>
+        <ingredient id="margarine">margarine<properties><property name="storage" value="fridge"/><property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property></properties></ingredient>
         <ingredient id="cucumber">cucumber</ingredient>
         <ingredient id="cream-of-tartar">cream of tartar</ingredient>
         <ingredient id="salt">salt</ingredient>
-        <ingredient id="raspberries">raspberries</ingredient>
+        <ingredient id="raspberries">raspberries<properties><property name="storage" value="fridge"/></properties></ingredient>
         <ingredient id="ground-coriander">ground coriander</ingredient>
         <ingredient id="gin">gin</ingredient>
         <ingredient id="xanthan">xanthan</ingredient>
         <ingredient id="lime">lime</ingredient>
     </ingredients>
     <tools>
-        <tool id="silicone-cake-mould">silicone cake mould<properties>
+        <tool id="silicone-cake-mould" type="cake-mould">silicone cake mould<properties>
                 <property name="circumference">
                     <numeric-value number="20" unit="centimeters"/>
                 </property>
+                <property name="capacity">
+                    <numeric-value number="1" unit="cake"/>
+                </property>
             </properties>
         </tool>
-        <tool id="microwave-safe-jug">microwave safe jug</tool>
         <tool id="spatula">spatula</tool>
-        <tool id="bowl">bowl</tool>
-        <tool id="cup">cup</tool>
+        <tool id="bowl">bowl<properties>
+                <property name="capacity">
+                    <numeric-value number="4" unit="l"/>
+                </property>
+            </properties>
+        </tool>
+        <tool id="cup">cup<properties>
+                <property name="capacity">
+                    <numeric-value number="0.3" unit="l"/>
+                </property>
+            </properties>
+        </tool>
         <tool id="whisk">whisk</tool>
         <tool id="frosting-spatula">frosting spatula</tool>
-        <tool id="cooling-rack">cooling rack</tool>
+        <tool id="pastry-brush">pastry brush</tool>
         <tool id="precision-scale">precision scale</tool>
         <tool id="kitchen-scale">kitchen scale</tool>
         <tool id="plate">plate</tool>
@@ -41,36 +55,36 @@
         <tool id="fork">fork</tool>
         <tool id="serving-plate">serving plate</tool>
         <tool id="fruit-baller">fruit baller</tool>
-        <tool id="microwave-oven">microwave oven</tool>
+        <tool id="sieve">sieve</tool>
+        <tool id="grater">grater</tool>
     </tools>
     <tasks>
-        <task operation="measure">
+        <task operation="measure" id="measure-oat-milk-for-coffee">
             <options>
                 <option name="amount">
                     <numeric-value number="40" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="oat-milk"/>
             </inputs>
             <outputs>
                 <output id="oat-milk-for-coffee">oat milk for coffee</output>
-                <!-- TODO: How to differentiate different measurements of same ingredient? -->
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-oat-milk-for-batter">
             <options>
                 <option name="amount">
                     <numeric-value number="100" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="bowl"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="oat-milk"/>
@@ -79,15 +93,15 @@
                 <output id="oat-milk-for-batter">oat milk for batter</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-spread-for-filling">
             <options>
                 <option name="amount">
                     <numeric-value number="20" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="white-chocolate-spread"/>
@@ -96,15 +110,15 @@
                 <output id="white-chocolate-spread-for-filling">white chocolate for filling</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-spread-for-frosting">
             <options>
                 <option name="amount">
                     <numeric-value number="20" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="white-chocolate-spread"/>
@@ -113,15 +127,15 @@
                 <output id="white-chocolate-spread-for-frosting">white chocolate spread for frosting</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-coffee">
             <options>
                 <option name="amount">
                     <numeric-value number="8" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="precision-scale"/>
+                <tool ref="cup" reserved="true" soil="none"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="instant-coffee"/>
@@ -130,15 +144,15 @@
                 <output id="measured-instant-coffee">instant coffee</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-margarine">
             <options>
                 <option name="amount">
                     <numeric-value number="170" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="bowl"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="bowl" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="margarine"/>
@@ -147,15 +161,15 @@
                 <output id="measured-margarine">margarine</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-margarine-for-greasing">
             <options>
                 <option name="amount">
                     <numeric-value number="20" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="margarine"/>
@@ -164,15 +178,15 @@
                 <output id="margarine-for-greasing">margarine</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-flour">
             <options>
                 <option name="amount">
                     <numeric-value number="220" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="bowl"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="bowl" reserved="true" soil="none"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="flour"/>
@@ -181,15 +195,15 @@
                 <output id="measured-flour">flour</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-sugar">
             <options>
                 <option name="amount">
                     <numeric-value number="100" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="bowl"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true" soil="none"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="caster-sugar"/>
@@ -198,15 +212,15 @@
                 <output id="measured-caster-sugar">caster sugar</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-cream-for-frosting">
             <options>
                 <option name="amount">
                     <numeric-value number="100" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="vegan-cream"/>
@@ -215,15 +229,15 @@
                 <output id="vegan-cream-for-frosting">vegan cream</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-cream-of-tartar">
             <options>
                 <option name="amount">
                     <numeric-value number="1" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true" soil="none"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="cream-of-tartar"/>
@@ -232,16 +246,15 @@
                 <output id="measured-cream-of-tartar">cream of tartar</output>
             </outputs>
         </task>
-
-        <task operation="measure">
+        <task operation="measure" id="measure-coriander">
             <options>
                 <option name="amount">
                     <numeric-value number="4" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true" soil="none"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="ground-coriander"/>
@@ -250,15 +263,15 @@
                 <output id="measured-ground-coriander">coriander</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-salt">
             <options>
                 <option name="amount">
                     <numeric-value number="4" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true" soil="none"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="salt"/>
@@ -267,15 +280,15 @@
                 <output id="salt-for-batter">salt for batter</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-xanthan">
             <options>
                 <option name="amount">
                     <numeric-value number="4" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true" soil="none"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="xanthan"/>
@@ -284,15 +297,15 @@
                 <output id="measured-xanthan">xanthan</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-baking-powder">
             <options>
                 <option name="amount">
                     <numeric-value number="4" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true" soil="none"/>
+                <tool ref="precision-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="baking-powder"/>
@@ -301,15 +314,15 @@
                 <output id="measured-baking-powder">baking powder</output>
             </outputs>
         </task>
-        <task operation="measure">
+        <task operation="measure" id="measure-cucumber-for-filling">
             <options>
                 <option name="amount">
                     <numeric-value number="200" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="plate"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="plate" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="cucumber"/>
@@ -319,36 +332,39 @@
             </outputs>
         </task>
 
-        <task operation="soften">
+        <task operation="soften" id="soften-margarine">
             <instructions>
                 Soften the
                 <input ref="measured-margarine"/>
                 with a
-                <tool ref="fork" reserved="true"/>
+                <tool ref="fork"/>
                 in a
-                <tool ref="bowl"/>.
+                <tool ref="bowl" reserved="true"/>.
             </instructions>
             <outputs>
                 <output id="softened-margarine">softened margarine</output>
             </outputs>
         </task>
 
-        <task operation="cream">
+        <task operation="cream" id="cream-margarine-and-sugar">
             <instructions>
                 Whip the
                 <input ref="softened-margarine"/>
                 with
                 <input ref="measured-caster-sugar"/>
                 using a
-                <tool ref="whisk" reserved="true"/>
+                <tool ref="whisk"/>
                 until light and fluffy.
             </instructions>
+            <tools>
+                <tool ref="bowl" reserved="true"/>
+            </tools>
             <outputs>
                 <output id="creamed-margarine-and-sugar">creamed margarine and sugar</output>
             </outputs>
         </task>
 
-        <task operation="heat">
+        <task operation="heat" id="heat-oat-milk">
             <options>
                 <option name="temperature">
                     <numeric-value number="60" unit="celsius"/>
@@ -358,31 +374,37 @@
                 </option>
             </options>
             <tools>
-                <tool ref="microwave-oven"/>
+                <tool ref="cup" reserved="true"/>
             </tools>
             <inputs>
                 <input ref="oat-milk-for-coffee"/>
             </inputs>
             <outputs>
-                <output id="heated-oat-milk">heated oat milk</output>
+                <output id="heated-oat-milk" hold="10" hold-unit="minutes">heated oat milk</output>
             </outputs>
+            <instructions>
+                Heat the <input ref="oat-milk-for-coffee"/> in the microwave.
+            </instructions>
         </task>
 
-        <task operation="mix">
+        <task operation="mix" id="make-oat-milk-coffee">
             <instructions>
                 Add the
                 <input ref="measured-instant-coffee"/>
                 to
                 <input ref="heated-oat-milk"/>
                 and stir with a
-                <tool ref="spoon" reserved="true"/>.
+                <tool ref="spoon"/>.
             </instructions>
+            <tools>
+                <tool ref="cup" reserved="true"/>
+            </tools>
             <outputs>
                 <output id="oat-milk-coffee">oat milk coffee</output>
             </outputs>
         </task>
 
-        <task operation="mix">
+        <task operation="mix" id="mix-dry-ingredients">
             <instructions>
                 Add the
                 <input ref="measured-flour"/>,
@@ -391,46 +413,52 @@
                 <input ref="measured-xanthan"/>
                 and
                 <input ref="measured-ground-coriander"/>
-                to
-                <tool ref="bowl" reserved="true"/>
+                to a
+                <tool ref="bowl" reserved="true" soil="none"/>
                 and stir with a
-                <tool ref="spatula" reserved="true"/>.
+                <tool ref="spatula" reserved="true" soil="none"/>.
             </instructions>
             <outputs>
                 <output id="dry-ingredients">dry ingredients</output>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-dry-into-creamed">
             <instructions>
                 Mix the
                 <input ref="dry-ingredients"/>
                 into the
                 <input ref="creamed-margarine-and-sugar"/>.
             </instructions>
+            <tools>
+                <tool ref="bowl" reserved="true"/>
+                <tool ref="spatula" reserved="true"/>
+            </tools>
             <outputs>
                 <output id="butter-sugar-dry-ingredient-mix">butter, sugar and dry ingredients mix</output>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-batter">
             <instructions>
                 First, add the
                 <input ref="oat-milk-for-batter"/>
                 into the
                 <input ref="butter-sugar-dry-ingredient-mix"/>
                 and stir with a
-                <tool ref="spatula"/>
+                <tool ref="spatula" reserved="true"/>
                 until smooth. Then add the
                 <input ref="oat-milk-coffee"/>
                 and, again, mix until smooth.
             </instructions>
+            <tools>
+                <tool ref="bowl" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="batter">batter</output>
-                <tool ref="bowl"/> <!-- TODO: need to be specific about which bowl is freed! -->
-                <tool ref="microwave-safe-jug"/>
+                <output id="batter" volume="1" volume-unit="l">batter</output>
+                <tool ref="bowl" name="dry ingredients bowl"/>
             </outputs>
         </task>
 
-        <task operation="grease">
+        <task operation="grease" id="prepare-mould">
             <instructions>
                 Grease the sides of a
                 <tool ref="silicone-cake-mould" reserved="true"/>
@@ -438,10 +466,10 @@
                 <input ref="margarine-for-greasing"/>.
             </instructions>
             <outputs>
-                <output id="prepared-cake-mould">prepared cake mould</output>
+                <output id="prepared-cake-mould" amount="1" unit="cake">prepared cake mould</output>
             </outputs>
         </task>
-        <task operation="split">
+        <task operation="split" id="split-batter">
             <options>
                 <option name="parts">
                     <numeric-value number="2"/>
@@ -454,29 +482,30 @@
                 <tool ref="bowl" reserved="true"/>
             </tools>
             <outputs>
-                <output id="split-batter-in-a-bowl">split batter</output>
+                <output id="split-batter-in-a-bowl" amount="2" unit="cake">split batter</output>
             </outputs>
         </task>
-        <task operation="pour">
+        <task operation="pour" id="pour-into-mould">
             <instructions>
                 Pour the
                 <input ref="split-batter-in-a-bowl"/>
                 into the
-                <input ref="prepared-cake-mould">cake mould
-                </input> <!-- TODO: this is a input, but also a tool, so which tag to use? -->
+                <input ref="prepared-cake-mould">cake mould</input>
             </instructions>
+            <tools>
+                <tool ref="silicone-cake-mould" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="batter-in-mould">cake mould with batter</output>
+                <output id="batter-in-mould" amount="2" unit="cake">cake mould with batter</output>
                 <tool ref="bowl" name="used bowl"/>
+                <tool ref="spatula"/>
             </outputs>
         </task>
-        <task operation="bake-in-microwave"> <!-- operation is identical to heat -->
+        <task operation="bake-in-microwave" id="bake">
             <instructions>
                 Bake the
                 <input ref="batter-in-mould"/>
-                in the
-                <tool ref="microwave-oven"/>
-                with
+                in the microwave with
                 <option name="power">
                     <numeric-value number="700" unit="watts"/>
                 </option>
@@ -487,62 +516,66 @@
                 or until a toothpick comes out clean.
             </instructions>
             <outputs>
-                <output id="baked-cake">baked cake</output>
+                <output id="baked-cake" amount="2" unit="cake">baked cake</output>
             </outputs>
         </task>
-        <task operation="chill"><!-- should there be a combined take out -operation? -->
+        <task operation="chill" id="cool-in-mould">
             <instructions>
                 Cool the
                 <input ref="baked-cake"/>
                 for
                 <option name="duration">
-                    <numeric-value number="10" unit="minutes"/><!-- TODO: was 10 minutes -->
+                    <numeric-value number="10" unit="minutes"/>
                 </option>
-                in the <tool ref="silicone-cake-mould">mould</tool>.
+                in the <tool ref="silicone-cake-mould" reserved="true">mould</tool>.
             </instructions>
             <outputs>
-                <output id="cooled-cake-in-mould">cooled cake in moulds</output>
+                <output id="cooled-cake-in-mould" amount="2" unit="cake">cooled cake in mould</output>
             </outputs>
         </task>
-        <task operation="separate">
+        <task operation="separate" id="turn-out">
             <instructions>
                 Detach the
-                <input ref="cooled-cake-in-mould">cooled cakes</input>
+                <input ref="cooled-cake-in-mould">cooled cake</input>
                 from the mould by running a
                 <tool ref="spatula"/>
                 around the edges. Turn out the cake from the mould onto a
-                <tool ref="serving-plate"/>.
+                <tool ref="serving-plate" reserved="true"/>.
             </instructions>
             <outputs>
-                <output id="cake-on-a-plate">cake on a plate</output>
+                <output id="cake-on-a-plate" amount="2" unit="cake">cake on a plate</output>
                 <tool ref="silicone-cake-mould" name="used cake mould"/>
             </outputs>
         </task>
 
-        <task operation="grate">
-            Grate the
-            <input ref="measured-cucumber"/>
-            into a
-            <tool ref="sieve"/>
-            on top of a
-            <tool ref="bowl"/>.
-            Press the grated cucumber to push out the liquid.
+        <task operation="grate" id="grate-cucumber">
+            <instructions>
+                Grate the
+                <input ref="measured-cucumber"/>
+                with a
+                <tool ref="grater"/>
+                into a
+                <tool ref="sieve" reserved="true"/>
+                on top of a
+                <tool ref="bowl" reserved="true"/>.
+                Press the grated cucumber to push out the liquid.
+            </instructions>
             <outputs>
-                <!-- TODO: this creates two grate tasks -->
-                <output id="grated-cucumber">grated cucumber</output>
+                <output id="grated-cucumber" hold="60" hold-unit="minutes">grated cucumber</output>
                 <output id="cucumber-juice">cucumber juice</output>
+                <tool ref="plate"/>
             </outputs>
         </task>
 
-        <task operation="measure">
+        <task operation="measure" id="measure-yoghurt">
             <options>
                 <option name="amount">
                     <numeric-value number="40" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="vegan-yoghurt"/>
@@ -552,7 +585,7 @@
             </outputs>
         </task>
 
-        <task operation="mix">
+        <task operation="mix" id="mix-filling">
             <instructions>
                 Mix the
                 <input ref="grated-cucumber"/>,
@@ -560,40 +593,44 @@
                 and
                 <input ref="white-chocolate-spread-for-filling"/>
                 in a
-                <tool ref="bowl" reserved="true"/>
+                <tool ref="bowl" reserved="true" soil="wash"/>
+                with a
+                <tool ref="spoon" soil="wash"/>.
             </instructions>
             <outputs>
-                <output id="filling">filling</output>
+                <output id="filling" hold="60" hold-unit="minutes">filling</output>
+                <tool ref="sieve"/>
             </outputs>
         </task>
 
-        <task operation="measure">
+        <task operation="measure" id="measure-cucumber-juice">
             <options>
                 <option name="amount">
                     <numeric-value number="40" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="cucumber-juice"/>
             </inputs>
             <outputs>
                 <output id="measured-cucumber-juice">cucumber juice for filling</output>
+                <tool ref="bowl" name="juice bowl"/>
             </outputs>
         </task>
 
-        <task operation="measure">
+        <task operation="measure" id="measure-gin">
             <options>
                 <option name="amount">
                     <numeric-value number="20" unit="g"/>
                 </option>
             </options>
             <tools>
-                <tool ref="cup"/>
-                <tool ref="kitchen-scale"/>
+                <tool ref="cup" reserved="true"/>
+                <tool ref="kitchen-scale" soil="none"/>
             </tools>
             <inputs>
                 <input ref="gin"/>
@@ -603,97 +640,119 @@
             </outputs>
         </task>
 
-        <task operation="mix">
+        <task operation="mix" id="mix-cucumber-gin">
             <instructions>
-                Add
+                Add the
                 <input ref="measured-gin"/>
                 to the
                 <input ref="measured-cucumber-juice"/>
             </instructions>
+            <tools>
+                <tool ref="cup" reserved="true"/>
+            </tools>
             <outputs>
                 <output id="cucumber-gin-mix">cucumber gin mix</output>
             </outputs>
         </task>
-        <task operation="fill">
+        <task operation="spread" id="fill-cake">
             <instructions>
                 Brush the
                 <input ref="cake-on-a-plate">cake</input>
                 lightly with the
-                <input ref="cucumber-gin-mix"/>.
+                <input ref="cucumber-gin-mix"/>
+                using a
+                <tool ref="pastry-brush"/>.
                 Spread the
                 <input ref="filling"/>
-                over the top and place the second
-                <input ref="cake-on-a-plate">cake</input>
-                on top of the filling. Brush also the top of the cake.
-            </instructions>
-            <outputs>
-                <output id="filled-cake">filled cake</output>
+                over the top with a
                 <tool ref="spatula"/>
+                and place the second cake on top of the filling. Brush also the top of the cake.
+            </instructions>
+            <tools>
+                <tool ref="serving-plate" reserved="true"/>
+            </tools>
+            <outputs>
+                <output id="filled-cake" amount="1" unit="cake">filled cake</output>
+                <tool ref="spatula"/>
+                <tool ref="bowl" name="filling bowl"/>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-cream-and-tartar">
             <instructions>
                 Add
                 <input ref="vegan-cream-for-frosting"/>
                 and
                 <input ref="measured-cream-of-tartar"/>
                 into a
-                <tool ref="bowl"/>
+                <tool ref="bowl" reserved="true" soil="wash"/>
             </instructions>
             <outputs>
                 <output id="cream-tartar-mix">cream tartar mix</output>
             </outputs>
         </task>
-        <task operation="whip">
+        <task operation="whip" id="whip-cream">
             <instructions>
                 Whip the
                 <input ref="cream-tartar-mix"/>
                 using a
-                <tool ref="whisk"/>
+                <tool ref="whisk" soil="wash"/>
                 until soft peaks form.
             </instructions>
+            <tools>
+                <tool ref="bowl" reserved="true" soil="wash"/>
+            </tools>
             <outputs>
-                <output id="softly-whisked-cream">softly whipped cream</output>
+                <output id="softly-whisked-cream" hold="30" hold-unit="minutes">softly whipped cream</output>
             </outputs>
         </task>
-        <task operation="mix">
+        <task operation="mix" id="mix-spread-into-cream">
             <instructions>
                 Add
                 <input ref="white-chocolate-spread-for-frosting"/>
                 to the
                 <input ref="softly-whisked-cream"/>.
             </instructions>
+            <tools>
+                <tool ref="bowl" reserved="true" soil="wash"/>
+            </tools>
             <outputs>
-                <output id="white-chocolate-cream-mix">white chocolate cream mix</output>
+                <output id="white-chocolate-cream-mix" hold="30" hold-unit="minutes">white chocolate cream mix</output>
             </outputs>
         </task>
-        <task operation="whip">
+        <task operation="whip" id="whip-frosting">
             <instructions>
                 Whip the
                 <input ref="white-chocolate-cream-mix"/>
                 until hard peaks form using a
-                <tool ref="whisk" reserved="true"/>.
+                <tool ref="whisk" soil="wash"/>.
             </instructions>
+            <tools>
+                <tool ref="bowl" reserved="true" soil="wash"/>
+            </tools>
             <outputs>
-                <output id="frosting">frosting</output>
+                <output id="frosting" hold="30" hold-unit="minutes">frosting</output>
             </outputs>
         </task>
-        <task operation="spread">
+        <task operation="spread" id="frost-cake">
             <instructions>
                 Add the
                 <input ref="frosting"/>
                 on top of the center of the
                 <input ref="filled-cake">cake</input>
                 and use a
-                <tool ref="frosting-spatula"/>
+                <tool ref="frosting-spatula" soil="wash"/>
                 to ease it around the sides.
             </instructions>
+            <tools>
+                <tool ref="serving-plate" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="frosted-cake">frosted cake</output>
+                <output id="frosted-cake" amount="1" unit="cake">frosted cake</output>
+                <tool ref="bowl" name="frosting bowl"/>
             </outputs>
         </task>
 
-        <task operation="measure">
+        <task operation="measure" id="measure-cucumber-for-decoration">
             <options>
                 <option name="amount">
                     <numeric-value number="10" unit="cm"/>
@@ -703,25 +762,28 @@
                 <input ref="cucumber"/>
             </inputs>
             <tools>
-                <tool ref="plate"/>
+                <tool ref="plate" reserved="true"/>
             </tools>
             <outputs>
                 <output id="cucumber-for-decorations">cucumber for decorations</output>
             </outputs>
         </task>
-        <task operation="ball">
+        <task operation="ball" id="ball-cucumber">
             <instructions>
                 Use a
                 <tool ref="fruit-baller"/>
                 to make balls from the
                 <input ref="cucumber-for-decorations"/>
             </instructions>
+            <tools>
+                <tool ref="plate" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="cucumber-balls">cucumber balls</output>
+                <output id="cucumber-balls" hold="60" hold-unit="minutes">cucumber balls</output>
             </outputs>
         </task>
 
-        <task operation="decorate">
+        <task operation="decorate" id="decorate-cake">
             <instructions>
                 Place the
                 <input ref="cucumber-balls"/>
@@ -730,41 +792,40 @@
                 on top of the
                 <input ref="frosted-cake"/>.
             </instructions>
+            <tools>
+                <tool ref="serving-plate" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="decorated-cake">decorated cake</output>
+                <output id="decorated-cake" amount="1" unit="cake">decorated cake</output>
+                <tool ref="plate"/>
             </outputs>
         </task>
 
-        <task operation="grate">
+        <task operation="grate" id="grate-lime">
             <inputs>
                 <input ref="lime"/>
             </inputs>
             <tools>
                 <tool ref="grater"/>
-                <tool ref="cup"/>
+                <tool ref="cup" reserved="true"/>
             </tools>
             <outputs>
-                <output id="lime-curls">lime curls</output>
+                <output id="lime-curls">lime zest</output>
             </outputs>
         </task>
 
-        <task operation="sprinkle">
+        <task operation="sprinkle" id="sprinkle-lime">
             <instructions>
-                Sprinkle
+                Sprinkle the
                 <input ref="lime-curls"/>
                 on top of the
                 <input ref="decorated-cake">cake</input>
             </instructions>
+            <tools>
+                <tool ref="serving-plate" reserved="true"/>
+            </tools>
             <outputs>
-                <output id="finished-cake">birthday cake</output>
-            </outputs>
-        </task>
-        <task operation="enjoy">
-            <instructions>
-                Enjoy the <input ref="finished-cake"/> and celebrate!
-            </instructions>
-            <outputs>
-                <output id="great-fun">great fun</output>
+                <output id="finished-cake" amount="1" unit="cake" final="true">birthday cake</output>
             </outputs>
         </task>
     </tasks>

@@ -1,18 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd">
+<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd"
+        version="2" id="sandwich">
     <title>Simple Butter Sandwich</title>
+    <serving temperature="ambient"/>
     <ingredients>
         <ingredient id="bread">bread</ingredient>
-        <ingredient id="butter">butter</ingredient>
+        <ingredient id="butter">butter<properties><property name="storage" value="fridge"/><property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property></properties></ingredient>
         <ingredient id="cucumber">cucumber</ingredient>
         <ingredient id="tomato">tomato</ingredient>
     </ingredients>
     <tools>
         <tool id="knife">knife</tool>
-        <tool id="plate">plate</tool>
+        <tool id="plate">plate<properties>
+                <property name="capacity">
+                    <numeric-value number="1" unit="sandwich"/>
+                </property>
+            </properties>
+        </tool>
     </tools>
     <tasks>
-        <task operation="split">
+        <task operation="split" id="slice-bread" requires="knife">
             <options>
                 <option name="parts">
                     <numeric-value number="2"/>
@@ -22,25 +29,25 @@
                 <input ref="bread"/>
             </inputs>
             <tools>
-                <tool ref="knife" reusable="true"/>
+                <tool ref="knife" soil="none"/>
             </tools>
             <outputs>
-                <output id="bread-slice">bread slices</output>
+                <output id="bread-slice" amount="2" unit="slice">bread slice</output>
             </outputs>
         </task>
-        <task operation="spread">
+        <task operation="spread" id="butter-bread">
             <inputs>
                 <input ref="butter"/>
                 <input ref="bread-slice"/>
             </inputs>
             <tools>
-                <tool ref="knife" reusable="true"/>
+                <tool ref="knife" soil="rinse"/>
             </tools>
             <outputs>
-                <output id="buttered-slice">buttered bread slice</output>
+                <output id="buttered-slice" amount="2" unit="slice">buttered bread slice</output>
             </outputs>
         </task>
-        <task operation="slice">
+        <task operation="slice" id="slice-cucumber" requires="knife">
             <options>
                 <option name="parts">
                     <numeric-value number="6"/>
@@ -50,13 +57,13 @@
                 <input ref="cucumber"/>
             </inputs>
             <tools>
-                <tool ref="knife" reusable="true"/>
+                <tool ref="knife" soil="none"/>
             </tools>
             <outputs>
                 <output id="cucumber-slices">cucumber slices</output>
             </outputs>
         </task>
-        <task operation="slice">
+        <task operation="slice" id="slice-tomato" requires="knife">
             <options>
                 <option name="parts">
                     <numeric-value number="10"/>
@@ -66,24 +73,24 @@
                 <input ref="tomato"/>
             </inputs>
             <tools>
-                <tool ref="knife" reusable="true"/>
+                <tool ref="knife" soil="rinse"/>
             </tools>
             <outputs>
-                <output id="tomato-slices">tomato slices</output>
+                <output id="tomato-slices" hold="30" hold-unit="minutes">tomato slices</output>
             </outputs>
         </task>
-        <task operation="place">
+        <task operation="place" id="place-base-on-plate">
             <instructions>
-                Place the
+                Place one
                 <input ref="buttered-slice"/>
-                on the
-                <tool ref="plate"/>
+                on a
+                <tool ref="plate" reserved="true"/>
             </instructions>
             <outputs>
-                <output id="sandwich-base">sandwich base</output>
+                <output id="sandwich-base" amount="1" unit="sandwich">sandwich base</output>
             </outputs>
         </task>
-        <task operation="add-on-top">
+        <task operation="add-on-top" id="add-cucumber">
             <instructions>
                 Add the
                 <input ref="cucumber-slices"/>
@@ -91,26 +98,29 @@
                 <input ref="sandwich-base"/>
             </instructions>
             <outputs>
-                <output id="sandwich-with-cucumber">sandwich with cucumber</output>
+                <output id="sandwich-with-cucumber" amount="1" unit="sandwich">sandwich with cucumber</output>
             </outputs>
         </task>
-        <task operation="add-on-top">
+        <task operation="add-on-top" id="add-tomato">
             <inputs>
                 <input ref="sandwich-with-cucumber"/>
                 <input ref="tomato-slices"/>
             </inputs>
             <outputs>
-                <output id="sandwich-with-tomato">butter sandwich with cucumber and tomato</output>
+                <output id="sandwich-with-tomato" amount="1" unit="sandwich">butter sandwich with cucumber and tomato</output>
             </outputs>
         </task>
-        <task operation="stack">
+        <task operation="stack" id="close-sandwich">
             <inputs>
                 <input ref="sandwich-with-tomato"/>
-                <input ref="bread-slice"/>
+                <input ref="buttered-slice"/>
             </inputs>
             <outputs>
-                <output id="sandwich">sandwich with cucumber and tomato</output>
+                <output id="finished-sandwich" amount="1" unit="sandwich" final="true">sandwich with cucumber and tomato</output>
             </outputs>
+            <instructions>
+                Close the <input ref="sandwich-with-tomato"/> with the second <input ref="buttered-slice"/>, buttered side down.
+            </instructions>
         </task>
     </tasks>
 </recipe>
