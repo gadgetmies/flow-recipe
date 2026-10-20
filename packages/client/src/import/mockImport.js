@@ -71,7 +71,11 @@ export function getImportJob(jobId) {
   }
   if (step >= stages.length) {
     const result = makeMockResult({ precisionScale: !!job.body.precisionScale, url: job.body.url || MOCK_SOURCE_URL })
-    if (job.body.text) result.source = { url: null, title: null, structured: false, times: {} }
+    if (job.body.text) {
+      // like the real importer: pasted text has no page, so the XML has no `ref`
+      result.source = { url: null, title: null, structured: false, times: {} }
+      result.xml = result.xml.replace(/(<recipe\b[^>]*?)\sref="[^"]*"/, '$1')
+    }
     return delay({ id: jobId, status: 'done', stage: 'done', detail: null, attempts: 2, result })
   }
   const [stage, detail] = stages[step]

@@ -109,16 +109,38 @@ const UNIT_ALIASES = {
   cl: 'cl', centiliter: 'cl', centiliters: 'cl', centilitre: 'cl', centilitres: 'cl',
   dl: 'dl', deciliter: 'dl', deciliters: 'dl', decilitre: 'dl', decilitres: 'dl',
   l: 'l', ltr: 'l', ltrs: 'l', lt: 'l', liter: 'l', liters: 'l', litre: 'l', litres: 'l',
+  // Nordic, German, Dutch and French spoons (all metric: 5 ml / 15 ml); krm (kryddmått) is 1 ml
+  tl: 'tsp', teelusikka: 'tsp', teelusikallista: 'tsp', tsk: 'tsp', ts: 'tsp', teskje: 'tsp', tesked: 'tsp', teske: 'tsp',
+  'c a c': 'tsp', 'c à c': 'tsp', cac: 'tsp', 'cuillère à café': 'tsp', 'cuillere a cafe': 'tsp', theelepel: 'tsp',
+  teelöffel: 'tsp', teeloeffel: 'tsp',
+  rkl: 'tbsp', ruokalusikka: 'tbsp', ruokalusikallista: 'tbsp', msk: 'tbsp', matsked: 'tbsp', ss: 'tbsp', spsk: 'tbsp',
+  spiseskje: 'tbsp', el: 'tbsp', esslöffel: 'tbsp', essloeffel: 'tbsp', eetlepel: 'tbsp', 'c a s': 'tbsp', 'c à s': 'tbsp',
+  cas: 'tbsp', 'cuillère à soupe': 'tbsp', 'cuillere a soupe': 'tbsp',
+  krm: 'krm', kryddmått: 'krm', maustemitta: 'krm',
+  desilitra: 'dl', desiliter: 'dl', millilitra: 'ml', senttilitra: 'cl', litra: 'l', gramma: 'g', grammaa: 'g', kilogramma: 'kg',
+  prise: 'pinch', msp: 'pinch', messerspitze: 'pinch', nypp: 'pinch', ripaus: 'pinch', hyppysellinen: 'pinch',
   // butter sticks and pieces
   stick: 'stick', sticks: 'stick',
   piece: 'pieces', pieces: 'pieces', pc: 'pieces', pcs: 'pieces',
+  kpl: 'pieces', st: 'pieces', stk: 'pieces', stck: 'pieces', stück: 'pieces', styck: 'pieces', stykke: 'pieces', stuk: 'pieces',
+  // packages (kept as counts; the lint asks for the package size)
+  prk: 'jar', purkki: 'jar', pkt: 'packet', paketti: 'packet', pak: 'packet', pss: 'bag', pussi: 'bag', tlk: 'can',
+  tölkki: 'can', rs: 'package', rasia: 'package', burk: 'jar', förp: 'packet', pck: 'packet', pkg: 'package', pkgs: 'package', päckchen: 'packet',
+  dose: 'can', bund: 'bunch', nippu: 'bunch', knippe: 'bunch', oksa: 'sprig', oksaa: 'sprig', kvist: 'sprig', zweig: 'sprig',
+  kourallinen: 'handful', näve: 'handful', handvoll: 'handful',
   // "3 large eggs" → the size word is not a unit: pieces
   large: 'pieces', medium: 'pieces', small: 'pieces', 'extra large': 'pieces', 'extra-large': 'pieces', xl: 'pieces',
   jumbo: 'pieces', whole: 'pieces', each: 'pieces', ea: 'pieces',
 }
 
+/** Packaging counts: kept as written, but the lint asks for the package size. */
+export const PACKAGE_UNITS = new Set(['can', 'cans', 'tin', 'tins', 'jar', 'jars', 'package', 'packages', 'packet', 'packets', 'envelope', 'envelopes', 'bag', 'bags'])
+
+/** Other metric volume measures that are rewritten to spoons or ml (krm, the Swedish spice measure, is 1 ml). */
+const OTHER_VOLUME = { krm: 1 }
+
 /** Canonical spelling written back to the document for a unit key. */
-const CANONICAL = { cup: 'cup', 'fl oz': 'fl oz', pint: 'pint', quart: 'quart', gallon: 'gallon', oz: 'oz', lb: 'lb', stick: 'stick', pieces: 'pieces', g: 'g', kg: 'kg', mg: 'mg', ml: 'ml', cl: 'cl', dl: 'dl', l: 'l', tsp: 'tsp', tbsp: 'tbsp' }
+const CANONICAL = { pinch: 'pinch', jar: 'jar', packet: 'packet', package: 'package', bag: 'bag', can: 'can', bunch: 'bunch', sprig: 'sprig', handful: 'handful', cup: 'cup', 'fl oz': 'fl oz', pint: 'pint', quart: 'quart', gallon: 'gallon', oz: 'oz', lb: 'lb', stick: 'stick', pieces: 'pieces', g: 'g', kg: 'kg', mg: 'mg', ml: 'ml', cl: 'cl', dl: 'dl', l: 'l', tsp: 'tsp', tbsp: 'tbsp' }
 
 /** Unit → table key: aliases resolved, case and dots ignored except for the T / t spoon shorthand. */
 export function unitKey(unit) {
@@ -137,11 +159,13 @@ export function unitKey(unit) {
 /** True when a unit (any spelling) is one the converter knows: metric, US customary, counts, lengths. */
 export function isKnownAmountUnit(unit) {
   const k = unitKey(unit)
-  return k === '' || k in CANONICAL || k in MASS || k in VOLUME || COUNT.has(k) || COUNTISH.has(k) || k in IMPERIAL_MASS || k in IMPERIAL_VOLUME || isLength(k)
+  return k === '' || k in OTHER_VOLUME || k in CANONICAL || k in MASS || k in VOLUME || COUNT.has(k) || COUNTISH.has(k) || k in IMPERIAL_MASS || k in IMPERIAL_VOLUME || isLength(k)
 }
 
 /** The spelling metricizeRecipeXml writes for a unit it keeps: 'Tbs' → 'tbsp', 'g.' → 'g', 'grams' → 'g'. */
 export function canonicalAmountUnit(unit) {
+  // English count words stay as written ('2 cans', '3 sprigs'); translated ones ('prk', 'Prise') get the English word.
+  if (unit !== undefined && unit !== null && COUNTISH.has(String(unit).trim().toLowerCase())) return unit
   const k = unitKey(unit)
   if (k in CANONICAL) return CANONICAL[k]
   return unit === undefined ? null : unit
@@ -204,6 +228,10 @@ export function toMetricAmount({ number, unit }, { ingredient = null, properties
     return volumeToMetric(ml, { entry, precisionScale, imperial: !metricVolume, result, unchanged, entryNote })
   }
 
+  if (k in OTHER_VOLUME) {
+    return volumeToMetric(n * OTHER_VOLUME[k], { entry, precisionScale, imperial: true, result, unchanged, entryNote })
+  }
+
   if (isImperialLength(k)) return result({ number: inchesToCm(n), unit: 'cm' }, 'metric')
   if (isLength(k)) return unchanged('unchanged')
   return unchanged('unchanged', `unknown unit '${unit}'`)
@@ -226,7 +254,9 @@ function volumeToMetric(ml, { entry, precisionScale, imperial, result, unchanged
     if (!imperial) return unchanged('unchanged')
     return result(roundLiquid(ml), 'metric', join(entryNote, fluid))
   }
-  if (isSpoonIngredient(entry) && !precisionScale && (ml <= SMALL_ML + 0.01 || grams < SMALL_GRAMS)) {
+  // Spoon ingredients stay spoons when small; anything else too when it is too light for a 1 g kitchen scale.
+  const tooLightToWeigh = ml <= SMALL_ML + 0.01 && grams < SMALL_GRAMS
+  if (!precisionScale && (tooLightToWeigh || (isSpoonIngredient(entry) && (ml <= SMALL_ML + 0.01 || grams < SMALL_GRAMS)))) {
     if (!imperial) return unchanged('spoon')
     return result(spoonAmount(ml), 'spoon', entryNote)
   }

@@ -102,16 +102,112 @@ function summarise(model, catalogue) {
   return { ingredients, tasks, tools, serving: model.serving, finalOutputs }
 }
 
+const HEAT_STATIONS = new Set(['hob', 'oven', 'microwave', 'grill'])
+/** Warnings from vesselOrderWarnings start with this, so the repair loop can recognise them. */
+export const VESSEL_ORDER_PREFIX = 'Vessel order:'
+
+/**
+ * One-pot ordering: two tasks that hold the same reserved vessel (a pot, a pan, a single bowl) must be ordered by
+ * the data, or the scheduler may run them in either order or treat them as one container. Warns for every pair
+ * of non-measure tasks that reserve the same tool id with no input path between them, unless one of the uses
+ * ends with the tool being returned before the branches meet, and (for a tool the kitchen has several of) unless
+ * the two tasks are not both on the hob.
+ */
+export function vesselOrderWarnings(model, catalogue, inventory = scheduler.defaultInventory()) {
+  const leaves = leafTasks(model).map(({ task }) => task)
+  const producer = new Map()
+  for (const t of leaves) for (const o of t.outputs) producer.set(o.id, t.id)
+  const preds = new Map(leaves.map((t) => [t.id, new Set(t.inputs.map((i) => producer.get(i.ref)).filter((x) => x && x !== t.id))]))
+  const ancestors = new Map()
+  const ancestorsOf = (id, stack = new Set()) => {
+    if (ancestors.has(id)) return ancestors.get(id)
+    const out = new Set()
+    if (stack.has(id)) return out
+    stack.add(id)
+    for (const p of preds.get(id) || []) {
+      out.add(p)
+      for (const a of ancestorsOf(p, stack)) out.add(a)
+    }
+    stack.delete(id)
+    ancestors.set(id, out)
+    return out
+  }
+  const toolType = new Map((model.tools || []).map((t) => [t.id, t.type || t.id]))
+  const station = (t) => {
+    const op = catalogue ? catalogue[t.operation] : null
+    return op ? op.station || (op.expand ? 'oven' : null) : null
+  }
+  const heat = (t) => HEAT_STATIONS.has(station(t))
+  const isDescOrSelf = (x, of) => x === of || ancestorsOf(x).has(of)
+  const returners = new Map()
+  for (const t of leaves) for (const r of t.returnsTools || []) {
+    if (!returners.has(r.ref)) returners.set(r.ref, [])
+    returners.get(r.ref).push(t.id)
+  }
+  // a use of the vessel that is returned before the two branches meet is a separate use (wash, reuse)
+  const separateUse = (ref, a, b) =>
+    (returners.get(ref) || []).some((r) => isDescOrSelf(r, a.id) !== isDescOrSelf(r, b.id))
+  const byTool = new Map()
+  for (const t of leaves) {
+    if (t.operation === 'measure') continue
+    for (const tool of t.tools || []) {
+      if (!tool.reserved) continue
+      if (!byTool.has(tool.ref)) byTool.set(tool.ref, [])
+      if (!byTool.get(tool.ref).includes(t)) byTool.get(tool.ref).push(t)
+    }
+  }
+  const warnings = []
+  for (const [ref, tasks] of byTool) {
+    const count = scheduler.toolCount(inventory, toolType.get(ref) || ref)
+    const reported = new Set()
+    for (let i = 0; i < tasks.length; i++) {
+      const a = tasks[i]
+      if (reported.has(a.id)) continue
+      const unordered = []
+      for (let j = i + 1; j < tasks.length; j++) {
+        const b = tasks[j]
+        if (ancestorsOf(b.id).has(a.id) || ancestorsOf(a.id).has(b.id)) continue
+        if (count > 1 && !(station(a) === 'hob' && station(b) === 'hob')) continue
+        if (separateUse(ref, a, b)) continue
+        unordered.push(b.id)
+      }
+      if (!unordered.length) continue
+      for (const id of unordered) reported.add(id)
+      const b = unordered[0]
+      const others = unordered.length > 1 ? `'${unordered.join("', '")}'` : `'${b}'`
+      warnings.push(
+        `${VESSEL_ORDER_PREFIX} task '${a.id}' and ${unordered.length > 1 ? 'tasks ' : 'task '}${others} ${unordered.length > 1 ? 'all' : 'both'} hold the '${ref}' (reserved), but no input path links ${unordered.length > 1 ? 'them' : 'the two'} to '${a.id}', so the scheduler may run them in either order or at the same time. ` +
+          `If '${b}' cooks in the same ${ref} after '${a.id}', give '${a.id}' an extra output for the used vessel (e.g. "${ref}-with-fond") and make it an input of '${b}' (RECIPE.spec.md §7, one vessel for several steps); if they are different vessels, give the second its own tool id.`,
+      )
+      if (warnings.length >= 6) return warnings
+    }
+  }
+  return warnings
+}
+
+/** Warnings that the import's repair loop sends back to the model even when the check has no errors. */
+export function repairWorthyWarnings(check) {
+  if (!check) return []
+  const out = (check.warnings || []).filter((w) => typeof w === 'string' && w.startsWith(VESSEL_ORDER_PREFIX))
+  for (const l of check.unitLint || []) {
+    if (l && l.level === 'warning' && /is not recognised|is ambiguous/.test(l.message || '')) out.push(`${l.taskId ? `Task '${l.taskId}': ` : ''}${l.message}`)
+  }
+  return out
+}
+
 function diagnosticText(d) {
   return `[${d.code || 'NOTE'}] ${d.message || ''}`.trim()
 }
 
-function runPlan({ id, xml, operationsXml, participants }) {
-  const session = {
+// Diagnostics that only describe the dry run's artificial serve time (serve as soon as possible), not the recipe.
+const DRY_RUN_ARTIFACT_CODES = new Set(['LATE', 'CRITICAL_PATH', 'START_EARLIER', 'REPAIR_DELAY', 'REPAIR_START', 'REPAIR_SLACK', 'REPAIR_FLOAT', 'REPAIR_SPREAD', 'REPAIR_CHUNK'])
+
+function dryRunSession({ id, participants, serveTime, recipe }) {
+  return {
     id: 'import-dry-run',
     startTime: null,
     now: DRY_RUN_START,
-    dishes: [{ id, recipeId: id, scale: 1, serveTime: DRY_RUN_START + 6 * 3600 * 1000, earlyTolerance: 0, lateTolerance: 300000 }],
+    dishes: [{ id, recipeId: id, recipe, scale: 1, serveTime, earlyTolerance: 0, lateTolerance: 300000 }],
     participants: Array.from({ length: participants }, (_, i) => ({
       id: i === 0 ? '0' : `p${i + 1}`,
       name: `Cook ${i + 1}`,
@@ -126,10 +222,33 @@ function runPlan({ id, xml, operationsXml, participants }) {
     inventory: scheduler.defaultInventory(),
     policy: {},
   }
-  const { graph, plan } = scheduler.planSession({ recipes: { [id]: xml }, operationsXml, session, DOMParser: QuietDOMParser })
+}
+
+/**
+ * The critical path in seconds: the elapsed time with unlimited cooks and tools (resource-free forward pass over
+ * the task graph, durations from the catalogue).
+ */
+function criticalPathSeconds(graph) {
+  const { windows } = scheduler.computeWindows(graph, DRY_RUN_START, {})
+  let cp = 0
+  for (const w of Object.values(windows)) if (Number.isFinite(w.ES) && Number.isFinite(w.duration)) cp = Math.max(cp, w.ES + w.duration)
+  return cp
+}
+
+/**
+ * One dry run, planned as soon as possible: the serve time is the start plus the critical path, so the planner
+ * schedules forward from the start instead of spreading the work towards a far serve time. The makespan is the time
+ * from the first item to the planned serve (or the last item when the dish has no planned serve).
+ */
+function runPlan({ id, recipe, catalogue, participants, cpSeconds }) {
+  const session = dryRunSession({ id, participants, serveTime: DRY_RUN_START + Math.ceil(cpSeconds) * 1000, recipe })
+  const graph = scheduler.buildGraph(session, catalogue)
+  const plan = scheduler.plan(graph, session)
   const items = plan.lanes.flatMap((l) => l.items).filter((it) => it.kind !== 'idle' && it.kind !== 'blocked')
   const start = items.length ? Math.min(...items.map((it) => it.start)) : plan.startTime
-  const end = items.length ? Math.max(...items.map((it) => it.passiveUntil || it.end)) : plan.startTime
+  const lastEnd = items.length ? Math.max(...items.map((it) => it.passiveUntil || it.end)) : plan.startTime
+  const dish = plan.dishes[0] || {}
+  const end = Number.isFinite(dish.plannedServe) ? dish.plannedServe : lastEnd
   const activeMs = items.filter((it) => BUSY_KINDS.has(it.kind)).reduce((a, it) => a + Math.max(0, it.end - it.start), 0)
   const stageMap = new Map()
   try {
@@ -145,48 +264,61 @@ function runPlan({ id, xml, operationsXml, participants }) {
     organisation: c.organisation,
     workforce: c.workforce,
   }))
+  const all = [...(graph.diagnostics || []), ...(plan.diagnostics || [])].filter((d) => !DRY_RUN_ARTIFACT_CODES.has(d.code))
   const diagnostics = []
-  for (const d of [...(graph.diagnostics || []), ...(plan.diagnostics || [])]) {
-    const t = diagnosticText(d)
-    if (!diagnostics.includes(t)) diagnostics.push(t)
+  const seen = new Set()
+  for (const d of all) {
+    // the same tool note comes from several tasks, with and without a trailing period
+    const t = diagnosticText(d).replace(/\.$/, '')
+    if (!seen.has(t)) {
+      seen.add(t)
+      diagnostics.push(t)
+    }
   }
-  const serious = [...(graph.diagnostics || []), ...(plan.diagnostics || [])].filter((d) => SERIOUS_PLAN_CODES.has(d.code))
-  const dish = plan.dishes[0] || {}
+  const serious = all.filter((d) => SERIOUS_PLAN_CODES.has(d.code))
   return {
     participants,
     ok: serious.length === 0,
     makespanSeconds: Math.round((end - start) / 1000),
     activeSeconds: Math.round(activeMs / 1000),
     tasks: Object.values(graph.tasks).filter((t) => t.kind !== 'sink').length,
-    lateSeconds: dish.late ?? null,
     chains,
     diagnostics,
   }
 }
 
 /**
- * Dry-run the scheduler on one recipe with 1 and 3 cooks (default inventory, serve 6 h after the start).
+ * Dry-run the scheduler on one recipe with 1 and 3 cooks (default inventory), planned as soon as possible.
  * Top-level fields describe the 1-cook run, except `chains`, which come from the 3-cook run (pipelines are only
- * organised when there are several cooks); `runs` holds both runs.
+ * organised when there are several cooks); `runs` holds every run as { participants, makespanSeconds,
+ * activeSeconds, ... }; `criticalPathSeconds` is the elapsed time with unlimited cooks and tools.
  */
 export function dryRunPlan({ id, xml, operationsXml = loadOperationsXml(), participants = DRY_RUN_PARTICIPANTS } = {}) {
   const runs = []
+  let cpSeconds = null
   try {
-    for (const n of participants) runs.push(runPlan({ id, xml, operationsXml, participants: n }))
+    const catalogue = catalogueFor(operationsXml)
+    const recipe = scheduler.parseRecipe(xml, { DOMParser: QuietDOMParser, id })
+    const probe = dryRunSession({ id, participants: 1, serveTime: DRY_RUN_START + 6 * 3600 * 1000, recipe })
+    cpSeconds = criticalPathSeconds(scheduler.buildGraph(probe, catalogue))
+    for (const n of participants) runs.push(runPlan({ id, recipe, catalogue, participants: n, cpSeconds }))
   } catch (e) {
-    return { ok: false, makespanSeconds: null, activeSeconds: null, tasks: null, chains: [], diagnostics: [], error: `Scheduler failed: ${e && e.message ? e.message : String(e)}`, runs }
+    return { ok: false, makespanSeconds: null, activeSeconds: null, criticalPathSeconds: null, tasks: null, chains: [], diagnostics: [], error: `Scheduler failed: ${e && e.message ? e.message : String(e)}`, runs }
   }
   const first = runs[0]
   const multi = runs.find((r) => r.participants > 1) || first
   const diagnostics = []
+  // a note that every run reports is listed once; a note from one run only is prefixed with its team size
+  const everyRun = (d) => runs.every((r) => r.diagnostics.includes(d))
   for (const r of runs) for (const d of r.diagnostics) {
-    const t = runs.length > 1 ? `${r.participants} cook${r.participants > 1 ? 's' : ''}: ${d}` : d
+    const t = runs.length > 1 && !everyRun(d) ? `${r.participants} cook${r.participants > 1 ? 's' : ''}: ${d}` : d
     if (!diagnostics.includes(t)) diagnostics.push(t)
   }
   return {
     ok: runs.every((r) => r.ok),
     makespanSeconds: first.makespanSeconds,
     activeSeconds: first.activeSeconds,
+    criticalPathSeconds: Math.round(cpSeconds),
     tasks: first.tasks,
     chains: multi.chains,
     diagnostics,
@@ -260,6 +392,11 @@ export function checkRecipeXml(xml, { precisionScale = false, id, planCheck = tr
     result.errors.push(...validation.errors)
     result.warnings.push(...validation.warnings)
     result.summary = catalogue ? summarise(model, catalogue) : summarise(model, null)
+    try {
+      result.warnings.push(...vesselOrderWarnings(model, catalogue))
+    } catch (e) {
+      result.warnings.push(`Vessel order check failed: ${e.message}`)
+    }
 
     const conv = conversions()
     if (conv) {

@@ -132,7 +132,8 @@ export default function ImportProgress({ job, fromText, sourceLabel, sourceUrl, 
     )
   }
 
-  const detail = fmtJobDetail(job?.detail)
+  // the repair step already says which round it is
+  const detail = stage === 'repairing' ? null : fmtJobDetail(job?.detail)
   return (
     <Card>
       <CardContent>
@@ -155,7 +156,7 @@ export default function ImportProgress({ job, fromText, sourceLabel, sourceUrl, 
                   <Typography variant="body2" color="text.secondary">
                     {HINTS[s.key]}
                   </Typography>
-                  {detail && detail !== s.label && (
+                  {detail && s.key === stage && (
                     <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>
                       {detail}
                     </Typography>

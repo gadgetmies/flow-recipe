@@ -21,7 +21,9 @@
 //   other    eggs, meat, ice and anything else
 //
 // spoon: true marks ingredients that stay in metric spoons when the amount is small (≤ 1 tbsp or < 10 g) even
-// though their kind is not spice or leavening (salts, extracts, gelatine powder, instant coffee …).
+// though their kind is not spice or leavening (salts, extracts, gelatine powder, instant coffee, fresh herbs …).
+// Any other weighable ingredient also stays in spoons without a precision scale when it is both ≤ 1 tbsp and
+// under 10 g (2 tsp cornstarch, 1 tsp sugar): a 1 g kitchen scale cannot weigh that reliably.
 // pieceGrams is the typical weight of one piece (edible part) for countables; recipes keep counting pieces.
 
 const KA = 'King Arthur ingredient weight chart'
@@ -438,11 +440,14 @@ const ROWS = [
   ['tofu', 'other', 1.05, ['tofu', 'firm tofu', 'silken tofu', 'extra-firm tofu', 'tempeh'], { note: 'cubed / pressed' }],
 ]
 
+/** Fresh leafy herbs: a spoonful weighs about a gram, so small amounts stay spoons (or sprigs / a handful). */
+const FRESH_HERBS = new Set(['parsley', 'cilantro', 'basil', 'mint', 'dill', 'chives', 'thyme', 'rosemary', 'sage', 'oregano-fresh', 'tarragon'])
+
 /** Volume → weight table; see the header comment for the meaning of each field. */
 export const DENSITIES = ROWS.map(([id, kind, gPerMl, names, extra = {}]) => {
   const entry = { id, names, gPerMl, kind }
   if (extra.pieceGrams !== undefined) entry.pieceGrams = extra.pieceGrams
-  if (extra.spoon) entry.spoon = true
+  if (extra.spoon || FRESH_HERBS.has(id)) entry.spoon = true
   if (extra.note) entry.note = extra.note
   entry.source = extra.source || (kind === 'spice' || kind === 'produce' || kind === 'liquid' || kind === 'other' ? USDA : KA)
   return Object.freeze(entry)

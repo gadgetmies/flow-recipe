@@ -4,7 +4,7 @@ import { XMLSerializer } from '@xmldom/xmldom'
 import { fetchRecipeSource, textSource } from './source.js'
 import { createLlmClient, describeLlmConfig, DEFAULT_MAX_TOKENS } from './llm.js'
 import { buildMessages, buildRepairMessage, catalogueSummary, loadGuide, loadOperationsXml } from './guide.js'
-import { catalogueFor, checkRecipeXml, conversions, QuietDOMParser } from './check.js'
+import { catalogueFor, checkRecipeXml, conversions, QuietDOMParser, repairWorthyWarnings } from './check.js'
 import { checkWellFormed } from './wellformed.js'
 import { decodeEntities } from './html.js'
 
@@ -88,11 +88,11 @@ function titleOf(xml) {
 
 function score(check, xml) {
   if (!check) return Infinity
-  return (xml ? 0 : 100000) + check.errors.length * 100 + (check.plan && !check.plan.ok ? 10 : 0) + (check.plan ? 0 : 5)
+  return (xml ? 0 : 100000) + check.errors.length * 100 + (check.plan && !check.plan.ok ? 10 : 0) + (check.plan ? 0 : 5) + repairWorthyWarnings(check).length
 }
 
 function needsRepair(check) {
-  return !check.ok || (check.plan !== null && check.plan !== undefined && !check.plan.ok)
+  return !check.ok || (check.plan !== null && check.plan !== undefined && !check.plan.ok) || repairWorthyWarnings(check).length > 0
 }
 
 function throwIfAborted(signal) {

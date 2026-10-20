@@ -124,6 +124,11 @@ export function makeMockCheck({ precisionScale = false, id = 'chewy-chocolate-ch
         { id: 'chocolate-chips', name: 'chocolate chips', amounts: [amount(340, 'g', 'measure-chocolate-chips')] },
       ],
       tasks: [
+        { id: 'measure-flour', operation: 'measure', title: 'Measure: flour', units: null, unitStream: null },
+        { id: 'measure-butter', operation: 'measure', title: 'Measure: butter', units: null, unitStream: null },
+        { id: 'measure-brown-sugar', operation: 'measure', title: 'Measure: brown sugar', units: null, unitStream: null },
+        { id: 'measure-sugar', operation: 'measure', title: 'Measure: sugar', units: null, unitStream: null },
+        { id: 'measure-chocolate-chips', operation: 'measure', title: 'Measure: chocolate chips', units: null, unitStream: null },
         { id: 'soften-butter', operation: 'rest', title: 'Let the butter soften', units: 1, unitStream: null },
         { id: 'whisk-dry', operation: 'whisk', title: 'Whisk flour, soda and salt', units: 1, unitStream: null },
         { id: 'cream-butter-sugar', operation: 'beat', title: 'Cream butter and sugars', units: 1, unitStream: null },

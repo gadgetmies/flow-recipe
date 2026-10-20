@@ -3,7 +3,7 @@
 import { canonicalUnit, isImperial, isMass, isVolume, toMetricBase } from '../units.js'
 import { findDensity } from './match.js'
 import { isSpoonIngredient } from './densities.js'
-import { canonicalAmountUnit, formatAmount, isKnownAmountUnit, toMetricAmount, unitKey } from './convert.js'
+import { PACKAGE_UNITS, canonicalAmountUnit, formatAmount, isKnownAmountUnit, toMetricAmount, unitKey } from './convert.js'
 
 const SPOON_UNITS = new Set(['tsp', 'tbsp'])
 /** Non-metric amount units the converter knows (any spelling resolves to one of these keys). */
@@ -54,6 +54,10 @@ export function lintRecipeUnits(model, { precisionScale = false } = {}) {
         }
         if (!isKnownAmountUnit(unit)) {
           push('warning', task.id, `amount unit '${unit}' (${amount}) is not recognised and was not converted; use g, kg, ml, dl, l, tsp, tbsp or pieces`)
+          continue
+        }
+        if (PACKAGE_UNITS.has(unitKey(unit))) {
+          push('info', task.id, `amount ${amount} is a package count; give the package size (e.g. in the ingredient name or a size property: 400 g can, 25 g packet) or measure the contents in g or ml`)
           continue
         }
         const canonical = canonicalAmountUnit(unit)

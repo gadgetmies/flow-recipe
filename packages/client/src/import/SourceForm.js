@@ -9,6 +9,7 @@ import {
   CardContent,
   Collapse,
   FormControlLabel,
+  Link,
   Stack,
   Switch,
   TextField,
@@ -108,15 +109,14 @@ export default function SourceForm({ source, onSourceChange, llmInfo, llmInfoErr
                   <Alert
                     severity="info"
                     icon={<LinkIcon />}
-                    action={
-                      <Button color="inherit" size="small" href={source.ref} target="_blank" rel="noreferrer" endIcon={<OpenInNewIcon />}>
-                        Open
-                      </Button>
-                    }
                     sx={{ wordBreak: 'break-word' }}
                   >
-                    Copy the title, ingredients and steps from <b>{hostOf(source.ref) || source.ref}</b> and paste them below. The link is kept
-                    as the recipe&apos;s source.
+                    Copy the title, ingredients and steps from{' '}
+                    <Link href={source.ref} target="_blank" rel="noreferrer" sx={{ fontWeight: 600 }}>
+                      {hostOf(source.ref) || source.ref}
+                      <OpenInNewIcon sx={{ fontSize: 14, ml: 0.25, verticalAlign: 'text-bottom' }} />
+                    </Link>{' '}
+                    and paste them below. The link is kept as the recipe&apos;s source.
                   </Alert>
                 )}
                 <TextField

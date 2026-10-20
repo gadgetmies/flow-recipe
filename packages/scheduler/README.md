@@ -144,6 +144,7 @@ Session = {
 }
 Inventory = {
   tools:      [{ type, count, capacity: { number, unit } | null }],          // e.g. { type:'baking-sheet', count:4, capacity:{ number:16, unit:'bun' } }
+              // capacity is only a default: a capacity stated on the recipe's tool always wins (it knows its items' size)
   appliances: [{ type: 'oven'|'microwave'|'hob'|'stand-mixer', slots: number, modes: bool, modeSwitchSeconds: number }],
   stations:   [{ type: 'sink'|'counter', count: number, area: number|null }],   // counter area in units (buffer when no carrier)
   holding:    [{ type: 'fridge'|'freezer'|'warming-drawer', slots: number, keeps: 'cold'|'hot', maxHold: seconds }],

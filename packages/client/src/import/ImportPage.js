@@ -135,12 +135,21 @@ export default function ImportPage() {
     }
   }, [mock])
 
+  const mounted = useRef(true)
+  useEffect(
+    () => () => {
+      mounted.current = false
+    },
+    []
+  )
   const refreshRecipes = useCallback(() => {
     listRecipes({ mock })
-      .then((list) => setRecipes(Array.isArray(list) ? list : []))
+      .then((list) => mounted.current && setRecipes(Array.isArray(list) ? list : []))
       .catch(() => {})
   }, [mock])
-  useEffect(refreshRecipes, [refreshRecipes])
+  useEffect(() => {
+    refreshRecipes()
+  }, [refreshRecipes])
 
   // remember the user's own LLM configuration only when asked to
   useEffect(() => {

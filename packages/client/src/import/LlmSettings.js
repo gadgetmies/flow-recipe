@@ -183,13 +183,20 @@ export default function LlmSettings({ info, infoError, value, onChange }) {
                   There are two ways to import:
                   <Box component="ol" sx={{ pl: 2.5, my: 0.5 }}>
                     <li>
-                      <b>Server default:</b> whoever runs this app sets <code>FLOW_LLM_PROVIDER</code> and <code>FLOW_LLM_API_KEY</code> on the server.
+                      <b>Server default:</b> ask whoever runs this app to set up an AI model on the server.
                     </li>
                     <li>
                       <b>Your own key:</b> enter an API key from Anthropic or OpenAI (or a local Ollama) below.
                     </li>
                   </Box>
                 </Typography>
+                <Box component="details" sx={{ mt: 0.5, '& summary': { cursor: 'pointer', typography: 'caption' } }}>
+                  <summary>For the server admin</summary>
+                  <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>
+                    Set <code>FLOW_LLM_PROVIDER</code> and <code>FLOW_LLM_API_KEY</code> (optionally <code>FLOW_LLM_MODEL</code>) in the
+                    server&apos;s environment and restart it.
+                  </Typography>
+                </Box>
               </Alert>
             )}
             {(value.mode === 'own' || !server) && (

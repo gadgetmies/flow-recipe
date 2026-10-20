@@ -1,7 +1,6 @@
 // Phases A and B (spec §5.1, §5.2): Session + Catalogue → Graph (README §5).
 
 import { defaultInventory, toolCapacity, toolCount } from '../inventory.js'
-import { canonicalUnit } from '../units.js'
 import { expandTasks } from './expand.js'
 import { propagateQuantities, streamUnit } from './quantities.js'
 import { computeTaskDurations, optionCelsius } from './timing.js'
@@ -471,21 +470,12 @@ export function topologicalOrder(graph) {
   return order
 }
 
-// The kitchen's capacity wins when it is in the recipe's unit (or the recipe has none); a recipe capacity in another
-// unit (a sheet of 12 cookies vs. the default inventory's 16 buns) is the recipe's own fact and is kept. Units are
-// compared canonically (litre = l, cookies = cookie).
+// The recipe's capacity wins whenever the recipe states one: it is a fact about how many of THIS item fit (17 buns of
+// this size on a sheet, 12 cookies spaced 5 cm apart), which a kitchen default cannot know. The inventory capacity
+// is used only when the recipe gives none.
 function pickCapacity(inventoryCapacity, recipeCapacity) {
-  if (!recipeCapacity) return inventoryCapacity ?? null
-  if (!inventoryCapacity) return recipeCapacity
-  return sameUnit(inventoryCapacity.unit, recipeCapacity.unit) ? inventoryCapacity : recipeCapacity
-}
-
-function sameUnit(a, b) {
-  const norm = (u) => {
-    const c = canonicalUnit(u)
-    return c.length > 3 && c.endsWith('s') && !c.endsWith('ss') ? c.slice(0, -1) : c
-  }
-  return norm(a) === norm(b)
+  if (recipeCapacity && Number(recipeCapacity.number) > 0) return recipeCapacity
+  return inventoryCapacity ?? null
 }
 
 /**
