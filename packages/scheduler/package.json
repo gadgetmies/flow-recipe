@@ -14,7 +14,8 @@
     "./online": "./src/online/index.js",
     "./sim": "./src/sim/index.js",
     "./units": "./src/units.js",
-    "./inventory": "./src/inventory.js"
+    "./inventory": "./src/inventory.js",
+    "./conversions": "./src/conversions/index.js"
   },
   "bin": {
     "flow-demo": "./bin/demo.js"

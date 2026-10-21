@@ -79,3 +79,72 @@ export function toCelsius({ number, unit }) {
 }
 
 export { MASS, VOLUME, TIME, COUNT }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Imperial / US customary units and lengths (additive: the tables above and the functions using them are unchanged,
+// so `isMass('oz')` is still false and the parser keeps such units verbatim). Used by conversions/ to metricize.
+
+/** Grams per imperial mass unit (avoirdupois). */
+const IMPERIAL_MASS = { oz: 28.349523125, ounce: 28.349523125, ounces: 28.349523125, lb: 453.59237, lbs: 453.59237, pound: 453.59237, pounds: 453.59237 }
+/**
+ * Millilitres per US customary volume unit. `cup` here is the US customary cup (236.6 ml = 16 US tbsp), the cup the
+ * density table's "g per cup" figures refer to, so a converted cup agrees with its note (1 cup brown sugar → 213 g).
+ * VOLUME.cup stays 240 ml for the scheduler's own quantity arithmetic (toBase), which existing recipes rely on.
+ */
+const US_CUP_ML = 236.5882365
+const IMPERIAL_VOLUME = {
+  'fl oz': 29.5735295625, floz: 29.5735295625, 'fluid ounce': 29.5735295625, 'fluid ounces': 29.5735295625,
+  cup: US_CUP_ML, cups: US_CUP_ML,
+  pint: 473.176473, pints: 473.176473, pt: 473.176473,
+  quart: 946.352946, quarts: 946.352946, qt: 946.352946,
+  gallon: 3785.411784, gallons: 3785.411784, gal: 3785.411784,
+}
+/** Centimetres per length unit. */
+const LENGTH = {
+  mm: 0.1, millimeter: 0.1, millimeters: 0.1, millimetre: 0.1, millimetres: 0.1,
+  cm: 1, centimeter: 1, centimeters: 1, centimetre: 1, centimetres: 1,
+  m: 100, meter: 100, meters: 100, metre: 100, metres: 100,
+  in: 2.54, inch: 2.54, inches: 2.54, '"': 2.54,
+}
+const IMPERIAL_LENGTH = new Set(['in', 'inch', 'inches', '"'])
+/** One US stick of butter (1/2 cup, 4 oz). */
+const BUTTER_STICK_GRAMS = 113
+/** A pinch when weighed (salt / ground spice). */
+const PINCH_GRAMS = 0.3
+
+/** Unit key tolerant of US spellings: 'Fl. Oz.' → 'fl oz', 'fl.oz' → 'fl oz', 'lbs.' → 'lbs'. */
+export function imperialKey(unit) {
+  return key(unit).replace(/\./g, ' ').replace(/\s+/g, ' ').trim().replace(/^fl ?oz$/, 'fl oz')
+}
+
+export function isImperialMass(unit) { return imperialKey(unit) in IMPERIAL_MASS }
+export function isImperialVolume(unit) { return imperialKey(unit) in IMPERIAL_VOLUME }
+export function isLength(unit) { return imperialKey(unit) in LENGTH }
+export function isImperialLength(unit) { return IMPERIAL_LENGTH.has(imperialKey(unit)) }
+export function isFahrenheit(unit) { return canonicalUnit(unit) === 'fahrenheit' }
+/** True for any non-metric unit this module knows (US mass/volume incl. cup, inches, Fahrenheit). */
+export function isImperial(unit) {
+  return isImperialMass(unit) || isImperialVolume(unit) || isImperialLength(unit) || isFahrenheit(unit)
+}
+
+/** Mass → grams, volume → millilitres, length → centimetres, for metric and imperial units; null otherwise. */
+export function toMetricBase({ number, unit }) {
+  const n = Number(number)
+  const k = key(unit)
+  const ik = imperialKey(unit)
+  // US units first: a cup converted from a source recipe is the US customary cup.
+  if (ik in IMPERIAL_MASS) return { number: n * IMPERIAL_MASS[ik], unit: 'g' }
+  if (ik in IMPERIAL_VOLUME) return { number: n * IMPERIAL_VOLUME[ik], unit: 'ml' }
+  if (k in MASS) return { number: n * MASS[k], unit: 'g' }
+  if (k in VOLUME) return { number: n * VOLUME[k], unit: 'ml' }
+  if (ik in LENGTH) return { number: n * LENGTH[ik], unit: 'cm' }
+  return null
+}
+
+/** Length in any known unit → centimetres; null for other units. */
+export function toCentimeters({ number, unit }) {
+  const ik = imperialKey(unit)
+  return ik in LENGTH ? Number(number) * LENGTH[ik] : null
+}
+
+export { IMPERIAL_MASS, IMPERIAL_VOLUME, LENGTH, BUTTER_STICK_GRAMS, PINCH_GRAMS, US_CUP_ML }

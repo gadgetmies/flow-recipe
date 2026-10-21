@@ -1,6 +1,7 @@
 // REST helpers (server API.md). In mock mode they resolve to the fixtures so no server is needed.
 import { SERVER_URL } from './config'
-import { RECIPES_FIXTURE, DEFAULT_INVENTORY, makeSessionFixture } from './mocks/session.fixture'
+import { DEFAULT_INVENTORY, makeSessionFixture } from './mocks/session.fixture'
+import { listRecipes as listMockRecipes } from './import/mockImport'
 import { makePlanFixture } from './mocks/plan.fixture'
 
 async function getJson(path) {
@@ -10,7 +11,7 @@ async function getJson(path) {
 }
 
 export async function getRecipes(mock = false) {
-  if (mock) return RECIPES_FIXTURE
+  if (mock) return listMockRecipes()
   return getJson('/api/recipes')
 }
 

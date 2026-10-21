@@ -99,10 +99,12 @@ export function checkReferences(model) {
   const finals = tasks.flatMap((t) => t.outputs.filter((o) => o.final || !consumedBy.has(o.id)))
   if (tasks.length > 0 && finals.length === 0) errors.push('No final output: every output is consumed by a later task')
 
-  // Unit streams: an output with a unit consumed by a task whose own outputs are in a different unit.
+  // Unit streams: an output with a unit consumed by a task whose own outputs are in a different unit. Cutting or
+  // portioning a counted thing into other units (2 rolled sheets cut into 34 buns) starts a new stream on purpose.
+  const STREAM_STARTS = new Set(['split', 'cut', 'slice', 'scoop', 'shape', 'portion'])
   for (const task of tasks) {
     const own = task.outputs.map((o) => o.unit).filter((u) => u !== null && u !== undefined)
-    if (own.length === 0) continue
+    if (own.length === 0 || STREAM_STARTS.has(task.operation)) continue
     for (const input of task.inputs) {
       const entry = allOutputs.get(input.ref)
       if (!entry || entry.output.unit === null || entry.output.unit === undefined) continue

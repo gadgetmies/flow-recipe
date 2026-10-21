@@ -72,6 +72,79 @@
         <timeline model="per-unit" active="30" per-unit="3" passive="0"/>
     </operation>
 
+    <!-- Knife work and other preparation added for recipes imported from the web. Per-unit = per recipe batch of the
+         ingredient (units = the scale) or per stream unit, so two people can share a big pile of chopping. -->
+    <operation name="chop" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1.1" requires="knife">
+        <title>Chop</title>
+        <timeline model="per-unit" active="20" per-unit="90" passive="0"/>
+    </operation>
+
+    <operation name="dice" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1.2" requires="knife">
+        <title>Dice</title>
+        <timeline model="per-unit" active="20" per-unit="150" passive="0"/>
+    </operation>
+
+    <operation name="mince" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1.2" requires="knife">
+        <title>Mince</title>
+        <timeline model="per-unit" active="20" per-unit="120" passive="0"/>
+    </operation>
+
+    <!-- Cut something into pieces or portions: bars, a tray bake, a pizza, chicken into strips. -->
+    <operation name="cut" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1" requires="knife">
+        <title>Cut</title>
+        <options>
+            <option name="parts" type="numeric" required="false"/>
+        </options>
+        <timeline model="per-unit" active="30" per-unit="8" passive="0"/>
+    </operation>
+
+    <operation name="zest" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1.1">
+        <title>Zest</title>
+        <timeline model="per-unit" active="10" per-unit="60" passive="0"/>
+    </operation>
+
+    <operation name="juice" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1">
+        <title>Juice</title>
+        <timeline model="per-unit" active="10" per-unit="40" passive="0"/>
+    </operation>
+
+    <operation name="crush" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="none" preemptible="anywhere" resume-cost="20" soil="rinse" station="counter" tedium="1">
+        <title>Crush</title>
+        <timeline model="sub-linear" active="30" per-unit="90" passive="0"/>
+    </operation>
+
+    <operation name="sift" min-inputs="1" min-outputs="1"
+               attention="attended" divisible="none" preemptible="never" soil="rinse" station="counter" tedium="1">
+        <title>Sift</title>
+        <timeline model="sub-linear" active="0" per-unit="45" passive="0"/>
+    </operation>
+
+    <operation name="rinse" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="none" preemptible="never" soil="none" station="sink" tedium="1">
+        <title>Rinse</title>
+        <timeline model="per-unit" active="20" per-unit="30" passive="0"/>
+    </operation>
+
+    <!-- Pour off the cooking liquid (pasta, potatoes, beans) or let something drip dry in a colander. -->
+    <operation name="drain" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="none" preemptible="never" soil="rinse" station="sink" tedium="1">
+        <title>Drain</title>
+        <timeline model="fixed" active="60" passive="0"/>
+    </operation>
+
+    <operation name="season" min-inputs="2" min-outputs="1"
+               attention="attended" divisible="none" preemptible="never" soil="none" station="counter" tedium="1">
+        <title>Season</title>
+        <timeline model="sub-linear" active="10" per-unit="20" passive="0"/>
+    </operation>
+
     <!-- ===== Mixing ===== -->
 
     <operation name="mix" min-inputs="1" min-outputs="1"
@@ -129,6 +202,30 @@
                attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="bar" tedium="1">
         <title>Muddle</title>
         <timeline model="per-unit" active="0" per-unit="30" passive="0"/>
+    </operation>
+
+    <operation name="knead" min-inputs="1" min-outputs="1"
+               attention="attended" divisible="none" preemptible="anywhere" resume-cost="30" soil="rinse" station="counter" tedium="1.3">
+        <title>Knead</title>
+        <timeline model="sub-linear" active="60" per-unit="420" passive="0"/>
+    </operation>
+
+    <operation name="blend" min-inputs="1" min-outputs="1" requires-tools="true"
+               attention="attended" divisible="none" preemptible="never" soil="wash" station="counter" tedium="1">
+        <title>Blend</title>
+        <timeline model="sub-linear" active="30" per-unit="90" passive="0"/>
+    </operation>
+
+    <operation name="mash" min-inputs="1" min-outputs="1"
+               attention="attended" divisible="none" preemptible="anywhere" resume-cost="20" soil="wash" station="counter" tedium="1.2">
+        <title>Mash</title>
+        <timeline model="sub-linear" active="0" per-unit="180" passive="0"/>
+    </operation>
+
+    <operation name="toss" min-inputs="1" min-outputs="1"
+               attention="attended" divisible="none" preemptible="never" soil="rinse" station="counter" tedium="1">
+        <title>Toss</title>
+        <timeline model="sub-linear" active="0" per-unit="45" passive="0"/>
     </operation>
 
     <!-- ===== Heat ===== -->
@@ -218,6 +315,102 @@
         <completion urgency="critical" early="0" late="60" duration="30"/>
     </operation>
 
+    <!-- Hob cooking with a stated duration (spec §3.6). Frying, sautéing, searing and toasting burn when forgotten:
+         monitored with a short check interval and a critical completion. Fry and sear are per-unit so a pan with a
+         capacity in the stream's unit ("4 patty") turns them into rounds. -->
+    <operation name="fry" min-inputs="1" min-outputs="1"
+               attention="monitored" check-interval="60" check-duration="15" divisible="none" preemptible="never"
+               soil="wash" station="hob" tedium="1.1" requires="hot-pan">
+        <title>Fry</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+            <option name="temperature" type="numeric" required="false" default-unit="celsius"/>
+        </options>
+        <timeline model="per-unit" active="30" per-unit="10" passive="0" passive-from="duration"/>
+        <completion urgency="critical" early="0" late="30" duration="30"/>
+    </operation>
+
+    <operation name="saute" min-inputs="1" min-outputs="1"
+               attention="monitored" check-interval="60" check-duration="10" divisible="none" preemptible="never"
+               soil="rinse" station="hob" tedium="1" requires="hot-pan">
+        <title>Sauté</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline model="fixed" active="30" passive="0" passive-from="duration"/>
+        <completion urgency="critical" early="0" late="60" duration="30"/>
+    </operation>
+
+    <operation name="sear" min-inputs="1" min-outputs="1"
+               attention="monitored" check-interval="60" check-duration="15" divisible="none" preemptible="never"
+               soil="wash" station="hob" tedium="1.1" requires="hot-pan">
+        <title>Sear</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline model="per-unit" active="30" per-unit="15" passive="0" passive-from="duration"/>
+        <completion urgency="critical" early="0" late="30" duration="30"/>
+    </operation>
+
+    <operation name="toast" min-inputs="1" min-outputs="1"
+               attention="monitored" check-interval="60" check-duration="10" divisible="none" preemptible="never"
+               soil="none" station="hob" tedium="1" requires="hot-pan">
+        <title>Toast</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline model="fixed" active="20" passive="0" passive-from="duration"/>
+        <completion urgency="critical" early="0" late="30" duration="20"/>
+    </operation>
+
+    <!-- Gentle cooking in liquid: sauces, stews, soups, reductions. Stir now and then. -->
+    <operation name="simmer" min-inputs="1" min-outputs="1"
+               attention="monitored" check-interval="600" check-duration="15" divisible="none" preemptible="never"
+               soil="wash" station="hob" tedium="1" requires="hot-pan">
+        <title>Simmer</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline model="fixed" active="30" passive="0" passive-from="duration"/>
+        <completion urgency="timed" early="0" late="300" duration="30"/>
+    </operation>
+
+    <!-- Generic hob cooking for a stated time: pasta, rice, grains, vegetables in boiling water, eggs. -->
+    <operation name="cook" min-inputs="1" min-outputs="1"
+               attention="monitored" check-interval="180" check-duration="10" divisible="none" preemptible="never"
+               soil="rinse" station="hob" tedium="1" requires="hot-pan">
+        <title>Cook</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+            <option name="temperature" type="numeric" required="false" default-unit="celsius"/>
+        </options>
+        <timeline model="fixed" active="30" passive="0" passive-from="duration"/>
+        <completion urgency="critical" early="0" late="60" duration="30"/>
+    </operation>
+
+    <operation name="steam" min-inputs="1" min-outputs="1"
+               attention="unattended" divisible="none" preemptible="never" soil="rinse" station="hob" tedium="1" requires="hot-pan">
+        <title>Steam</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline model="fixed" active="30" passive="0" passive-from="duration"/>
+        <completion urgency="timed" early="0" late="120" duration="30"/>
+    </operation>
+
+    <!-- Savoury oven cooking. Same expansion as bake-in-oven: preheat, put in, take out. -->
+    <operation name="roast" min-inputs="1" max-inputs="1" min-outputs="1" max-outputs="1"
+               attention="unattended" divisible="none" preemptible="never" soil="none" station="oven" tedium="1" requires="oven"
+               expand="bake-in-oven">
+        <title>Roast</title>
+        <options>
+            <option name="temperature" type="numeric" required="true" default-unit="celsius"/>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline model="fixed" active="30" passive="0" passive-from="duration"/>
+        <completion urgency="critical" early="0" late="60" duration="30"/>
+    </operation>
+
     <!-- ===== Waiting ===== -->
 
     <operation name="wait" min-inputs="0" max-inputs="0" min-outputs="0" max-outputs="0"
@@ -260,6 +453,47 @@
         </options>
         <timeline model="sub-linear" active="0" per-unit="60" passive="120" passive-from="duration"/>
         <completion urgency="timed" early="0" late="300" duration="30"/>
+    </operation>
+
+    <!-- Let something stand: a dough relaxing, meat resting after cooking, a batter settling. -->
+    <operation name="rest" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="unattended" divisible="none" preemptible="never" soil="none" station="counter" tedium="1">
+        <title>Rest</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline model="fixed" active="0" passive="0" passive-from="duration"/>
+        <completion urgency="timed" early="0" late="300" duration="30"/>
+    </operation>
+
+    <operation name="cool" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="unattended" divisible="none" preemptible="never" soil="none" station="counter" tedium="1">
+        <title>Cool</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline model="fixed" active="0" passive="0" passive-from="duration"/>
+        <completion urgency="relaxed" early="0" late="1800" duration="30"/>
+    </operation>
+
+    <operation name="marinate" min-inputs="1" min-outputs="1"
+               attention="unattended" divisible="none" preemptible="never" soil="wash" station="fridge" tedium="1">
+        <title>Marinate</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="minutes"/>
+        </options>
+        <timeline model="sub-linear" active="30" per-unit="30" passive="0" passive-from="duration"/>
+        <completion urgency="relaxed" early="0" late="1800" duration="30"/>
+    </operation>
+
+    <operation name="freeze" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="unattended" divisible="none" preemptible="never" soil="rinse" station="fridge" tedium="1">
+        <title>Freeze</title>
+        <options>
+            <option name="duration" type="numeric" required="true" default-unit="hours"/>
+        </options>
+        <timeline model="fixed" active="30" passive="0" passive-from="duration"/>
+        <completion urgency="relaxed" early="0" late="1800" duration="30"/>
     </operation>
 
     <!-- ===== Shaping and assembly ===== -->
@@ -377,6 +611,57 @@
                soil="rinse" station="counter" tedium="1">
         <title>Decorate</title>
         <timeline model="per-unit" active="0" per-unit="180" passive="0"/>
+    </operation>
+
+    <!-- Shaping and assembling per unit (spec §3.2, §5.4): consecutive per-unit tasks on one unit stream form a chain
+         the planner can run as a pipeline. -->
+    <operation name="roll-out" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="none" preemptible="anywhere" resume-cost="20" soil="rinse" station="counter" tedium="1.1">
+        <title>Roll out</title>
+        <timeline model="sub-linear" active="60" per-unit="180" passive="0"/>
+    </operation>
+
+    <operation name="shape" min-inputs="1" max-inputs="1" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1">
+        <title>Shape</title>
+        <timeline model="per-unit" active="0" per-unit="20" passive="0"/>
+    </operation>
+
+    <operation name="scoop" min-inputs="1" max-inputs="2" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1">
+        <title>Scoop</title>
+        <timeline model="per-unit" active="0" per-unit="8" passive="0"/>
+    </operation>
+
+    <operation name="pipe" min-inputs="1" max-inputs="2" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="wash" station="counter" tedium="1.1">
+        <title>Pipe</title>
+        <timeline model="per-unit" active="60" per-unit="10" passive="0"/>
+    </operation>
+
+    <operation name="glaze" min-inputs="2" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1">
+        <title>Glaze</title>
+        <timeline model="per-unit" active="20" per-unit="10" passive="0"/>
+    </operation>
+
+    <operation name="assemble" min-inputs="2" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1">
+        <title>Assemble</title>
+        <timeline model="per-unit" active="30" per-unit="45" passive="0"/>
+    </operation>
+
+    <operation name="garnish" min-inputs="2" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="none" station="counter" tedium="1">
+        <title>Garnish</title>
+        <timeline model="per-unit" active="0" per-unit="15" passive="0"/>
+    </operation>
+
+    <!-- Portion onto plates or into bowls for serving. -->
+    <operation name="plate" min-inputs="1" min-outputs="1"
+               attention="attended" divisible="units" min-chunk="180" preemptible="units" soil="rinse" station="counter" tedium="1">
+        <title>Plate</title>
+        <timeline model="per-unit" active="20" per-unit="20" passive="0"/>
     </operation>
 
     <!-- ===== Bar ===== -->

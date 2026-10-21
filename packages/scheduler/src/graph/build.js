@@ -140,7 +140,7 @@ function buildDish(dish, session, catalogue, inventory, policy, graph, seen) {
         qty: t.qty ?? 1,
         mode: t.reserved ? 'reserved' : 'active',
         soil: t.soil ?? op.soil ?? 'rinse',
-        capacity: toolCapacity(inventory, type) ?? def?.capacity ?? null,
+        capacity: pickCapacity(toolCapacity(inventory, type), def?.capacity),
         count: inInventory ? toolCount(inventory, type) : 1,
       })
     }
@@ -468,6 +468,14 @@ export function topologicalOrder(graph) {
     throw new Error(`Cycle in task graph: ${(cycle ?? [...remaining]).join(' → ')}`)
   }
   return order
+}
+
+// The recipe's capacity wins whenever the recipe states one: it is a fact about how many of THIS item fit (17 buns of
+// this size on a sheet, 12 cookies spaced 5 cm apart), which a kitchen default cannot know. The inventory capacity
+// is used only when the recipe gives none.
+function pickCapacity(inventoryCapacity, recipeCapacity) {
+  if (recipeCapacity && Number(recipeCapacity.number) > 0) return recipeCapacity
+  return inventoryCapacity ?? null
 }
 
 /**

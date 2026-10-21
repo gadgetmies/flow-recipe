@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<recipe version="2" id="whatever">
+    <title>Brown Butter Cookies</title>
+    <serving temperature="ambient"/>
+    <ingredients>
+        <ingredient id="butter">butter<properties><property name="storage" value="fridge"/></properties></ingredient>
+        <ingredient id="sugar">sugar</ingredient>
+        <ingredient id="flour">all-purpose flour</ingredient>
+        <ingredient id="egg">egg<properties><property name="storage" value="fridge"/></properties></ingredient>
+        <ingredient id="salt">salt</ingredient>
+    </ingredients>
+    <tools>
+        <tool id="bowl">bowl<properties><property name="capacity"><numeric-value number="4" unit="l"/></property></properties></tool>
+        <tool id="kitchen-scale">kitchen scale</tool>
+        <tool id="spatula">spatula</tool>
+        <tool id="baking-sheet">baking sheet<properties><property name="capacity"><numeric-value number="12" unit="cookie"/></property></properties></tool>
+        <tool id="parchment-paper">parchment paper</tool>
+        <tool id="cooling-rack">cooling rack<properties><property name="capacity"><numeric-value number="24" unit="cookie"/></property></properties></tool>
+    </tools>
+    <tasks>
+        <task operation="measure" id="measure-butter">
+            <options><option name="amount"><numeric-value number="1" unit="cup"/></option></options>
+            <tools><tool ref="bowl" reserved="true"/></tools>
+            <inputs><input ref="butter"/></inputs>
+            <outputs><output id="butter-for-dough">butter</output></outputs>
+        </task>
+        <task operation="measure" id="measure-sugar">
+            <options><option name="amount"><numeric-value number="150" unit="g"/></option></options>
+            <tools><tool ref="kitchen-scale" soil="none"/></tools>
+            <inputs><input ref="sugar"/></inputs>
+            <outputs><output id="sugar-for-dough">sugar</output></outputs>
+        </task>
+        <task operation="measure" id="measure-flour">
+            <options><option name="amount"><numeric-value number="250" unit="g"/></option></options>
+            <tools><tool ref="kitchen-scale" soil="none"/></tools>
+            <inputs><input ref="flour"/></inputs>
+            <outputs><output id="flour-for-dough">flour</output></outputs>
+        </task>
+        <task operation="measure" id="measure-egg">
+            <options><option name="amount"><numeric-value number="1" unit="pieces"/></option></options>
+            <inputs><input ref="egg"/></inputs>
+            <outputs><output id="egg-for-dough">egg</output></outputs>
+        </task>
+        <task operation="measure" id="measure-salt">
+            <options><option name="amount"><numeric-value number="0.5" unit="tsp"/></option></options>
+            <inputs><input ref="salt"/></inputs>
+            <outputs><output id="salt-for-dough">salt</output></outputs>
+        </task>
+        <task operation="cream" id="cream-butter-sugar">
+            <tools><tool ref="bowl" reserved="true" soil="wash"/><tool ref="spatula" soil="wash"/></tools>
+            <inputs><input ref="butter-for-dough"/><input ref="sugar-for-dough"/></inputs>
+            <outputs><output id="creamed">creamed butter and sugar</output></outputs>
+        </task>
+        <task operation="incorporate" id="mix-dough">
+            <tools><tool ref="bowl" reserved="true"/></tools>
+            <inputs><input ref="creamed"/><input ref="egg-for-dough"/><input ref="flour-for-dough"/><input ref="salt-for-dough"/></inputs>
+            <outputs><output id="dough">cookie dough</output></outputs>
+        </task>
+        <task operation="line" id="line-sheets">
+            <inputs><input ref="parchment-paper"/></inputs>
+            <tools><tool ref="baking-sheet" reserved="true"/></tools>
+            <outputs><output id="lined-sheet" amount="2" unit="sheet">lined baking sheet</output></outputs>
+        </task>
+        <task operation="split" id="portion-dough">
+            <options><option name="unit-size"><numeric-value number="30" unit="g"/></option></options>
+            <inputs><input ref="dough"/></inputs>
+            <outputs><output id="dough-portion" amount="24" unit="cookie">dough for one cookie</output><tool ref="bowl"/></outputs>
+        </task>
+        <task operation="spherify" id="roll-balls">
+            <inputs><input ref="dough-portion"/></inputs>
+            <outputs><output id="dough-ball" amount="24" unit="cookie">dough ball</output></outputs>
+        </task>
+        <task operation="place-on-sheet" id="place-balls">
+            <tools><tool ref="baking-sheet" reserved="true"/></tools>
+            <inputs><input ref="dough-ball"/><input ref="lined-sheet"/></inputs>
+            <outputs><output id="cookie-on-sheet" amount="24" unit="cookie" hold="30" hold-unit="minutes">cookie on sheet</output></outputs>
+        </task>
+        <task operation="bake-in-oven" id="bake-cookies" requires="oven">
+            <options>
+                <option name="temperature"><numeric-value number="180" unit="celsius"/></option>
+                <option name="duration"><numeric-value number="11" unit="minutes"/></option>
+            </options>
+            <tools><tool ref="baking-sheet" reserved="true" soil="none"/></tools>
+            <inputs><input ref="cookie-on-sheet"/></inputs>
+            <outputs><output id="baked-cookie" amount="24" unit="cookie" hold="10" hold-unit="minutes">baked cookie</output></outputs>
+        </task>
+        <task operation="transfer" id="cool-on-rack">
+            <tools><tool ref="cooling-rack" reserved="true" soil="none"/></tools>
+            <inputs><input ref="baked-cookie"/></inputs>
+            <outputs><output id="cookies" amount="24" unit="cookie" final="true">cookies</output><tool ref="baking-sheet"/></outputs>
+        </task>
+    </tasks>
+</recipe>

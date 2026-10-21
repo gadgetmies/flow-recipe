@@ -148,7 +148,7 @@ function mockApplyEvent(plan, event, now) {
  * @param {boolean} opts.isSpectator   current participation status (used for joinSession)
  * @param {boolean} opts.enabled       false until the name is set (no join before that)
  * @param {boolean} opts.mock          serve fixtures instead of opening a socket
- * @param {object|null} opts.createIfMissing  `{ recipeId }` → POST /api/sessions before joining (host only)
+ * @param {object|null} opts.createIfMissing  `{ recipeId, serveTime? }` → POST /api/sessions before joining (host only)
  */
 export default function useSession({ sessionId, participantId, name, isSpectator, enabled = true, mock = false, createIfMissing = null }) {
   const [session, setSession] = useState(null)
@@ -218,7 +218,7 @@ export default function useSession({ sessionId, participantId, name, isSpectator
     const create = createRef.current
     if (create) {
       const body = { sessionId }
-      if (create.recipeId) body.dishes = [{ recipeId: create.recipeId }]
+      if (create.recipeId) body.dishes = [{ recipeId: create.recipeId, ...(create.serveTime ? { serveTime: create.serveTime } : {}) }]
       fetch(`${SERVER_URL}/api/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -263,6 +263,8 @@ export function dispatch(graph, session, windows, opts = {}) {
     if (!(task.batch && task.unitStream)) return Infinity
     const buf = graph.buffers.find((b) => b.carrier === type && (b.from === task.id || b.to === task.id))
     let cap = buf ? buf.capPerCarrier : null
+    // the task's own tool capacity (the recipe's when it states one) before the kitchen default
+    if (!cap) { const own = (task.tools || []).find((x) => x.type === type && x.capacity && String(x.capacity.unit).toLowerCase() === task.unitStream); if (own) cap = own.capacity.number }
     if (!cap) { const inv = (session.inventory.tools || []).find((x) => x.type === type); if (inv && inv.capacity && inv.capacity.unit === task.unitStream) cap = inv.capacity.number }
     return cap ? Math.max(1, Math.ceil(task.units / cap)) : 1
   }
@@ -271,9 +273,19 @@ export function dispatch(graph, session, windows, opts = {}) {
 
   function compatibleDirty(inst, task) {
     // a dirty tool last used on the same food (same dish and same recipe step or unit stream) needs no cleaning
+    // or on the food this task continues (the whisk that creamed the butter beats in the egg)
     const u = inst.lastUse
     if (!u || u.dishId !== task.dishId) return false
-    return u.recipeTaskId === task.recipeTaskId || (!!task.unitStream && u.unitStream === task.unitStream)
+    return u.recipeTaskId === task.recipeTaskId || (!!task.unitStream && u.unitStream === task.unitStream) || (!!u.taskId && directFoodPreds(task.id).has(u.taskId))
+  }
+  const foodPreds = new Map()
+  function directFoodPreds(id) {
+    if (!foodPreds.size) for (const e of graph.edges) {
+      if (e.kind !== 'fs' && e.kind !== 'stream') continue
+      if (!foodPreds.has(e.to)) foodPreds.set(e.to, new Set())
+      foodPreds.get(e.to).add(e.from)
+    }
+    return foodPreds.get(id) || new Set()
   }
 
   function requiredToolBindings(r, t) {
@@ -503,7 +515,7 @@ export function dispatch(graph, session, windows, opts = {}) {
       if ((b.reserved || b.inherited || isCarrier) && !returns.has(b.type)) binding = myKey
       const until = binding ? end : activeEnd
       tools.acquire(inst, { until, binding })
-      inst.lastUse = { dishId: task.dishId, recipeTaskId: task.recipeTaskId, unitStream: task.unitStream || null }
+      inst.lastUse = { dishId: task.dishId, taskId: task.id, recipeTaskId: task.recipeTaskId, unitStream: task.unitStream || null }
       r.boundTools.push({ instance: inst, soil: b.soil, binding, reserved: !!binding, type: b.type, returned: returns.has(b.type) })
       toolRefs.push({ type: b.type, instanceId: inst.id })
     }
@@ -778,9 +790,15 @@ export function dispatch(graph, session, windows, opts = {}) {
         const item1 = place(r, p, t, unitsFirst !== null ? { units: unitsFirst, chunkIndex: 1, chunkOf: { from: 1, to: unitsFirst } } : {})
         if (unitsFirst === null) { item1.end = best.block.start; r.activeEnd = best.block.start }
         // second segment as a resume item
-        const resumeStart = best.block.end + (task.resumeCost || 20)
+        let resumeStart = best.block.end + (task.resumeCost || 20)
         const remaining = unitsFirst !== null ? task.units - unitsFirst : null
         const remA = unitsFirst !== null ? (task.perUnit || 0) * remaining / p.speed : total - firstLen
+        // the remainder must not run into a later block of the same lane either (the next check of a seared pot)
+        for (let guard = 0; guard < 200; guard++) {
+          const next = laneBlockOverlap(p, resumeStart, resumeStart + remA, { soft: task.preemptible === 'anywhere' })
+          if (!next) break
+          resumeStart = next.end + (task.resumeCost || 20)
+        }
         const item2 = itemFor({ uuid: `${r.id}/c2`, taskId: r.id, kind: 'resume', participantId: p.id, start: resumeStart, end: resumeStart + remA, title: task.title, instructions: task.instructions, task, units: unitsFirst !== null ? { from: unitsFirst + 1, to: task.units, of: task.units } : null, dependencies: (pred.get(r.id) || []).map((e) => e.from) })
         items.push(item2)
         r.activeEnd = resumeStart + remA
