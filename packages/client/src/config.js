@@ -16,5 +16,6 @@ export function getQueryParams() {
 
 export function isMockMode() {
   const m = getQueryParams().mock
-  return m !== null && m !== '0' && m !== 'false'
+  if (m === null) return process.env.REACT_APP_PAGES === 'true' && !process.env.REACT_APP_SERVER_URL
+  return m !== '0' && m !== 'false'
 }
