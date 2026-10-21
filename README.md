@@ -18,6 +18,18 @@ interrupted by timers, and the page shows the lanes with the simulated clock, ea
 dish status, metrics and the event log. The same seed gives the same run. The CLI alternative is
 `yarn workspace @flow-recipe/scheduler demo --recipes buns,tiramisu --participants 3 --seed 7`.
 
+## GitHub Pages and pull request previews
+
+Two workflows build and publish the static client. Pushes to `master` publish the main site; opening, updating or reopening a PR publishes `/previews/pr-<number>/` beneath it. Closing or merging a PR removes its preview. Production updates preserve other previews. The publish run's summary contains the preview URL.
+
+Enable this once under **Settings → Pages → Build and deployment → Source: GitHub Actions**. Both workflows must first be merged into the default branch: the publisher uses `workflow_run` and runs only trusted default-branch code. Afterwards, run **Build Pages site** manually on `master` for the initial deployment, or push a change. The `github-pages` environment must allow deployments from the default branch. The workflows use `GITHUB_TOKEN`; no personal access token is needed. The `gh-pages` branch stores the combined site between deployments; keep Pages configured for **GitHub Actions**, rather than publishing that branch directly.
+
+Fork PRs build with read-only permissions and no deployment credentials. A separate publisher downloads their static artifact and validates its GitHub PR metadata before adding it to Pages. GitHub may require maintainer approval for a first-time contributor's build. Superseded builds and closed PRs are skipped.
+
+Pages cannot run the Node server. By default, these builds use the app's mock/demo mode. To use a deployed backend instead, set the repository variable `REACT_APP_SERVER_URL` to its public HTTPS URL and rebuild; the backend must permit the Pages origin via CORS. Do not put API keys or other secrets in build variables. You can explicitly select demo mode with `?mock=1` or live mode with `?mock=0`.
+
+Repository subpaths and PR asset paths are configured during each build; `/demo/`, `/import/` and `/graph/` have direct entry points. For a custom domain served at its root, set the repository variable `PAGES_BASE_PATH` to `/` (and configure the domain in Pages settings). Previews share the Pages origin and browser storage with production.
+
 ---
 
 # Getting Started with Create React App

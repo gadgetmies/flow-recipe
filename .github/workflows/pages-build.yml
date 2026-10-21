@@ -1,0 +1,65 @@
+name: Build Pages site
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Set site path
+        env:
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_OVERRIDE: ${{ vars.PAGES_BASE_PATH }}
+        run: |
+          repo="${REPOSITORY#*/}"
+          base="/$repo"
+          if [[ "${repo,,}" == "${GITHUB_REPOSITORY_OWNER,,}.github.io" ]]; then base="/"; fi
+          if [[ -n "$BASE_OVERRIDE" ]]; then base="$BASE_OVERRIDE"; fi
+          if [[ -n "$PR_NUMBER" ]]; then base="${base%/}/previews/pr-$PR_NUMBER"; fi
+          echo "PUBLIC_URL=$base" >> "$GITHUB_ENV"
+      - name: Verify publication tree updates
+        run: python3 .github/scripts/test_pages_tree.py
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build static client
+        env:
+          CI: 'true'
+          REACT_APP_SERVER_URL: ${{ vars.REACT_APP_SERVER_URL }}
+          REACT_APP_PAGES: 'true'
+          BUILD_PATH: ${{ runner.temp }}/pages-build
+        run: npm run build --workspace=client
+      - name: Add direct route entry points
+        run: |
+          for route in demo import graph; do
+            mkdir -p "$BUILD_PATH/$route"
+            cp "$BUILD_PATH/index.html" "$BUILD_PATH/$route/index.html"
+          done
+          cp "$BUILD_PATH/index.html" "$BUILD_PATH/404.html"
+        env:
+          BUILD_PATH: ${{ runner.temp }}/pages-build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pages-client
+          path: ${{ runner.temp }}/pages-build
+          if-no-files-found: error
+          retention-days: 7
