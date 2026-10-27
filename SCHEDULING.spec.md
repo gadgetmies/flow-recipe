@@ -2,6 +2,9 @@
 
 Status: proposal, v0.1. Companion to `RECIPE.spec.md`.
 
+Diagrams of the whole design, from the system context down to single decisions, are in
+[docs/scheduling-diagrams.md](docs/scheduling-diagrams.md).
+
 This document specifies the algorithm that turns one or more recipes, a set of participants, a kitchen inventory and
 target serving times into a per-participant work plan, and keeps that plan valid while the cooking is happening.
 
