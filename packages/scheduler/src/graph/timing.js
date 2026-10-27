@@ -2,6 +2,7 @@
 // This mirrors `catalogue/durations.js`; the two will be unified once both modules land.
 
 import { toCelsius, toSeconds } from '../units.js'
+import { amountSeconds } from '../catalogue/durations.js'
 
 const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0)
 
@@ -33,7 +34,7 @@ export function computeDurations(op, task, units) {
   const time = op?.time ?? {}
   const timeModel = time.model ?? 'fixed'
   const fixed = num(time.active)
-  const perUnit = num(time.perUnit)
+  const perUnit = amountSeconds(time, task) ?? num(time.perUnit)
   const n = Math.max(0, num(units))
   let active = fixed
   if (timeModel === 'per-unit') active = fixed + perUnit * n

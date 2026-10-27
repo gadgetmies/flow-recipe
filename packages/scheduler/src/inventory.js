@@ -10,6 +10,7 @@ export const TOOL_TYPES = [
   { type: 'serving-plate', count: 2, capacity: null },
   { type: 'baking-sheet', count: 4, capacity: { number: 16, unit: 'bun' } },
   { type: 'baking-tin', count: 1, capacity: { number: 1, unit: 'cake' } },
+  { type: 'baking-stone', count: 1, capacity: null }, // pizza stone or steel; the recipe gives its capacity (2 pita)
   { type: 'cake-mould', count: 1, capacity: { number: 1, unit: 'cake' } },
   { type: 'square-dish', count: 1, capacity: null },
   { type: 'shallow-dish', count: 1, capacity: null },

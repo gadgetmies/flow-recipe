@@ -30,6 +30,9 @@ working example: follow its shape.
 `<serving temperature="hot|cold|ambient" hold="10" hold-unit="minutes"/>`: how the dish is served and how long it
 stays servable once done (`hold-unit` `seconds|minutes|hours`, default minutes). Defaults without `hold`: hot 10 min,
 cold 20 min, ambient unlimited. Hot meals: `hot`, 5–15 min. Fridge desserts: `cold`. Baked goods: `ambient`.
+**Copy the serving hold onto the `final` output** (`<output id="soup-in-bowl" hold="10" hold-unit="minutes"
+final="true">`): it bounds how early the last step may finish before serving. The scheduler applies the serving
+hold to a final output that has none, and the check warns about it.
 
 ## 3. Ingredients
 
@@ -54,7 +57,9 @@ cold 20 min, ambient unlimited. Hot meals: `hot`, 5–15 min. Fridge desserts: `
 unit="cookie"/></property></properties></tool>`
 
 - A tool names a **type**; the kitchen inventory says how many exist. Use these types as ids when they fit: `bowl`
-  (4 l), `large-bowl` (8 l), `cup`, `jug`, `plate`, `serving-plate`, `baking-sheet`, `baking-tin`, `cake-mould`,
+  (4 l), `large-bowl` (8 l), `cup`, `jug`, `plate`, `serving-plate`, `baking-sheet` (4), `baking-tin`,
+  `baking-stone` (one pizza stone or steel: give it a capacity, 2 `pita`; the oven then bakes one stone per round
+  and the task that lifts the bread off returns the stone for the next round), `cake-mould`,
   `square-dish`, `shallow-dish`, `cooling-rack`, `pot` (4 l, 2 of them), `casserole-pot` (Dutch oven, 5 l),
   `pan`, `serving-bowl`, `mixing-glass`, `rocks-glass`, `whisk`, `spatula`, `frosting-spatula`, `spoon`, `fork`,
   `knife`, `cutting-board` (2, so two cooks can cut at once), `rolling-pin`, `hand-mixer`, `pastry-brush`, `grater`,
@@ -112,7 +117,8 @@ unit="cookie"/></property></properties></tool>`
 `<output id amount unit hold hold-unit volume volume-unit final>name</output>`
 
 - Every output is consumed by a later task or is `final="true"` (an unconsumed output becomes an extra served dish).
-  Mark what goes to the table `final="true"`, usually one output.
+  Mark what goes to the table `final="true"`, usually one output, and give it the serving hold (§2) when
+  `<serving>` has one.
 - `hold` (default unit minutes): how long the result stays good before its consumer must start. Only on results
   that degrade: whipped cream 30, beaten egg whites 10, warm milk for yeast 10, melted chocolate 15, boiling water
   15, cooked pasta 2, fried food 10, shaped dough before baking 30, hot baked goods 10. Put it on the result that
@@ -222,7 +228,8 @@ unit="cookie"/></property></properties></tool>`
 6. One task per per-unit action on the stream; carriers have capacity in the stream unit, ride along into the bake
    as a reserved tool and are returned in `<outputs>` where the units leave them.
 7. One measure per ingredient use, amounts as the source states them (the converter metricizes), for the stated yield.
-8. Holds on degrading results, `<serving>` set, perishables with `storage`.
+8. Holds on degrading results, `<serving>` set and its hold copied onto the `final` output, perishables with
+   `storage`.
 9. Steps that happen one after another in the same pot or pan are linked by data (§7, one vessel, several steps).
 
 Mistakes: `name` attributes or amounts on ingredients; preheat tasks; `wait` instead of `rest`/`cool`; `portion` or
@@ -234,10 +241,14 @@ the converter does not know (`smidgen`, `knob`); durations without a unit; stray
 
 **The dry run** (`check_recipe`, `bin/check.js`, the import's check) plans the recipe with 1 and 3 cooks and the
 default kitchen, as soon as possible from a fixed start. `plan.runs[].makespanSeconds` is the elapsed time from the
-first step to serving, `activeSeconds` the hands-on time, `criticalPathSeconds` the time with unlimited cooks. Compare
-the 1-cook figure with the source's total time: it should be close to it plus the waits you modelled (measuring
-every ingredient adds a few minutes). Much longer usually means a passive step modelled as active, a missing
-carrier return, a too-small capacity or one-pot steps that are not linked; 3 cooks never take longer than 1.
+first step to serving, `activeSeconds` the hands-on time, `criticalPathSeconds` the time with unlimited cooks. A dry
+run that cannot schedule the recipe (a deadlock: a task waits for a tool nobody frees) is an **error**
+(`Scheduler dry run failed: …`): such a recipe never gets a plan. Compare the 1-cook figure with the source's total
+time: within +30 % or +15 min (whichever is larger) is fine; when the critical path alone exceeds the source total,
+the source understates its waits (check them against its text). Beyond max(source total, critical path) × 1.3 +
+15 min usually means a passive step modelled as active, a missing carrier return, a too-small capacity or one-pot
+steps that are not linked; 3 cooks never take longer than 1. (Measuring takes about 20 s per spoon, 40 s per
+weighed amount.)
 
 ## 10. Operations
 

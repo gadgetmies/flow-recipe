@@ -185,10 +185,66 @@ export function vesselOrderWarnings(model, catalogue, inventory = scheduler.defa
   return warnings
 }
 
+/** Errors from a dry run that could not schedule the recipe start with this. */
+export const DRY_RUN_FAILED_PREFIX = 'Scheduler dry run failed:'
+
+/**
+ * An actionable error for a dry run that deadlocked or left tasks unscheduled: which tasks wait for which tool,
+ * and the usual fixes. A recipe like that never gets a plan in a session, so it must not be saved.
+ */
+export function dryRunFailureMessage(plan, model) {
+  const failed = (plan.runs || []).filter((r) => !r.ok)
+  const cooks = failed.map((r) => r.participants).join(' and ')
+  const all = failed.flatMap((r) => r.diagnostics)
+  const codes = [...new Set(all.map((d) => (/\[(INVARIANT|DEADLOCK|INCOMPLETE)\]/.exec(d) || [])[1]).filter(Boolean))]
+  const waits = new Map()
+  for (const d of all) {
+    if (!d.startsWith('[DEADLOCK]')) continue
+    for (const m of d.matchAll(/([\w-]+:[\w#.-]+): no free ([\w-]+)/g)) {
+      const type = m[2]
+      if (!waits.has(type)) waits.set(type, [])
+      const task = m[1].replace(/^[^:]+:/, '')
+      if (!waits.get(type).includes(task)) waits.get(type).push(task)
+    }
+  }
+  const known = new Set(scheduler.defaultInventory().tools.map((t) => t.type))
+  const typeOf = new Map(((model && model.tools) || []).map((t) => [t.id, t.type || t.id]))
+  const parts = [`${DRY_RUN_FAILED_PREFIX} with ${cooks || '?'} cook(s) the scheduler could not finish the recipe (${codes.join(', ') || 'unscheduled tasks'}), so a session would never get a plan for it.`]
+  for (const [type, tasks] of waits) {
+    const listed = tasks.slice(0, 3).map((t) => `'${t}'`).join(', ')
+    const ids = [...typeOf].filter(([, ty]) => ty === type).map(([id]) => id)
+    const inKitchen = known.has(type) ? `the kitchen has ${scheduler.toolCount(scheduler.defaultInventory(), type)}` : 'not a default kitchen type, so it is assumed to exist once'
+    parts.push(
+      `${listed} wait${tasks.length === 1 ? 's' : ''} for a free '${type}' (${inKitchen}) that is never freed: return it in the <outputs> (<tool ref="${ids[0] || type}"/>) of the task that empties it, so the next round or step can use it` +
+        `${known.has(type) ? '' : `, or use a default tool type (RECIPE.spec.md §4)`}; a result that stays in a reserved container keeps it until a task returns it.`,
+    )
+  }
+  if (!waits.size) parts.push('See plan.diagnostics for the tasks it could not place; usually a reserved tool or carrier is never returned, or an input is produced after its consumer.')
+  return parts.join(' ')
+}
+
+/**
+ * The dish's serving hold only bounds how early the dish may be finished when the final output carries it too: the
+ * scheduler applies the serving hold to a final output without a hold, but the recipe should say it explicitly.
+ */
+export function servingHoldWarnings(model) {
+  const serving = model && model.serving
+  if (!serving || serving.hold === null || serving.hold === undefined || !Number.isFinite(serving.hold)) return []
+  const out = []
+  for (const { task } of leafTasks(model)) {
+    for (const o of task.outputs || []) {
+      if (!o.final || (o.hold !== null && o.hold !== undefined && Number.isFinite(o.hold))) continue
+      const minutes = Math.round(serving.hold / 60)
+      out.push(`Final output '${o.id}' has no hold although <serving> has hold="${minutes}": copy it onto the output (<output id="${o.id}" … hold="${minutes}" hold-unit="minutes" final="true">) so the dish is finished at most ${minutes} min before serving (RECIPE.spec.md §2, §6)`)
+    }
+  }
+  return out
+}
+
 /** Warnings that the import's repair loop sends back to the model even when the check has no errors. */
 export function repairWorthyWarnings(check) {
   if (!check) return []
-  const out = (check.warnings || []).filter((w) => typeof w === 'string' && w.startsWith(VESSEL_ORDER_PREFIX))
+  const out = (check.warnings || []).filter((w) => typeof w === 'string' && (w.startsWith(VESSEL_ORDER_PREFIX) || /^Final output '.*' has no hold/.test(w)))
   for (const l of check.unitLint || []) {
     if (l && l.level === 'warning' && /is not recognised|is ambiguous/.test(l.message || '')) out.push(`${l.taskId ? `Task '${l.taskId}': ` : ''}${l.message}`)
   }
@@ -392,6 +448,7 @@ export function checkRecipeXml(xml, { precisionScale = false, id, planCheck = tr
     result.errors.push(...validation.errors)
     result.warnings.push(...validation.warnings)
     result.summary = catalogue ? summarise(model, catalogue) : summarise(model, null)
+    result.warnings.push(...servingHoldWarnings(model))
     try {
       result.warnings.push(...vesselOrderWarnings(model, catalogue))
     } catch (e) {
@@ -412,10 +469,7 @@ export function checkRecipeXml(xml, { precisionScale = false, id, planCheck = tr
     if (planCheck && result.errors.length === 0 && catalogue) {
       result.plan = dryRunPlan({ id: result.id, xml, operationsXml: ops })
       if (result.plan.error) result.errors.push(result.plan.error)
-      else if (!result.plan.ok) {
-        const codes = [...new Set(result.plan.diagnostics.map((d) => (/\[(INVARIANT|DEADLOCK|INCOMPLETE)\]/.exec(d) || [])[1]).filter(Boolean))]
-        result.warnings.push(`The scheduler dry run could not schedule the recipe cleanly (${codes.join(', ')}); see the plan diagnostics`)
-      }
+      else if (!result.plan.ok) result.errors.push(dryRunFailureMessage(result.plan, model))
     }
   } catch (e) {
     result.errors.push(`Unexpected checker failure: ${e && e.message ? e.message : String(e)}`)

@@ -146,6 +146,9 @@ Active duration is `a_j = (fixed_j + perUnit_j × n_j) / speed_p`, where the ope
 - `fixed`: mixing a dough. Time does not change much with quantity; cannot be split across people.
 - `per-unit`: rolling buns, dipping ladyfingers. Linear in units; can be split across people at unit boundaries.
 - `sub-linear`: measuring, spreading. `fixed + perUnit × sqrt(n)`; treated as not divisible.
+- Measuring time depends on what is measured: the timeline may give seconds per kind of `amount` (`spoon` 20 s for
+  a spoon or pinch, `count` 15 s for pieces, `weigh` 40 s on the scale, `pour` 30 s for a liquid) that replace
+  `perUnit`; a run of measuring also pays only the small measuring switch cost (§3.7) between the steps.
 
 Switching setup time (§3.7) is added on top when the participant's previous context differs.
 

@@ -63,15 +63,19 @@ structure of the work rather than transcribing paragraphs:
   extra output for the used pot (`pot-with-fond`) and make it an input of the next step (RECIPE.spec.md §7). The
   check warns "Vessel order: …" otherwise; fix it, do not accept it.
 - **Tools.** Use the guide's tool types (`cutting-board`, `casserole-pot`, `hand-mixer`, `rolling-pin`,
-  `serving-bowl` exist in the default kitchen); an unknown type is assumed to exist once, which serialises work.
+  `serving-bowl`, `baking-stone` exist in the default kitchen); an unknown type is assumed to exist once, which
+  serialises work. A single carrier (one pizza stone) is fine: the oven bakes it round by round as long as the
+  task that takes the bread off returns it.
 - **Serving.** `<serving temperature="hot|cold|ambient" hold="…" hold-unit="minutes"/>` — how long the dish
-  stays good once finished.
+  stays good once finished. **Copy that hold onto the `final="true"` output** (`hold="10" hold-unit="minutes"`):
+  it is what keeps the last step close to serving when several dishes are planned together (the scheduler falls
+  back to the serving hold, and the check warns when the final output lacks it).
 - **Storage.** Ingredient properties for storage (e.g. fridge items and `out-of-storage` times) as in the guide.
 - **Soil and requires.** `soil="none|rinse|wash"` on tools (scales and dry measuring: `none`), `requires="knife"`,
   `requires="oven"`, `requires="hot-pan"` per the catalogue.
 - **Passive steps** (rise, chill, marinate, bake, simmer) use the catalogue's duration option; they free the
   cooks, so state realistic durations from the source.
-- **Final outputs.** Mark what is served with `final="true"`. Use `<join>` only where the guide says to.
+- **Final outputs.** Mark what is served with `final="true"` and give it the serving hold. Use `<join>` only where the guide says to.
 - Ids: lowercase kebab-case, unique across ingredients, tools, outputs and tasks. Recipe id from the title
   (e.g. `chocolate-chip-cookies`).
 - **Units: copy the source; the converter converts.** Write every amount exactly as the source states it, in
@@ -99,19 +103,28 @@ must be fixed: an unconverted unit means wrong amounts for the cook.
 Call `check_recipe { xml, precisionScale }`. Repeat steps 3–5 until:
 
 - `ok` is `true` (no `errors`). Fix each error at its cause (unknown operation → pick one from the catalogue;
-  unresolved ref → fix the id; missing option → add it).
+  unresolved ref → fix the id; missing option → add it; `Scheduler dry run failed: …` → the recipe can never be
+  planned, usually because a reserved bowl, pot or carrier is never returned; the message names the tool and
+  the waiting tasks). The server refuses to upload a recipe with errors.
 - every `warnings` / `unitLint` entry is fixed or deliberately accepted (say which and why in your summary).
 - every `Vessel order:` warning is fixed (one vessel, several steps — see step 3).
 - the dry-run `plan` is sensible: it succeeded; per-unit work shows up as pipelines (`chains`); 3 cooks are no
   slower than 1 and faster when the recipe has parallel work. The dry run plans as soon as possible:
   `plan.runs[].makespanSeconds` is the elapsed time from the first step to serving, `activeSeconds` the hands-on
-  time, `plan.criticalPathSeconds` the time with unlimited cooks. **Compare the 1-cook time with the source's
-  total time** (`fetch_recipe_source` → `times.total`): expect it within about +30 % (+ a few minutes, because
-  every ingredient is measured as a step); sources often understate waits, so first add up the waits you modelled
-  (chill 60 + rest 10 + bake 12 + cool 20 > a "1 h 30 total" claim is the source's error, not yours). Clearly
-  longer than source + waits usually means a passive step modelled as active (bake/simmer/chill without its
-  operation's duration), a carrier never returned, a too-small capacity, unlinked one-pot steps, or a wait you
-  invented; clearly shorter means a wait is missing. Say in the summary how the estimate compares.
+  time, `plan.criticalPathSeconds` the time with unlimited cooks (the modelled steps and waits that must happen one
+  after another). **Compare the 1-cook time with the source's total time** (`fetch_recipe_source` →
+  `times.total`, or prep + cook):
+  - Within **+30 % or +15 min, whichever is larger**: fine (a single cook cannot overlap all the hands-on work).
+  - Longer, but the critical path alone already exceeds the source total: the source understates its waits (rising,
+    chilling, cooling and "cook 40 min" claims usually do). Check your waits against the source *text*, not its
+    total; if they match it, the estimate is right — say so in the summary.
+  - A real modelling mistake shows as a 1-cook time beyond **max(source total, critical path) × 1.3 + 15 min**, a
+    critical path longer than the waits the text states, or 3 cooks no faster than 1 although there is parallel
+    work. Usual causes: a passive step modelled as active (bake/simmer/chill without its operation's duration), a
+    carrier never returned, a too-small capacity, unlinked one-pot steps, or an invented wait.
+  - Clearly shorter than the source means a wait is missing.
+  Say in the summary how the estimate compares. (Measuring costs about 20 s per spoon and 40 s per weighed amount,
+  so it is not a reason for a long estimate.)
 
 Stop after ~5 rounds and report what is still wrong instead of looping.
 

@@ -104,6 +104,10 @@ function buildDish(dish, session, catalogue, inventory, policy, graph, seen) {
   const scale = dish.scale ?? 1
   const tasks = expandTasks(recipe.tasks ?? [], catalogue, recipe)
   const q = propagateQuantities({ ...recipe, tasks }, scale)
+  // the dish's own result: the outputs marked final, else every output nobody consumes
+  const explicitFinal = tasks.flatMap((t) => (t.outputs ?? []).filter((o) => o.final).map((o) => o.id))
+  const finalSet = new Set(explicitFinal.length > 0 ? explicitFinal : q.finalOutputs)
+  const servingHold = dishHold(recipe.serving, policy)
   const resolveOp = (t) => {
     const op = catalogue?.[t.operation]
     if (!op && t.operation !== 'join') {
@@ -161,7 +165,11 @@ function buildDish(dish, session, catalogue, inventory, policy, graph, seen) {
           .sort((a, b) => a.cap - b.cap)[0] ?? null
       : null
     const returnsTools = uniq((task.returnsTools ?? []).map((r) => recipe.tools?.find((x) => x.id === r.ref)?.type ?? r.ref))
-    const holds = (task.outputs ?? []).map((o) => o.hold).filter((h) => h != null && Number.isFinite(h))
+    // a final output without a hold of its own inherits the dish's serving hold (spec §3.8): the recipe-level fact
+    // "how long the dish stays good" bounds how early its last step may finish, so the producer is released just in time
+    const holds = (task.outputs ?? [])
+      .map((o) => (o.hold != null && Number.isFinite(o.hold) ? o.hold : finalSet.has(o.id) ? servingHold : null))
+      .filter((h) => h != null && Number.isFinite(h))
     const hold = holds.length > 0 ? Math.min(...holds) : Infinity
     records.set(task.id, { task, op, units, unitStream, timing, tools, appliance, ownCarrier, carrier: null, applianceBatched: false, returnsTools, hold, instances: [], outputs: qi.outputs })
   }
@@ -196,6 +204,20 @@ function buildDish(dish, session, catalogue, inventory, policy, graph, seen) {
   }
   for (const task of tasks) carrierOf(task.id)
 
+  // the batched producer whose carrier this task returns, when those carriers cannot hold all units at once
+  const carrierReleaseSource = (task, record) => {
+    for (const input of task.inputs ?? []) {
+      const src = outputs.get(input.ref)
+      if (!src || src.task === task) continue
+      const prod = records.get(src.task.id)
+      const c = prod.carrier
+      if (!c || !record.returnsTools.includes(c.type) || prod.instances.length < 2 || prod.units !== record.units) continue
+      if (Number.isFinite(c.carriers) && c.carriers * c.cap >= prod.units) continue
+      return prod
+    }
+    return null
+  }
+
   // --- pass 3: batch counts (spec §5.2 step 3) and instances ---
   for (const task of tasks) {
     const record = records.get(task.id)
@@ -203,14 +225,23 @@ function buildDish(dish, session, catalogue, inventory, policy, graph, seen) {
     let cap = Infinity
     if (appliance) {
       if (carrier) {
-        cap = appliance.slots * carrier.cap
+        // a round holds at most as many carriers as the kitchen has (one pizza stone in a two-shelf oven: one per round)
+        const carriersPerRound = Math.max(1, Math.min(appliance.slots, Number.isFinite(carrier.carriers) && carrier.carriers > 0 ? carrier.carriers : appliance.slots))
+        cap = carriersPerRound * carrier.cap
         record.applianceBatched = true
       } else if (unitStream) {
         pushDiagnostic(graph, seen, { code: 'NO_CAPACITY', message: `Task '${task.id}' uses the ${appliance.type} on stream '${unitStream}' without a carrier capacity; cannot derive rounds`, dish: dishId, task: task.id })
       }
     } else if (carrier) cap = carrier.cap
-    const batches = Number.isFinite(cap) && cap < units ? Math.ceil(units / cap) : 1
-    const ranges = batchRanges(units, cap, batches)
+    let batches = Number.isFinite(cap) && cap < units ? Math.ceil(units / cap) : 1
+    let ranges = batchRanges(units, cap, batches)
+    // the task that empties a carrier (lifts the pitas off the stone) works round by round when the kitchen does not
+    // have enough carriers for all units at once: the carrier must come back before the next round can be loaded
+    const release = batches === 1 ? carrierReleaseSource(task, record) : null
+    if (release) {
+      batches = release.instances.length
+      ranges = release.instances.map((x) => x.range)
+    }
     const qi = q.tasks[task.id]
     const baseText = renderInstructions(task, recipe, catalogue, tasks)
     const word = batchWord(record)

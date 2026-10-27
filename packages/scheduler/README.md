@@ -108,6 +108,8 @@ Operation = {
     perUnit: seconds,                          // per-unit part (per-unit, sub-linear)
     passive: seconds,                          // constant passive part
     passiveFrom: 'duration' | 'formula:heat' | 'formula:preheat' | null,  // passive computed from the task's options
+    byAmount: { spoon?, count?, weigh?, pour? } | null,  // seconds replacing perUnit by the kind of the task's
+                                               // `amount` option (timeline attributes; measure: 20/15/40/30)
   },
   attention: 'attended'|'monitored'|'unattended',   // default attended if passive=0 else unattended
   checkInterval: seconds|null, checkDuration: seconds|null,   // monitored only
@@ -125,7 +127,10 @@ Operation = {
 
 `durations(operation, task, units, catalogue)` → `{ active, passive }` seconds at speed 1, applying the time model,
 `passiveFrom` (duration option in seconds; `formula:heat` = `(temperature°C − 10) × 5`; `formula:preheat` =
-`(temperature°C − 20) × 8`) and the `sub-linear` rule `active + perUnit × sqrt(units)`.
+`(temperature°C − 20) × 8`) and the `sub-linear` rule `active + perUnit × sqrt(units)`. When the operation has
+`byAmount`, the task's `amount` option picks the per-unit seconds: `spoon` (tsp, tbsp, pinch, dash, or a volume up to
+15 ml), `count` (pieces, cloves, sheets), `weigh` (a mass, on the scale), `pour` (a larger volume); other units keep
+`perUnit` (`amountKind(amount)` / `amountSeconds(time, task)`).
 
 `instructionText(task, recipeModel, catalogue)` → string. Ported from the client's `operations.js` instruction
 functions; when `task.instructions` is present, render it (names of refs, option values with units).
