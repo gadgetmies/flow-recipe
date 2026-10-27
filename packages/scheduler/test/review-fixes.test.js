@@ -50,10 +50,13 @@ test('a dish that is ready longer than its hold before serving gets an EARLY dia
   const graph = buildGraph(s, catalogue)
   // drop the release time (as before the fix) and let the last steps float an hour early
   for (const t of Object.values(graph.tasks)) if (t.dishId === 'soup' && t.kind !== 'sink') t.hold = Infinity
+  // and make the soup keep only one minute, so a few minutes of float are already too early
+  for (const e of graph.edges) if (e.to === 'soup:sink' && e.kind === 'maxlag') e.hold = 60
+  graph.dishes[0].hold = 60
   const p = plan(graph, s, { budgetMs: 0 })
   const early = p.diagnostics.find((d) => d.code === 'EARLY')
   const soupEnd = Math.max(...items(p).filter((it) => it.dishId === 'soup' && it.kind !== 'cleaning').map((it) => it.passiveUntil || it.end))
-  assert.ok(soupEnd < SERVE - 600_000 - 60_000, `the scenario should finish early: ${(SERVE - soupEnd) / 60000} min`)
+  assert.ok(soupEnd < SERVE - 60_000 - 60_000, `the scenario should finish early: ${(SERVE - soupEnd) / 60000} min`)
   assert.ok(early, `ready ${(SERVE - soupEnd) / 60000} min early without a diagnostic`)
   assert.match(early.message, /min before serving/)
 })

@@ -32,7 +32,8 @@ test('catalogue has every client operation plus clean and serve', () => {
 test('parsed attributes', () => {
   const spherify = catalogue.spherify
   assert.equal(spherify.title, 'Roll into balls')
-  assert.deepEqual(spherify.time, { model: 'per-unit', active: 0, perUnit: 15, passive: 0, passiveFrom: null })
+  assert.deepEqual(spherify.time, { model: 'per-unit', active: 0, perUnit: 15, passive: 0, passiveFrom: null, byAmount: null })
+  assert.deepEqual(catalogue.measure.time.byAmount, { spoon: 20, count: 15, weigh: 40, pour: 30 })
   assert.equal(spherify.divisible, 'units')
   assert.equal(spherify.minChunk, 180)
   assert.equal(spherify.preemptible, 'units')
@@ -50,7 +51,7 @@ test('parsed attributes', () => {
 
   const measure = catalogue.measure
   assert.equal(measure.time.model, 'sub-linear')
-  assert.equal(measure.time.perUnit, 60)
+  assert.equal(measure.time.perUnit, 45)
   assert.equal(measure.tedium, 1.2)
   assert.equal(measure.minInputs, 1)
   assert.equal(measure.maxOutputs, 1)
@@ -147,8 +148,12 @@ test('loader defaults', () => {
 
 test('durations: time models', () => {
   const task = { operation: 'measure', options: { amount: { number: 500, unit: 'grams' } } }
-  assert.deepEqual(durations(catalogue.measure, task, 1), { active: 60, passive: 0 })
-  assert.deepEqual(durations(catalogue.measure, task, 4), { active: 120, passive: 0 })
+  // measuring by the kind of amount: weighing 40 s (sub-linear in units)
+  assert.deepEqual(durations(catalogue.measure, task, 1), { active: 40, passive: 0 })
+  assert.deepEqual(durations(catalogue.measure, task, 4), { active: 80, passive: 0 })
+  const spoon = { operation: 'measure', options: { amount: { number: 1, unit: 'tsp' } } }
+  assert.deepEqual(durations(catalogue.measure, spoon, 1), { active: 20, passive: 0 })
+  assert.deepEqual(durations(catalogue.measure, { operation: 'measure', options: {} }, 1), { active: 45, passive: 0 })
   assert.deepEqual(durations(catalogue.spherify, { operation: 'spherify', options: {} }, 64), { active: 960, passive: 0 })
   assert.deepEqual(durations(catalogue.split, { operation: 'split', options: {} }, 64), { active: 30 + 3 * 64, passive: 0 })
   assert.deepEqual(durations(catalogue.enjoy, { operation: 'enjoy', options: {} }, 10), { active: 180, passive: 0 })

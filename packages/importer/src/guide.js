@@ -58,6 +58,7 @@ export function catalogueSummary(catalogue) {
     if (t.model === 'per-unit') time += ` ${fmtSeconds(t.active)} + ${fmtSeconds(t.perUnit)}/unit`
     else if (t.model === 'sub-linear') time += ` ${fmtSeconds(t.active)} + ${fmtSeconds(t.perUnit)}·√units`
     else time += ` ${fmtSeconds(t.active)}`
+    if (t.byAmount) time += ` (by amount: ${Object.entries(t.byAmount).map(([k, v]) => `${k} ${fmtSeconds(v)}`).join(', ')})`
     if (t.passiveFrom === 'duration') time += ', passive = duration option'
     else if (t.passiveFrom) time += `, passive = ${t.passiveFrom.replace('formula:', '')} formula from temperature`
     else if (t.passive) time += `, passive ${fmtSeconds(t.passive)}`

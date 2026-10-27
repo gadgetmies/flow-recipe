@@ -159,3 +159,35 @@ describe('one vessel for several steps', () => {
     assert.deepEqual(r.warnings.filter((x) => x.startsWith(VESSEL_ORDER_PREFIX)), [])
   })
 })
+
+describe('dry-run failures and the serving hold', () => {
+  const PITA = readFileSync(join(RECIPES_DIR, '..', '..', '..', 'scheduler', 'test', 'fixtures', 'pita-stone.xml'), 'utf8')
+
+  test('one baking stone over several oven rounds plans', () => {
+    const r = checkRecipeXml(PITA)
+    assert.equal(r.ok, true, r.errors.join('\n'))
+    assert.equal(r.plan.ok, true, r.plan.diagnostics.join('\n'))
+  })
+
+  test('a deadlocking dry run is an error that names the tool and the fix', () => {
+    const xml = PITA.replace('final="true">warm pita bread</output><tool ref="baking-stone"/>', 'final="true">warm pita bread</output>')
+    const r = checkRecipeXml(xml)
+    assert.equal(r.ok, false)
+    assert.equal(r.plan.ok, false)
+    const e = r.errors.find((x) => x.startsWith('Scheduler dry run failed:'))
+    assert.ok(e, r.errors.join('\n'))
+    assert.match(e, /'load-onto-stone#b\d'.*free 'baking-stone' \(the kitchen has 1\)/)
+    assert.match(e, /<tool ref="baking-stone"\/>/)
+  })
+
+  test('a serving hold without a hold on the final output is a repair-worthy warning', () => {
+    const soup = readFileSync(join(RECIPES_DIR, 'tomato-soup.xml'), 'utf8')
+    assert.deepEqual(checkRecipeXml(soup, { planCheck: false }).warnings.filter((w) => /has no hold/.test(w)), [])
+    const xml = soup.replace(/(<output id="tomato-soup-in-bowl"[^>]*?) hold="10" hold-unit="minutes"/, '$1')
+    const r = checkRecipeXml(xml, { planCheck: false })
+    const w = r.warnings.filter((x) => /^Final output 'tomato-soup-in-bowl' has no hold/.test(x))
+    assert.equal(w.length, 1, r.warnings.join('\n'))
+    assert.match(w[0], /hold="10"/)
+    assert.ok(repairWorthyWarnings(r).includes(w[0]))
+  })
+})
