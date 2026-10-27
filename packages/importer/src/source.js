@@ -602,7 +602,7 @@ export function textSource(text, { url = null, title = null } = {}) {
     } else if (mode === 'steps') steps.push(stripNumbering(line))
   }
   const times = {}
-  const timeRe = [['prep', /(?:prep(?:aration)?|valmisteluaika)\s*(?:time)?\s*[:\-]?\s*([^\n]{1,40})/i], ['cook', /(?:cook(?:ing)?|bake|baking|kypsennysaika|paistoaika)\s*time\s*[:\-]?\s*([^\n]{1,40})/i], ['total', /(?:total|kokonaisaika)\s*(?:time)?\s*[:\-]?\s*([^\n]{1,40})/i]]
+  const timeRe = [['prep', /(?:prep(?:aration)?|valmisteluaika)\s*(?:time)?\s*[:\-]?\s*([^\n,;|]{1,40})/i], ['cook', /(?:cook(?:ing)?|bake|baking|kypsennysaika|paistoaika)\s*time\s*[:\-]?\s*([^\n,;|]{1,40})/i], ['total', /(?:total|kokonaisaika)\s*(?:time)?\s*[:\-]?\s*([^\n,;|]{1,40})/i]]
   for (const [key, re] of timeRe) {
     const m = re.exec(clean)
     const s = m ? parseDuration(m[1]) : null

@@ -273,3 +273,9 @@ describe('ingredient lines', () => {
     assert.deepEqual(extractRecipeSource(html, 'https://example.fi/r').ingredients, ['kananmunaa', '0.5 dl maitoa', '50 g hiivaa'])
   })
 })
+
+test('pasted text: each labelled time is read on its own', () => {
+  const source = textSource('Cookies\nPrep 15 min, bake time 22 min, total 45 min.\n\nIngredients\n1 cup flour\n\nInstructions\nMix.')
+  assert.equal(source.times.prep, 900)
+  assert.equal(source.times.total, 2700)
+})
