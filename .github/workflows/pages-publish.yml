@@ -1,0 +1,134 @@
+name: Publish Pages site
+
+on:
+  workflow_run:
+    workflows: [Build Pages site]
+    types: [completed]
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: read
+
+# Every publication includes production and all active previews. Serialize the
+# read/modify/push/deploy cycle so publishers cannot overwrite each other's work.
+concurrency:
+  group: pages-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name == 'pull_request_target' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+      pull-requests: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Only trusted default-branch code runs here. PR artifacts are static data;
+      # never check out a PR, install its dependencies, or execute its scripts.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - name: Identify current publication
+        id: target
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            if (context.eventName === 'pull_request_target') {
+              core.setOutput('kind', 'remove');
+              core.setOutput('number', context.payload.pull_request.number);
+              return;
+            }
+            const run = context.payload.workflow_run;
+            if (run.event === 'push' || run.event === 'workflow_dispatch') {
+              const branch = context.payload.repository.default_branch;
+              const { data } = await github.rest.repos.getBranch({ owner, repo, branch });
+              if (run.head_branch !== branch || run.head_sha !== data.commit.sha) return;
+              core.setOutput('kind', 'production');
+              return;
+            }
+            if (run.event !== 'pull_request') return;
+            // Fork runs can have an empty pull_requests array. Resolve the PR
+            // from GitHub metadata, never from a file in the downloaded artifact.
+            const pulls = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit, {
+              owner, repo, commit_sha: run.head_sha, per_page: 100
+            });
+            const pull = pulls.find(p => p.state === 'open' && p.head.sha === run.head_sha &&
+              p.base.repo.full_name === context.payload.repository.full_name &&
+              p.head.repo?.full_name === run.head_repository.full_name);
+            if (!pull) return; // Closed or superseded build: do not resurrect it.
+            core.setOutput('kind', 'preview');
+            core.setOutput('number', pull.number);
+      - name: Download this run's static build
+        if: steps.target.outputs.kind == 'production' || steps.target.outputs.kind == 'preview'
+        uses: actions/download-artifact@v4
+        with:
+          name: pages-client
+          path: ${{ runner.temp }}/pages-incoming
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Load published tree
+        if: steps.target.outputs.kind != ''
+        env:
+          SITE: ${{ runner.temp }}/pages-site
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages > /dev/null; then
+            git fetch origin gh-pages
+            git worktree add --detach "$SITE" FETCH_HEAD
+          else
+            git worktree add --detach "$SITE" HEAD
+            git -C "$SITE" checkout --orphan pages-state
+            git -C "$SITE" rm -rf .
+          fi
+      - name: Update published tree
+        if: steps.target.outputs.kind != ''
+        env:
+          SITE: ${{ runner.temp }}/pages-site
+          INCOMING: ${{ runner.temp }}/pages-incoming
+          KIND: ${{ steps.target.outputs.kind }}
+          PR_NUMBER: ${{ steps.target.outputs.number }}
+        run: python3 .github/scripts/pages-tree.py
+      - name: Save publication state
+        if: steps.target.outputs.kind != ''
+        env:
+          SITE: ${{ runner.temp }}/pages-site
+        run: |
+          git -C "$SITE" config user.name 'github-actions[bot]'
+          git -C "$SITE" config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C "$SITE" add --all
+          if ! git -C "$SITE" diff --cached --quiet; then
+            git -C "$SITE" commit -m 'Update Pages publication'
+            git -C "$SITE" push origin HEAD:gh-pages
+          fi
+      - uses: actions/configure-pages@v5
+        if: steps.target.outputs.kind != ''
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.target.outputs.kind != ''
+        with:
+          path: ${{ runner.temp }}/pages-site
+      - uses: actions/deploy-pages@v4
+        if: steps.target.outputs.kind != ''
+        id: deployment
+      - name: Write publication link
+        if: steps.target.outputs.kind != ''
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+          KIND: ${{ steps.target.outputs.kind }}
+          PR_NUMBER: ${{ steps.target.outputs.number }}
+        run: |
+          if [[ "$KIND" == preview ]]; then
+            echo "Preview: ${PAGE_URL%/}/previews/pr-$PR_NUMBER/" >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$KIND" == remove ]]; then
+            echo "Removed preview for PR #$PR_NUMBER." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Published: $PAGE_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
