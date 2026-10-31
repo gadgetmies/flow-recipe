@@ -10,6 +10,7 @@ export function getQueryParams() {
   return {
     session: params.get('session'),
     recipe: params.get('recipe'),
+    serveIn: params.get('serveIn'),
     mock: params.get('mock'),
   }
 }

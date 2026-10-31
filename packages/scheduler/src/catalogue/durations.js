@@ -1,6 +1,43 @@
 // Duration model (README §3, spec §3.2): active and passive seconds of one task instance at speed 1.
 
-import { toSeconds, toCelsius, isTime } from '../units.js'
+import { toSeconds, toCelsius, isTime, isMass, isVolume, isCount, toBase, canonicalUnit, isImperialMass, isImperialVolume } from '../units.js'
+
+const SPOON_UNITS = new Set(['tsp', 'tbsp', 'pinch', 'pinches', 'dash', 'dashes', 'drop', 'drops', 'sprig', 'sprigs', 'tl', 'rkl', 'msk', 'krm', 'el', 'ts', 'ss'])
+const SPOON_MAX_ML = 15
+
+/**
+ * What measuring an amount takes (spec §3.2): `spoon` (a spoon or pinch of spice, up to 1 tbsp), `count` (eggs,
+ * cloves: picking pieces), `weigh` (on a scale: tare and scoop), `pour` (a jug or cup of liquid), or null.
+ */
+export function amountKind(amount) {
+  if (!amount || amount.unit === undefined || amount.unit === null || amount.unit === '') return amount && Number.isFinite(Number(amount.number)) ? 'count' : null
+  const unit = String(amount.unit).trim()
+  const lower = unit.toLowerCase()
+  if (SPOON_UNITS.has(lower) || SPOON_UNITS.has(canonicalUnit(unit))) return 'spoon'
+  if (isMass(unit)) return 'weigh'
+  if (isVolume(unit)) {
+    let ml = null
+    try {
+      ml = toBase({ number: Number(amount.number), unit }).number
+    } catch {
+      ml = null
+    }
+    return Number.isFinite(ml) && ml <= SPOON_MAX_ML ? 'spoon' : 'pour'
+  }
+  if (isImperialVolume(unit)) return 'pour'
+  if (isImperialMass(unit)) return 'weigh'
+  if (isCount(unit) || /^(pieces?|pcs?|cloves?|kpl|st|stk|sheets?|leaves|leaf|eggs?|slices?)$/i.test(unit)) return 'count'
+  return null
+}
+
+/** Seconds per unit for a task from the operation's per-kind measuring times, or null to use `per-unit`. */
+export function amountSeconds(time, task) {
+  const by = time && time.byAmount
+  if (!by) return null
+  const amount = task && task.options ? task.options.amount : null
+  const kind = amountKind(amount)
+  return kind && Number.isFinite(by[kind]) ? by[kind] : null
+}
 
 function option(task, name) {
   const options = task && task.options
@@ -41,11 +78,11 @@ function safeUnits(units) {
  * @param {number} [units=1] n_j
  * @returns {number} seconds
  */
-export function activeSeconds(operation, units = 1) {
+export function activeSeconds(operation, units = 1, task = null) {
   const time = (operation && operation.time) || { model: 'fixed', active: 0, perUnit: 0 }
   const n = safeUnits(units)
   const active = Number(time.active) || 0
-  const perUnit = Number(time.perUnit) || 0
+  const perUnit = amountSeconds(time, task) ?? (Number(time.perUnit) || 0)
   switch (time.model) {
     case 'per-unit':
       return active + perUnit * n
@@ -100,5 +137,5 @@ export function passiveSeconds(operation, task) {
 export function durations(operation, task, units = 1, catalogue) {
   const op = typeof operation === 'string' && catalogue ? catalogue[operation] : operation
   if (!op) return { active: 0, passive: 0 }
-  return { active: activeSeconds(op, units), passive: passiveSeconds(op, task) }
+  return { active: activeSeconds(op, units, task), passive: passiveSeconds(op, task) }
 }

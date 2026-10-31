@@ -80,7 +80,20 @@ function parseTime(operationElement) {
     perUnit: timeline ? numberAttr(timeline, 'per-unit', 0) : 0,
     passive: timeline ? numberAttr(timeline, 'passive', 0) : 0,
     passiveFrom,
+    byAmount: timeline ? parseByAmount(timeline) : null,
   }
+}
+
+// Seconds per kind of `amount` (measure): a spoon of spice, a few pieces, weighing on a scale, pouring a volume.
+// They replace `per-unit` when the task's amount option is of that kind (see catalogue/durations.js amountKind).
+const AMOUNT_KINDS = ['spoon', 'count', 'weigh', 'pour']
+function parseByAmount(timeline) {
+  const out = {}
+  for (const k of AMOUNT_KINDS) {
+    const v = numberAttr(timeline, k, null)
+    if (v !== null && v >= 0) out[k] = v
+  }
+  return Object.keys(out).length ? out : null
 }
 
 function parseCompletion(operationElement) {

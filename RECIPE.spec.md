@@ -1,406 +1,433 @@
-# Recipe XML Generation Specification
+# Recipe authoring guide (format v2)
 
-This specification guides an agent to convert a web-based recipe into a structured XML recipe file following the schema defined in `recipe.xsd`.
+You convert a recipe (usually a web page) into ONE Flow Recipe XML document. A multi-cook scheduler reads it, so the
+XML states **facts** — ingredients, amounts, steps, durations, temperatures, tools, capacities, how long results stay
+good — never who does what or any order beyond the data dependencies. The scheduler derives batches, oven rounds,
+pipelines and timing from those facts. Output only the XML; it must parse, validate and plan. §11 is a complete,
+working example: follow its shape.
 
-## Schema Reference
+## 1. Document
 
-The XML structure must conform to the XSD schema located at:
-`packages/server/src/recipes/recipe.xsd`
-
-All generated XML must validate against this schema. Refer to the schema for the authoritative definition of allowed elements, attributes, and their constraints.
-
-## Overview
-
-The goal is to create a file containing an XML recipe definition that follows the schema in recipe.xsd:
 ```xml
-<?xml version="1.0" encoding="utf-8" ?>
-<recipe xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="recipe.xsd" ref="SOURCE_URL">
-    <title>Recipe Title</title>
-    <ingredients>...</ingredients>
-    <tools>...</tools>
-    <tasks>...</tasks>
+<?xml version="1.0" encoding="utf-8"?>
+<recipe version="2" id="chocolate-chip-cookies" ref="https://example.com/source-page">
+  <title>Chocolate chip cookies</title>
+  <serving temperature="ambient"/>
+  <ingredients>…</ingredients>
+  <tools>…</tools>
+  <tasks>…</tasks>
 </recipe>
 ```
 
-## Step-by-Step Process
+- Children in exactly this order; `serving` optional; at least one ingredient; `<tools>` always present.
+- `version="2"`; `id` = kebab-case of the title; `ref` = the source URL. `<title>`: the dish name, no "best"/"easy".
+- **Ids**: kebab-case, unique across ingredients, tools, tasks and outputs together (a task `plate` and a tool
+  `plate` collide). Tasks verb-noun (`chop-onion`), outputs nouns (`chopped-onion`), measured amounts
+  `<ingredient>-for-<use>` (`flour-for-dough`).
 
-### Step 1: Scrape and Parse the Web Page
+## 2. Serving
 
-1. **Obtain the recipe URL** from the user or input
-2. **Fetch the web page content** using appropriate web scraping techniques
-3. **Parse the HTML** to extract structured recipe data:
-   - Recipe title
-   - Ingredients list with quantities and units
-   - Cooking steps/instructions
-   - Any mentioned tools or equipment
-   - Cooking times and temperatures
-   - Servings information (if available)
+`<serving temperature="hot|cold|ambient" hold="10" hold-unit="minutes"/>`: how the dish is served and how long it
+stays servable once done (`hold-unit` `seconds|minutes|hours`, default minutes). Defaults without `hold`: hot 10 min,
+cold 20 min, ambient unlimited. Hot meals: `hot`, 5–15 min. Fridge desserts: `cold`. Baked goods: `ambient`.
+**Copy the serving hold onto the `final` output** (`<output id="soup-in-bowl" hold="10" hold-unit="minutes"
+final="true">`): it bounds how early the last step may finish before serving. The scheduler applies the serving
+hold to a final output that has none, and the check warns about it.
 
-4. **Extract metadata**:
-   - Source URL (for the `ref` attribute in the `<recipe>` element)
-   - Recipe title
+## 3. Ingredients
 
-**Output**: Structured data containing title, ingredients, steps, tools, and metadata.
+`<ingredient id="butter">unsalted butter<properties>…</properties></ingredient>`
 
----
+- The **name is the text content** (lower case, singular, specific). No `name` attribute, no amounts (amounts live
+  in `measure` tasks).
+- Properties: `<property name="…" value="…"/>`, or with `<numeric-value number="…" unit="…"/>` or
+  `<text-content>` inside.
+- `storage` = `fridge` | `freezer` for perishables (milk, butter, eggs, cream, cheese, meat, fish, fresh yeast,
+  fresh herbs); omit for the pantry. Their measuring is then kept close to their use.
+- `out-of-storage` (numeric duration) only when it differs from the default (fridge 60 min, freezer 10 min):
+  butter that must soften 120 min, ice 5 min.
+- Free descriptive properties: `type` (fine, ground, dry, pearl), `size` (large), `fat-content` (percent).
+- One ingredient per product; the same product used twice (eggs in the dough and for brushing) is one ingredient
+  with two measure tasks; variants (white sugar, pearl sugar) are separate ingredients. Measured water is an
+  ingredient.
 
-### Step 2: Extract Ingredients and Build Ingredients List
+## 4. Tools
 
-1. **Parse each ingredient** from the scraped recipe:
-   - Extract ingredient name
-   - Extract quantity and unit (if specified)
-   - Identify any properties (e.g., "fine salt", "ground coriander", "medium egg")
+`<tool id="baking-sheet">baking sheet<properties><property name="capacity"><numeric-value number="12"
+unit="cookie"/></property></properties></tool>`
 
-2. **Create unique ingredient IDs**:
-   - Use kebab-case format (e.g., "white-chocolate-spread", "baking-powder")
-   - Ensure IDs are unique within the recipe
-   - Match IDs to ingredient names consistently
+- A tool names a **type**; the kitchen inventory says how many exist. Use these types as ids when they fit: `bowl`
+  (4 l), `large-bowl` (8 l), `cup`, `jug`, `plate`, `serving-plate`, `baking-sheet` (4), `baking-tin`,
+  `baking-stone` (one pizza stone or steel: give it a capacity, 2 `pita`; the oven then bakes one stone per round
+  and the task that lifts the bread off returns the stone for the next round), `cake-mould`,
+  `square-dish`, `shallow-dish`, `cooling-rack`, `pot` (4 l, 2 of them), `casserole-pot` (Dutch oven, 5 l),
+  `pan`, `serving-bowl`, `mixing-glass`, `rocks-glass`, `whisk`, `spatula`, `frosting-spatula`, `spoon`, `fork`,
+  `knife`, `cutting-board` (2, so two cooks can cut at once), `rolling-pin`, `hand-mixer`, `pastry-brush`, `grater`,
+  `peeler`, `sieve`, `strainer`, `bar-spoon`, `fruit-baller`, `blender`, `ladle`, `kitchen-scale`,
+  `precision-scale`, `towel`, `parchment-paper`, `cling-film`, `cover`. Other types are allowed (assumed to exist
+  once). `type="…"` maps an id to another type (rare).
+- Never declare the oven, hob or microwave; operations bring them.
+- `capacity` with a unit: containers in litres (`pot` 3 l) so a rising dough gets a bowl that fits; **carriers** in
+  the unit of the stream they carry (`baking-sheet` 12 `cookie`, `pan` 2 `fillet`, `plate` 1 `serving`). Carrier
+  capacity turns 24 cookies into 2 sheets and sheets into oven rounds (2 sheets per round). Use the realistic count
+  for THIS item (bun size, spacing from the source): the recipe's capacity always wins over the kitchen's default
+  (16 buns per sheet), which applies only when the recipe states none.
+- Parchment paper and cling film are tools, consumed as `<input ref>` by `line` / `cover`.
 
-3. **Build the ingredients XML section** (must conform to XSD schema):
-   ```xml
-   <ingredients>
-       <ingredient id="ingredient-id" name="Ingredient Name">
-           <properties>
-               <!-- Option 1: Text property using value attribute -->
-               <property name="property-name" value="property-value"/>
-               <!-- Option 2: Text property using text-content element -->
-               <property name="property-name">
-                   <text-content>property-value</text-content>
-               </property>
-               <!-- Option 3: Numeric property -->
-               <property name="property-name">
-                   <numeric-value number="NUMBER" unit="UNIT">optional text content</numeric-value>
-               </property>
-           </properties>
-       </ingredient>
-   </ingredients>
-   ```
-
-4. **Handle ingredient properties** (per XSD schema):
-   - Text properties: Use `value="property-value"` attribute OR `<text-content>property-value</text-content>` element (e.g., `type="fine"`, `size="medium"`)
-   - Numeric properties: Use `<numeric-value>` element with `number` (decimal) and optional `unit` attributes
-   - The `<numeric-value>` element can contain optional text content (per XSD simpleContent extension)
-
-5. **Create a mapping** of ingredient names to IDs for later reference in tasks
-
-**Output**: Complete `<ingredients>` XML section with all ingredients from the recipe.
-
----
-
-### Step 3: Extract Tools and Generate Tools List
-
-1. **Identify all tools mentioned** in the recipe:
-   - Scan ingredient lists, instructions, and step descriptions
-   - Common tools: bowls, spoons, spatulas, whisks, scales, ovens, pans, molds, etc.
-   - Look for implicit tools (e.g., "mix in a bowl" implies a bowl tool)
-
-2. **Create unique tool IDs**:
-   - Use kebab-case format (e.g., "silicone-cake-mould", "kitchen-scale")
-   - Ensure IDs are unique within the recipe
-
-3. **Build the tools XML section** (must conform to XSD schema):
-   ```xml
-   <tools>
-       <tool id="tool-id" name="Tool Name">
-           <properties>
-               <!-- Properties follow same structure as ingredient properties -->
-               <property name="property-name" value="property-value"/>
-               <!-- OR -->
-               <property name="property-name">
-                   <numeric-value number="NUMBER" unit="UNIT">optional text</numeric-value>
-               </property>
-           </properties>
-       </tool>
-   </tools>
-   ```
-
-4. **Handle tool properties** (per XSD schema):
-   - Text properties: Use `value` attribute OR `<text-content>` element
-   - Numeric properties: Use `<numeric-value>` element with `number` (decimal) and optional `unit` attributes
-   - Size/dimension properties (e.g., circumference, capacity)
-   - Type properties (e.g., "microwave-safe")
-
-5. **Create a mapping** of tool names to IDs for later reference in tasks
-
-**Output**: Complete `<tools>` XML section with all tools mentioned or implied in the recipe.
-
----
-
-### Step 4: Extract Steps and Create Tasks
-
-#### Step 4.1: Extract Steps and Split into Tasks
-
-1. **Parse each step** from the recipe instructions:
-   - Each numbered step in the recipe may contain multiple operations
-   - Identify compound steps (e.g., "Mix ingredients and then heat" = two tasks)
-
-2. **Split compound steps** into individual tasks:
-   - A single step may require multiple operations
-   - Each operation should become a separate `<task>` element
-   - Maintain the logical sequence and dependencies
-
-3. **Identify implicit steps**:
-   - Measurement steps (if quantities are specified in ingredients)
-   - Preparation steps (e.g., "preheat oven", "grease pan")
-   - Transfer steps (e.g., "pour into mold")
-
-**Output**: List of individual operations/tasks to be converted to XML.
-
----
-
-#### Step 4.2: Recognize Operations
-
-1. **Review available operations** in `operations.js`:
-   - Available operations include: measure, heat, preheat-oven, crumble, mix, incorporate, mix-in-steps, wait, raise, batch, fill, pour, spherify, separate, grease, stir, soften, ball, decorate, cream, stack, bake-in-microwave, bake-in-oven, split, put-into-oven, take-out-of-oven, brush, sprinkle, grate, spread, transfer, beat, place-on-sheet, chill, spoon, cover, level, add-on-top, press, line, melt, fold, boil, soak, whip
-
-2. **Match each step to an operation**:
-   - Analyze the verb/action in the step (e.g., "mix", "bake", "heat", "pour")
-   - Consider the context (e.g., "bake in oven" vs "bake in microwave")
-   - Use semantic matching, not just keyword matching
-
-3. **Handle unknown operations**:
-   - If no matching operation exists, create a new operation in `operations.js`
-   - The new operation must include:
-     - `instruction`: Function that generates instruction text
-     - `timeline`: Function that returns `{ active: NUMBER, passive: NUMBER }`
-     - `title`: Function that returns the operation title
-   - Follow the pattern of existing operations
-
-4. **Document the operation** with its required options and parameters
-
-**Output**: For each task, identified operation name and required options.
-
----
-
-#### Step 4.3: Create Task XML
-
-For each identified task, create a `<task>` element conforming to the XSD schema. The task structure is flexible (mixed content with choice elements). Use container elements for organization:
+## 5. Tasks
 
 ```xml
-<task operation="OPERATION_NAME">
-    <options>
-        <option name="option-name">
-            <!-- Option 1: Numeric value -->
-            <numeric-value number="NUMBER" unit="UNIT">optional text</numeric-value>
-            <!-- Option 2: Text content -->
-            <text-content>text value</text-content>
-        </option>
-    </options>
-    <tools>
-        <tool ref="tool-id" reserved="true|false" name="optional-name" reusable="true|false"/>
-    </tools>
-    <inputs>
-        <input ref="input-id">optional text content</input>
-    </inputs>
-    <outputs>
-        <!-- Outputs can be either output elements or tool elements -->
-        <output id="output-id">Output Name (text content)</output>
-        <!-- OR tool can be in outputs -->
-        <tool ref="tool-id" name="optional-name" reusable="true|false"/>
-    </outputs>
-    <instructions>
-        <!-- Optional: Custom instruction text with embedded refs -->
-        Text content with <input ref="..."/>, <tool ref="..."/>, <output id="..."/>, and <option name="..."> elements
-    </instructions>
+<task id="chill-dough" operation="chill">
+  <options><option name="duration"><numeric-value number="30" unit="minutes"/></option></options>
+  <inputs><input ref="cookie-dough"/></inputs>
+  <tools><tool ref="large-bowl" reserved="true"/></tools>
+  <outputs><output id="chilled-dough" hold="60" hold-unit="minutes">chilled cookie dough</output></outputs>
+  <instructions>Cover the <input ref="cookie-dough"/> and chill until firm.</instructions>
 </task>
 ```
 
-#### Step 4.4: Unit conversions
+- `operation` from §10; every task gets an `id`.
+- **Options** `<option name><numeric-value number unit/></option>`: always write the unit — durations
+  `minutes|hours|seconds`, temperatures as the source gives them (`celsius`, or `fahrenheit` — converted for you),
+  amounts in the source's units (§8). Default units differ
+  per operation (`raise` seconds, `chill` hours). Options not in the catalogue do nothing.
+- **Inputs** `<input ref/>`: an ingredient, a tool (consumables) or an output of an EARLIER task (document order).
+  `amount="10"` consumes only part of an output (10 of 24 ladyfingers); otherwise all of it.
+- **Tools** `<tool ref reserved soil qty/>`:
+  - `reserved="true"`: the tool holds the result until it is consumed (bowl with dough, pot on the hob, sheet with
+    cookies, glass with the drink). Hand tools (whisk, knife, spatula) are not reserved.
+  - `soil="none|rinse|wash"` overrides the operation default: `none` for scales, racks, towels, sheets on
+    parchment; `wash` after raw egg, meat, fish, dough, fat, chocolate. Soil exists only on tool references.
+  - `qty`: instances needed at once (rare).
+- `requires="knife hot-pan oven"` on `<task>`: capabilities a participant needs. Operations add their own (`chop` →
+  knife, `fry` → hot-pan, `bake-in-oven` → oven); add one only when the step needs more than its operation implies.
+- **Instructions** (recommended for every task except `measure`): imperative sentences with embedded
+  `<input ref/>`, `<tool ref/>`, `<option name/>`, rendered as names. They replace the generated text ("Chop onion"),
+  so keep the source's cues ("until golden"). The schema requires at least one embedded element.
+  - Refs inside instructions are merged into the task: an `<input ref>` not listed in `<inputs>` adds a dependency.
+    Reference only what the task consumes or uses.
+  - Never put `<output>` in instructions: it declares an output, and repeating one from `<outputs>` is a parse error
+    ("declares output twice"). Name results in words.
+  - `<option name="duration"/>` without a value renders the value set in `<options>`.
+- **Joins**: `<join id="dissolve-yeast">` wraps 2+ tasks one person does back-to-back as one step (crumble yeast,
+  stir into milk). Rare; never with long waits inside.
 
-Review the recipe recognising all non-metric units converting the amounts and the unit to metric. 
-If there are amounts for ingredients that are not liquids, but are measured by volume, convert those to grams using a best estimate for the conversion ratio. Add a comment next to all the amounts that have been converted from volume to weight.
+## 6. Outputs, unit streams, carriers
 
-**Note**: Per XSD schema, tasks can also have individual `<input>`, `<tool>`, or `<output>` elements at the task level (not in containers), but using containers (`<inputs>`, `<tools>`, `<outputs>`) is recommended for clarity.
+`<output id amount unit hold hold-unit volume volume-unit final>name</output>`
 
-**Required components**:
+- Every output is consumed by a later task or is `final="true"` (an unconsumed output becomes an extra served dish).
+  Mark what goes to the table `final="true"`, usually one output, and give it the serving hold (§2) when
+  `<serving>` has one.
+- `hold` (default unit minutes): how long the result stays good before its consumer must start. Only on results
+  that degrade: whipped cream 30, beaten egg whites 10, warm milk for yeast 10, melted chocolate 15, boiling water
+  15, cooked pasta 2, fried food 10, shaped dough before baking 30, hot baked goods 10. Put it on the result that
+  degrades (the baked cookie), not on a later transfer.
+- `volume` (+ `volume-unit`, default l): size of a dough that needs room to rise.
+- **Unit streams**: `amount` + `unit` with a countable noun — `cookie`, `bun`, `serving`, `fillet`, `patty`,
+  `dumpling`, `drink`, `bowl` — names a stream of units; `amount` is the count for the stated yield. Plain quantity
+  units are NOT streams: `pieces`, `piece`, `pcs`, `unit(s)`, `portion(s)`, `slice(s)`, `dash`, any mass, volume or
+  time unit. Write `serving`, not `portion`.
+- A stream starts where a mass becomes units (`split` with `parts`, `scoop`, `shape`, `cut`; also 2 rolled `sheet`s
+  cut into 34 `bun`s); every later task on it
+  repeats `amount` and `unit` (24 `cookie` through to the final output). `split` with `unit-size` (45 g) derives the
+  count from the producing output's `amount` in g (`<output id="dough" amount="1100" unit="g">`); prefer `parts`.
+- **Pipelines**: consecutive tasks on one stream whose operations are per-unit (**u** in §10) are linked unit by
+  unit, so the planner can run them as a pipeline (one person rolls, another places on sheets) or share units
+  between people. A non-per-unit task (bake, cool, rest) ends the chain. So split early and write one task per
+  per-unit action (portion → roll → place → brush → sprinkle), each with the stream output. Never lump "shape and
+  place on sheets" into one task.
+- **Carriers**: a tool with a capacity in the stream's unit, used by a per-unit task or the bake, batches the units
+  (24 / 12 per sheet = 2 sheets) and stays with them through later tasks and the oven until a task **returns** it by
+  listing it in `<outputs>`: `<outputs><output id="cookie-on-rack" …/><tool ref="baking-sheet"/></outputs>`. Return
+  each carrier at the task that takes the units off it (transfer to rack, plating), else sheets never come back for
+  the next round (`CARRIER_NEVER_RETURNED`). A carrier that goes to the table needs no return. Reserved containers
+  are returned the same way once emptied (`split` returns the dough bowl).
+- A stream task may also consume non-stream outputs (lined sheet, beaten egg). Give those no `unit`, or the
+  validator warns about mixed units.
 
-1. **Operation attribute**: Set `operation="OPERATION_NAME"` matching the identified operation
+## 7. Oven, hob, waits
 
-2. **Options** (if required by the operation, per XSD schema):
-   - `amount`: For measure operations (number + unit)
-   - `temperature`: For heat/bake operations (number + unit, typically "celsius" or "fahrenheit")
-   - `duration`: For time-based operations (number + unit: "seconds", "minutes", "hours")
-   - `power`: For microwave operations (number + unit, typically "watts" or "percent")
-   - `parts`: For split operations (number only)
-   - Extract these from the recipe step text
-   - Use `<numeric-value>` element with `number` (decimal) and optional `unit` attributes
-   - Optionally use `<text-content>` for text-based options
-   - The `<numeric-value>` element can contain optional text content
+- **Oven**: one `bake-in-oven` (sweet) or `roast` (savoury) task, `temperature` and `duration`, exactly one input
+  and one output (combine fillings first). List the carrier as `<tool ref="baking-sheet" reserved="true"
+  soil="none"/>` so the rounds follow from capacity × 2 slots. Never write preheat, "put in" or "take out" tasks:
+  the task expands into `preheat-oven` (timed from the temperature), `put-into-oven`, `take-out-of-oven`. Cakes:
+  `baking-tin` / `cake-mould` (capacity 1 `cake`).
+- **Hob** (each needs `duration`, per round, from the source): `fry` (per-unit; a pan with a capacity in the
+  stream's unit gives rounds), `sear`, `saute` (onions, garlic, vegetables), `toast` (nuts, spices), `simmer`
+  (sauces, stews, soups), `cook` (pasta, rice, grains, eggs), `boil`, `steam`; `heat` takes `temperature` or
+  `duration`; `melt` and `soften` take none.
+- **One vessel, several steps** (one-pot stews, sauces built on the fond, butter melted then milk added): the
+  steps happen in order in the same pot, but a shared `<tool ref>` alone does not order them — the scheduler only
+  follows inputs. Carry the vessel on as data: each step in the same pot consumes the previous step's output.
+  When the earlier result leaves the pot (browned beef set aside), give that task a second output for the used pot
+  and make it an input of the next step:
 
-3. **Tools** (per XSD schema):
-   - Reference tools by ID using `<tool ref="tool-id"/>` within `<tools>` container
-   - Add `reserved="true"` (boolean) if the tool is used for the entire duration (e.g., bowl during mixing)
-   - Add `reusable="true"` (boolean) if the tool can be reused after this task
-   - Add optional `name` attribute for tool identification
-   - Add `amount` attribute (decimal, defaults to 1) for tools that scale with output:
-     - **Use `amount="1"`** (or omit, as it's default) for tools consumed per output: serving glasses, plates, cake molds, baking pans, individual containers
-     - **Omit `amount` and use `reusable="true"`** for reusable tools: mixing bowls, measuring tools, utensils, equipment
-     - Tools in `<outputs>` section typically have `amount="1"` (per output)
-     - Tools in `<tools>` section with `reusable="true"` don't need/use `amount` for scaling
-   - Include all tools mentioned or implied in the step
-   - Tools can also appear in `<outputs>` section (see outputs below)
-   - **Important**: If a tool is referenced in the `<instructions>` element (using `<tool ref="..."/>`), do NOT also list it in the `<tools>` container
+  ```xml
+  <task id="brown-beef" operation="sear">…
+    <tools><tool ref="casserole-pot" reserved="true" soil="wash"/></tools>
+    <outputs><output id="browned-beef">browned beef</output><output id="pot-with-fond">pot with the fond</output></outputs>
+  </task>
+  <task id="saute-onion" operation="saute">…
+    <inputs><input ref="sliced-onion"/><input ref="pot-with-fond"/></inputs>
+    <tools><tool ref="casserole-pot" reserved="true" soil="wash"/></tools>
+    <outputs><output id="softened-onion">onion softened on the fond</output></outputs>
+  </task>
+  <!-- later: <task id="add-beef-back"> takes softened-onion (or the sauce built on it) and browned-beef -->
+  ```
 
-4. **Inputs** (per XSD schema):
-   - Reference ingredients or outputs from previous tasks using `<input ref="id"/>` within `<inputs>` container
-   - Use ingredient IDs for initial ingredients
-   - Use output IDs for intermediate products from previous tasks
-   - Order matters: first input is typically the primary ingredient
-   - Input elements can contain optional text content (mixed content)
-   - **Important**: If an input is referenced in the `<instructions>` element (using `<input ref="..."/>`), do NOT also list it in the `<inputs>` container
+  The check warns ("Vessel order: …") when two tasks hold the same reserved vessel with no input path between them.
+- **Waits** have one input, one output and a required `duration`: `raise` (proofing), `chill` (fridge), `freeze`,
+  `rest` (dough, meat), `cool` (room temperature, rack), `marinate` (fridge), `soak`. Ranges → the lower bound;
+  overnight → 8 hours. Never `wait` (it links nothing).
 
-5. **Outputs** (per XSD schema):
-   - Create unique output IDs (e.g., "measured-flour", "mixed-batter", "baked-cake")
-   - Output elements contain text content (the output name/description) and have required `id` attribute
-   - Use kebab-case for IDs
-   - Each task should produce at least one output
-   - The `<outputs>` container can contain both `<output>` elements AND `<tool>` elements
-   - Tools in outputs can have `ref`, `name`, and `reusable` attributes (for tools that are produced/modified by the task)
+## 8. Measuring and units
 
-6. **Instructions** (optional, per XSD schema):
-   - Can include custom instruction text (mixed content) with embedded references:
-     - `<input ref="..."/>` - reference to an input
-     - `<tool ref="..."/>` - reference to a tool
-     - `<output id="..."/>` - reference to an output
-     - `<option name="...">` - reference to an option (can contain `<numeric-value>` or `<text-content>`)
-   - If omitted, the operation's default instruction function will be used
-   - **Important**: If an input or tool is referenced in the `<instructions>` element, it should NOT be listed separately in the `<inputs>` or `<tools>` containers to avoid duplication
+- One `measure` task per ingredient **use**: `amount` option, the ingredient as input, one output. Unmeasured uses
+  ("salt to taste", "oil for greasing", "flour for dusting") take the ingredient directly as an input of the task.
+- Tools: `<tool ref="kitchen-scale" soil="none"/>` when weighing (`precision-scale` below 10 g if the user has one);
+  optionally the reserved container it goes into (several measures may share one bowl).
+- **Write amounts exactly as the source states them, in its own units** — `1 cup`, `2 tbsp`, `0.5 tsp`, `8 oz`,
+  `1 stick`, `1 lb`, `200 g`, `3 dl`; temperatures `350` `fahrenheit` or `180` `celsius`; pan sizes `9x13 inch`.
+  Never convert volume to weight, ounces to grams or °F to °C yourself, and never round: the deterministic converter
+  (`metricizeRecipeXml`, run by the importer and by `convert_recipe_units`) is the source of truth. It converts with
+  its density table and kitchen rounding and leaves `<!-- converted from 1 cup (all-purpose flour, 0.53 g/ml) -->`
+  next to every changed value. **When the source states a weight, use it verbatim** — also in parentheses or
+  side by side ("1 cup (125 g) flour" → `125` `g`; "1.2 kg / 2.4 lb beef" → `1.2` `kg`); the converter only
+  converts volumes that have no weight, and its density estimate differs from the author's own figure.
+- Non-English spoons may be copied as written; they are metric (5 ml / 15 ml) and normalised by the converter:
+  Finnish `tl`/`rkl`, Swedish `tsk`/`msk`/`krm` (1 ml), Norwegian/Danish `ts`/`ss`/`spsk`, German `TL`/`EL`,
+  French `c.à.c`/`c.à.s`; `kpl`/`st`/`Stk` are `pieces`; `Prise`/`ripaus` a `pinch`. Packages (`prk`, `pkt`,
+  `pss`, `tlk`, can, jar, packet) stay counts: put the package size in the ingredient name ("cream, 2 dl carton")
+  or measure the contents in g/ml. Ingredient names, titles and instructions stay in the source's language.
+- Unit spellings: `g kg ml dl l tsp tbsp cup fl oz oz lb stick pint quart` (amounts), `celsius fahrenheit`,
+  `inch`/`cm`. Decimals only (`0.5`, not `1/2`). Countables are `pieces` ("3 large eggs" → `3` `pieces`, size as a
+  `size` property).
+- After conversion the recipe follows the metric kitchen policy:
+  - **grams** (g, kg): flour, sugar, butter, fats, chocolate, nuts, grains, rice, pasta, cheese, chopped produce,
+    honey, syrup, oil and other viscous liquids;
+  - **ml / dl / l** for thin liquids: water, milk, stock, wine, cream, juice, spirits;
+  - **`tsp` (5 ml) / `tbsp` (15 ml)** for small amounts (≤ 1 tbsp, under ~10 g) of salt, spices, baking powder,
+    baking soda, yeast, extracts and fresh herbs, and for anything else that is both ≤ 1 tbsp and under 10 g
+    (2 tsp cornstarch) — a 1 g kitchen scale cannot weigh it — unless the user has a precision scale: then grams
+    with one decimal. Fresh herbs in bigger amounts may stay `sprig`/`bunch`/`handful` counts as the source says;
+  - **`pieces`** for countables: eggs, onions, garlic cloves, lemons, fillets, gelatine sheets;
+  - temperatures `celsius`, lengths cm. A cup is the US cup (236.6 ml).
+  Amounts the converter cannot handle (unknown units, no density) are reported by the unit lint as warnings; fix
+  those by hand (an unknown unit is never silently accepted).
+- **Scaling**: every amount, `parts` and stream `amount` is for the yield the source states (24 cookies, 4
+  servings). Never rescale; the scheduler scales the whole recipe.
 
-**Special cases**:
+## 9. Checklist and common mistakes
 
-- **Measure operations**: Always require an `amount` option. Output should be a measured quantity with a unique ID.
-- **Bake operations**: May need to be expanded into multiple tasks (preheat, put-into-oven, take-out-of-oven) if using `bake-in-oven` operation
-- **Split operations**: Require a `parts` option and may need special handling
+1. Root `<recipe version="2" id ref>`, children in order, `<tools>` present, well-formed.
+2. Operations from §10; required options present, every number with a unit.
+3. Inputs resolve to an ingredient, a tool or an EARLIER task's output; tool refs to declared tools.
+4. Ids unique across everything, kebab-case.
+5. Every output consumed or `final="true"`.
+6. One task per per-unit action on the stream; carriers have capacity in the stream unit, ride along into the bake
+   as a reserved tool and are returned in `<outputs>` where the units leave them.
+7. One measure per ingredient use, amounts as the source states them (the converter metricizes), for the stated yield.
+8. Holds on degrading results, `<serving>` set and its hold copied onto the `final` output, perishables with
+   `storage`.
+9. Steps that happen one after another in the same pot or pan are linked by data (§7, one vessel, several steps).
 
-**Output**: Complete `<task>` XML elements for all identified tasks.
+Mistakes: `name` attributes or amounts on ingredients; preheat tasks; `wait` instead of `rest`/`cool`; `portion` or
+`pieces` as a stream unit; one "shape and bake" task; two inputs to `bake-in-oven`; `<output>` in instructions;
+instructions without any embedded ref; the baking sheet never returned; `<batch>` or nested `<tasks>` (v1,
+rejected); converting cups/ounces/°F yourself instead of copying the source; density-converting an amount the
+source already gives in grams; one-pot steps linked only by the shared pot; fractions like `1/2`; unit words
+the converter does not know (`smidgen`, `knob`); durations without a unit; stray outputs nobody uses.
 
----
+**The dry run** (`check_recipe`, `bin/check.js`, the import's check) plans the recipe with 1 and 3 cooks and the
+default kitchen, as soon as possible from a fixed start. `plan.runs[].makespanSeconds` is the elapsed time from the
+first step to serving, `activeSeconds` the hands-on time, `criticalPathSeconds` the time with unlimited cooks. A dry
+run that cannot schedule the recipe (a deadlock: a task waits for a tool nobody frees) is an **error**
+(`Scheduler dry run failed: …`): such a recipe never gets a plan. Compare the 1-cook figure with the source's total
+time: within +30 % or +15 min (whichever is larger) is fine; when the critical path alone exceeds the source total,
+the source understates its waits (check them against its text). Beyond max(source total, critical path) × 1.3 +
+15 min usually means a passive step modelled as active, a missing carrier return, a too-small capacity or one-pot
+steps that are not linked; 3 cooks never take longer than 1. (Measuring takes about 20 s per spoon, 40 s per
+weighed amount.)
 
-#### Step 4.4: Ensure Correct Output References
+## 10. Operations
 
-1. **Build a dependency graph**:
-   - For each task, list its inputs (from ingredients or previous outputs)
-   - Track which task produces each output ID
-   - Verify that all inputs are either:
-     - Ingredient IDs (from the ingredients section)
-     - Tool IDs (from the tools section)
-     - Output IDs from previous tasks
+**u** = per-unit (pipelines, shareable between people); `in` = inputs allowed; * = required option. Pick the most
+specific operation and put nuances in the instructions.
 
-2. **Validate references**:
-   - Check that every `<input ref="...">` references a valid:
-     - Ingredient ID (in `<ingredients>`)
-     - Tool ID (in `<tools>`)
-     - Output ID from a previous task
-   - Ensure no circular dependencies
-   - Ensure all outputs are eventually used (except final outputs)
+| Operation | in | Options | Use for |
+|---|---|---|---|
+| `measure` | 1–2 | amount* | one ingredient use |
+| `chop` **u**, `dice` **u**, `mince` **u** | 1 | | knife work |
+| `slice` | 1 | parts* | into a number of slices |
+| `cut` **u** | 1 | parts | into pieces or portions (bars, strips) |
+| `peel` **u**, `grate` **u**, `zest` **u**, `juice` **u** | 1 | | produce |
+| `crumble` **u**, `separate` **u**, `crush`, `sift` | 1 (sift 1+) | | yeast, eggs, biscuits, flour |
+| `rinse` **u**, `drain` | 1 | | at the sink |
+| `split` **u** | 1 | parts or unit-size | a mass into stream units |
+| `mix`, `fold`, `incorporate` **u**, `mix-in-steps` **u** | 1+ (fold, incorporate, mix-in-steps 2+) | | combine; add gradually |
+| `beat` **u**, `whip` **u**, `cream` **u** | 1 (cream 2+, needs a tool) | | eggs; cream, egg whites; butter + sugar |
+| `knead`, `blend`, `mash`, `toss`, `season` | 1+ (season 2+; blend needs a tool) | | dough; purée; potatoes; salads; salt and pepper |
+| `stir` **u**, `muddle` **u**, `fill` **u**, `strain` **u**, `express` **u** | 1 (muddle, express 1+; strain 1–2) | | drinks |
+| `heat`, `melt`, `soften`, `boil` | 1 | heat: temperature or duration; boil: duration | hob basics |
+| `fry` **u**, `sear` **u**, `saute`, `toast`, `simmer`, `cook`, `steam` | 1+ | duration* | hob (§7) |
+| `bake-in-oven`, `roast` | 1 | temperature*, duration* | oven (§7) |
+| `bake-in-microwave` | 1 | duration*, power | microwave |
+| `raise`, `chill`, `freeze`, `rest`, `cool`, `marinate`, `soak` | 1 (marinate, soak 1+) | duration* (soak optional) | waits (§7) |
+| `roll-out`, `level` | 1 | | dough sheet; smooth a surface |
+| `shape` **u**, `spherify` **u**, `scoop` **u**, `pipe` **u**, `ball` **u** | 1–2 (shape, spherify, ball 1) | | form units |
+| `place-on-sheet` **u**, `place` **u**, `pour` **u**, `transfer` **u**, `plate` **u** | 1+ (place-on-sheet, place, pour 1–2; transfer needs a tool) | | onto carriers, into dishes |
+| `grease` **u**, `line` **u**, `cover` **u** | grease 1 + a tool; line 1+; cover 2+ | | tins, sheets, film/lid |
+| `brush` **u**, `sprinkle` **u**, `glaze` **u**, `garnish` **u**, `dust` | 2+ | | toppings |
+| `spread`, `spoon`, `add-on-top`, `press`, `stack` **u**, `assemble` **u**, `decorate` **u** | 2+ | | layers, sandwiches, cakes |
 
-3. **Fix missing references**:
-   - If an input references something that doesn't exist, create it:
-     - Add missing ingredients to the ingredients section
-     - Add missing tools to the tools section
-     - Add intermediate measure/prep tasks if needed
+Not for recipes: `gather`, `batch`, `clean`, `serve`, `wait`, `preheat-oven`, `put-into-oven`, `take-out-of-oven`,
+`enjoy`.
 
-4. **Order tasks correctly**:
-   - Tasks should be ordered so that inputs are available before use
-   - Measurement tasks typically come first
-   - Final assembly/consumption tasks come last
+## 11. Complete example
 
-5. **Create intermediate outputs**:
-   - If a step mentions something that wasn't explicitly created, create an intermediate task
-   - Example: "mix flour and sugar" → ensure both are measured first if not already
+24 cookies from one dough, two sheets of 12, baked in one oven round (2 slots), moved to a rack (which returns the
+sheets), cooled. Portion → roll → place is a per-unit chain on the `cookie` stream.
 
-6. **Handle task dependencies**:
-   - Some operations (like `bake-in-oven`) expand into multiple tasks
-   - Ensure the expanded tasks are properly sequenced
-   - Ensure outputs from expanded tasks are correctly referenced
-
-**Output**: Validated and corrected task XML with all references resolved.
-
----
-
-## Validation Checklist
-
-Before finalizing the recipe XML, verify:
-
-- [ ] Recipe has a valid `<title>` element (required per XSD)
-- [ ] Recipe has a `ref` attribute with the source URL (optional per XSD, but recommended)
-- [ ] All ingredients from the recipe are in the `<ingredients>` section
-- [ ] All tools mentioned are in the `<tools>` section
-- [ ] Each task has a valid `operation` attribute matching an operation in `operations.js`
-- [ ] All required options for each operation are provided
-- [ ] All `<input ref="...">` references exist (ingredient, tool, or previous output)
-- [ ] All `<tool ref="...">` references exist in the tools section
-- [ ] If an input or tool is referenced in `<instructions>`, it is NOT also listed in `<inputs>` or `<tools>` containers
-- [ ] All outputs have unique IDs
-- [ ] Tasks are ordered such that inputs are available before use
-- [ ] Final outputs are not referenced as inputs (they are the end result)
-- [ ] The XML is well-formed and validates against `recipe.xsd` schema
-- [ ] All numeric values use decimal format (per XSD: `number` attribute is `xs:decimal`)
-- [ ] All required attributes are present (per XSD: `id`, `name`, `ref`, `operation`)
-- [ ] All boolean attributes (`reserved`, `reusable`) use proper boolean values if present
-
----
-
-## Example Transformation
-
-**Original Recipe Step**: "Mix 200g flour, 100g sugar, and 2 eggs in a large bowl until smooth."
-
-**Extracted Tasks**:
-
-1. Measure flour (200g) → output: "measured-flour"
-2. Measure sugar (100g) → output: "measured-sugar"
-3. Measure eggs (2 pieces) → output: "measured-eggs"
-4. Mix measured-flour, measured-sugar, and measured-eggs → output: "mixed-batter"
-
-**XML Representation**:
 ```xml
-<task operation="measure">
-    <options>
-        <option name="amount">
-            <numeric-value number="200" unit="g"/>
-        </option>
-    </options>
-    <tools>
-        <tool ref="kitchen-scale"/>
-    </tools>
-    <inputs>
-        <input ref="flour"/>
-    </inputs>
-    <outputs>
-        <output id="measured-flour">flour</output>
-    </outputs>
-</task>
-<!-- Similar for sugar and eggs -->
-<task operation="mix">
-    <tools>
-        <tool ref="bowl" reserved="true"/>
-    </tools>
-    <inputs>
-        <input ref="measured-flour"/>
-        <input ref="measured-sugar"/>
-        <input ref="measured-eggs"/>
-    </inputs>
-    <outputs>
-        <output id="mixed-batter">batter</output>
-    </outputs>
-</task>
+<?xml version="1.0" encoding="utf-8"?>
+<recipe version="2" id="chocolate-chip-cookies" ref="https://example.com/chocolate-chip-cookies">
+  <title>Chocolate chip cookies</title>
+  <serving temperature="ambient"/>
+  <ingredients>
+    <ingredient id="butter">unsalted butter<properties>
+        <property name="storage" value="fridge"/>
+        <property name="out-of-storage"><numeric-value number="120" unit="minutes"/></property>
+      </properties></ingredient>
+    <ingredient id="sugar">light brown sugar</ingredient>
+    <ingredient id="egg">egg<properties><property name="storage" value="fridge"/>
+        <property name="size" value="large"/></properties></ingredient>
+    <ingredient id="flour">all-purpose flour</ingredient>
+    <ingredient id="baking-soda">baking soda</ingredient>
+    <ingredient id="salt">salt<properties><property name="type" value="fine"/></properties></ingredient>
+    <ingredient id="chocolate-chips">dark chocolate chips</ingredient>
+  </ingredients>
+  <tools>
+    <tool id="kitchen-scale">kitchen scale</tool>
+    <tool id="large-bowl">large bowl<properties>
+        <property name="capacity"><numeric-value number="8" unit="l"/></property></properties></tool>
+    <tool id="bowl">bowl<properties>
+        <property name="capacity"><numeric-value number="4" unit="l"/></property></properties></tool>
+    <tool id="whisk">whisk</tool>
+    <tool id="spatula">spatula</tool>
+    <tool id="baking-sheet">baking sheet<properties>
+        <property name="capacity"><numeric-value number="12" unit="cookie"/></property></properties></tool>
+    <tool id="parchment-paper">parchment paper</tool>
+    <tool id="cooling-rack">cooling rack<properties>
+        <property name="capacity"><numeric-value number="24" unit="cookie"/></property></properties></tool>
+  </tools>
+  <tasks>
+    <task id="measure-butter" operation="measure">
+      <options><option name="amount"><numeric-value number="225" unit="g"/></option></options>
+      <inputs><input ref="butter"/></inputs>
+      <tools><tool ref="kitchen-scale" soil="none"/><tool ref="large-bowl" reserved="true"/></tools>
+      <outputs><output id="butter-for-dough">butter</output></outputs>
+    </task>
+    <task id="measure-sugar" operation="measure">
+      <options><option name="amount"><numeric-value number="300" unit="g"/></option></options>
+      <inputs><input ref="sugar"/></inputs>
+      <tools><tool ref="kitchen-scale" soil="none"/><tool ref="large-bowl" reserved="true"/></tools>
+      <outputs><output id="sugar-for-dough">sugar</output></outputs>
+    </task>
+    <task id="measure-eggs" operation="measure">
+      <options><option name="amount"><numeric-value number="2" unit="pieces"/></option></options>
+      <inputs><input ref="egg"/></inputs><outputs><output id="eggs-for-dough">eggs</output></outputs>
+    </task>
+    <task id="measure-flour" operation="measure">
+      <options><option name="amount"><numeric-value number="280" unit="g"/></option></options>
+      <inputs><input ref="flour"/></inputs>
+      <tools><tool ref="kitchen-scale" soil="none"/><tool ref="bowl" reserved="true"/></tools>
+      <outputs><output id="flour-for-dough">flour</output></outputs>
+    </task>
+    <task id="measure-baking-soda" operation="measure">
+      <options><option name="amount"><numeric-value number="1" unit="tsp"/></option></options>
+      <inputs><input ref="baking-soda"/></inputs><outputs><output id="baking-soda-for-dough">baking soda</output></outputs>
+    </task>
+    <task id="measure-salt" operation="measure">
+      <options><option name="amount"><numeric-value number="0.5" unit="tsp"/></option></options>
+      <inputs><input ref="salt"/></inputs><outputs><output id="salt-for-dough">salt</output></outputs>
+    </task>
+    <task id="measure-chocolate-chips" operation="measure">
+      <options><option name="amount"><numeric-value number="340" unit="g"/></option></options>
+      <inputs><input ref="chocolate-chips"/></inputs>
+      <tools><tool ref="kitchen-scale" soil="none"/></tools>
+      <outputs><output id="chips-for-dough">chocolate chips</output></outputs>
+    </task>
+    <task id="cream-butter-and-sugar" operation="cream">
+      <inputs><input ref="butter-for-dough"/><input ref="sugar-for-dough"/></inputs>
+      <tools><tool ref="large-bowl" reserved="true" soil="wash"/><tool ref="whisk" soil="wash"/></tools>
+      <outputs><output id="creamed-butter">creamed butter and sugar</output></outputs>
+      <instructions>Beat the soft <input ref="butter-for-dough"/> with the <input ref="sugar-for-dough"/> until pale
+        and fluffy, about 3 minutes.</instructions>
+    </task>
+    <task id="beat-in-eggs" operation="incorporate">
+      <inputs><input ref="creamed-butter"/><input ref="eggs-for-dough"/></inputs>
+      <tools><tool ref="large-bowl" reserved="true" soil="wash"/><tool ref="whisk" soil="wash"/></tools>
+      <outputs><output id="wet-mix">wet mix</output></outputs>
+    </task>
+    <task id="mix-dry-ingredients" operation="mix">
+      <inputs><input ref="flour-for-dough"/><input ref="baking-soda-for-dough"/><input ref="salt-for-dough"/></inputs>
+      <tools><tool ref="bowl" reserved="true"/><tool ref="spatula"/></tools>
+      <outputs><output id="dry-mix">dry mix</output></outputs>
+    </task>
+    <task id="fold-dough" operation="fold">
+      <inputs><input ref="wet-mix"/><input ref="dry-mix"/><input ref="chips-for-dough"/></inputs>
+      <tools><tool ref="large-bowl" reserved="true" soil="wash"/><tool ref="spatula" soil="wash"/></tools>
+      <outputs><output id="cookie-dough">cookie dough</output><tool ref="bowl"/></outputs>
+      <instructions>Fold the <input ref="dry-mix"/> into the <input ref="wet-mix"/> until no flour streaks
+        remain, then fold in the <input ref="chips-for-dough"/>.</instructions>
+    </task>
+    <task id="chill-dough" operation="chill">
+      <options><option name="duration"><numeric-value number="30" unit="minutes"/></option></options>
+      <inputs><input ref="cookie-dough"/></inputs>
+      <tools><tool ref="large-bowl" reserved="true"/></tools>
+      <outputs><output id="chilled-dough" hold="60" hold-unit="minutes">chilled cookie dough</output></outputs>
+    </task>
+    <task id="line-sheets" operation="line">
+      <inputs><input ref="parchment-paper"/></inputs>
+      <tools><tool ref="baking-sheet" reserved="true"/></tools>
+      <outputs><output id="lined-sheet">lined baking sheet</output></outputs>
+    </task>
+    <task id="portion-dough" operation="split">
+      <options><option name="parts"><numeric-value number="24"/></option></options>
+      <inputs><input ref="chilled-dough"/></inputs><outputs><output id="dough-portion" amount="24" unit="cookie">portion of dough</output><tool ref="large-bowl"/></outputs>
+    </task>
+    <task id="roll-balls" operation="spherify">
+      <inputs><input ref="dough-portion"/></inputs><outputs><output id="dough-ball" amount="24" unit="cookie">dough ball</output></outputs>
+    </task>
+    <task id="place-on-sheet" operation="place-on-sheet">
+      <inputs><input ref="dough-ball"/><input ref="lined-sheet"/></inputs>
+      <tools><tool ref="baking-sheet" reserved="true"/></tools>
+      <outputs><output id="cookie-on-sheet" amount="24" unit="cookie">cookie on the sheet</output></outputs>
+      <instructions>Place the <input ref="dough-ball"/> on the <input ref="lined-sheet"/>, 5 cm apart.</instructions>
+    </task>
+    <task id="bake-cookies" operation="bake-in-oven">
+      <options>
+        <option name="temperature"><numeric-value number="180" unit="celsius"/></option>
+        <option name="duration"><numeric-value number="11" unit="minutes"/></option>
+      </options>
+      <inputs><input ref="cookie-on-sheet"/></inputs>
+      <tools><tool ref="baking-sheet" reserved="true" soil="none"/></tools>
+      <outputs><output id="baked-cookie" amount="24" unit="cookie" hold="10" hold-unit="minutes">baked cookie</output></outputs>
+    </task>
+    <task id="move-to-rack" operation="transfer">
+      <inputs><input ref="baked-cookie"/></inputs>
+      <tools><tool ref="cooling-rack" reserved="true" soil="none"/><tool ref="spatula"/></tools>
+      <outputs><output id="cookie-on-rack" amount="24" unit="cookie">cookie on the rack</output><tool ref="baking-sheet"/></outputs>
+      <instructions>Let the <input ref="baked-cookie"/> firm up on the sheet for 2 minutes, then lift them onto
+        the <tool ref="cooling-rack"/> with the <tool ref="spatula"/>.</instructions>
+    </task>
+    <task id="cool-cookies" operation="cool">
+      <options><option name="duration"><numeric-value number="15" unit="minutes"/></option></options>
+      <inputs><input ref="cookie-on-rack"/></inputs>
+      <tools><tool ref="cooling-rack" reserved="true" soil="none"/></tools>
+      <outputs><output id="cookies" amount="24" unit="cookie" final="true">chocolate chip cookies</output></outputs>
+    </task>
+  </tasks>
+</recipe>
 ```
-
----
-
-## Notes
-
-- **Schema validation**: Always validate generated XML against `packages/server/src/recipes/recipe.xsd` before finalizing
-- **Naming conventions**: Use kebab-case for all IDs (ingredients, tools, outputs)
-- **Units**: Use standard units (g, kg, ml, l, celsius, fahrenheit, minutes, hours, seconds)
-- **Numeric values**: The `number` attribute must be a valid decimal (per XSD: `xs:decimal`)
-- **Output format**: Output elements contain text content (the name), not a `name` attribute (per XSD simpleContent extension)
-- **Tool reservations**: Mark tools as `reserved="true"` (boolean) when they hold ingredients for an extended period
-- **Tool reuse**: Mark tools as `reusable="true"` (boolean) if they can be reused after the task
-- **Output naming**: Output text content should be descriptive and help identify the intermediate product
-- **Missing operations**: When adding new operations, ensure they follow the existing pattern in `operations.js`
-- **Complex operations**: Some operations (like `bake-in-oven`) have `expand` functions that create multiple tasks automatically
-- **Mixed content**: Many elements support mixed content (text + child elements) per XSD schema
-- **Property formats**: Properties can use either `value` attribute OR `<text-content>` element for text values
-
-

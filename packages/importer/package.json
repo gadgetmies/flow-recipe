@@ -1,0 +1,30 @@
+{
+  "name": "@flow-recipe/importer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Recipe import from a URL or text: source extraction, LLM prompt and clients, unit conversion and a scheduler dry run. Node 22, ESM.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./source": "./src/source.js",
+    "./llm": "./src/llm.js",
+    "./guide": "./src/guide.js",
+    "./check": "./src/check.js",
+    "./import": "./src/import.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "flow-recipe-check": "./bin/check.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@flow-recipe/scheduler": "0.1.0",
+    "@xmldom/xmldom": "^0.8.10"
+  }
+}

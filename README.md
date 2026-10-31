@@ -30,6 +30,28 @@ Pages cannot run the Node server. By default, these builds use the app's mock/de
 
 Repository subpaths and PR asset paths are configured during each build; `/demo/`, `/import/` and `/graph/` have direct entry points. For a custom domain served at its root, set the repository variable `PAGES_BASE_PATH` to `/` (and configure the domain in Pages settings). Previews share the Pages origin and browser storage with production.
 
+## Importing recipes
+
+Open `/import` (or **Import a recipe from a URL** in the host settings) to turn a recipe page or pasted text into a
+flow recipe. An LLM drafts the XML following [`RECIPE.spec.md`](RECIPE.spec.md); a deterministic converter then makes
+every amount metric and weight-first using the volume→weight table in `packages/scheduler/src/conversions` (eggs and
+other countables stay pieces, small spice amounts stay spoons unless you have a precision scale), and a scheduler dry
+run checks that the recipe plans with 1 and 3 cooks before it can be saved. Configure the LLM on the server with
+`FLOW_LLM_PROVIDER`, `FLOW_LLM_MODEL`, `FLOW_LLM_API_KEY` and `FLOW_LLM_BASE_URL`, or enter your own key on the import
+page (kept in your browser). Endpoints are in [`packages/server/API.md`](packages/server/API.md).
+
+With Claude, use the `flow-recipe-import` skill (`.claude/skills/flow-recipe-import`) and the MCP server in
+[`packages/mcp`](packages/mcp/README.md) (registered in `.mcp.json`): Claude writes the XML itself and the tools fetch
+the source, convert units, check and upload. Without the MCP server, `node packages/importer/bin/check.js recipe.xml
+--convert` does the conversion and check.
+
+**Import with Claude (custom connector).** Claude on the web, desktop and phone can use the app directly: set
+`FLOW_MCP_SECRET` (≥ 24 random characters, e.g. `openssl rand -hex 32`) on the server, then in Claude go to Settings →
+Connectors → Add custom connector with the URL `https://<your-app>/mcp/<FLOW_MCP_SECRET>` (the URL is a credential —
+keep it private). The import page then offers **Use Claude**: it hands the request to your Claude chat, Claude writes
+and checks the recipe with the app's tools, and the page picks up the draft for review — no server API key needed.
+Details in [`packages/mcp/README.md`](packages/mcp/README.md#use-the-app-from-claude-custom-connector).
+
 ---
 
 # Getting Started with Create React App

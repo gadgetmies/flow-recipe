@@ -153,12 +153,20 @@ export function plan(graph, session, options = {}) {
   for (const lane of lanes) lane.report = reports[lane.participantId] || { load: 0, expectedLoad: 0, switches: 0, longestLopsidedIdle: 0, timersHeld: 0 }
 
   // dishes
+  const EARLY_GRACE_SECONDS = 30
   const dishes = graph.dishes.map((gd) => {
     const dd = d.dishes.find((x) => x.dishId === gd.id) || {}
     const plannedServe = dd.plannedServeRel !== null && dd.plannedServeRel !== undefined ? ms(dd.plannedServeRel) : null
     const late = plannedServe !== null ? Math.max(0, (plannedServe - (gd.serveTime + (gd.lateTolerance || 0))) / 1000) : null
     const hold = Number.isFinite(gd.hold) ? gd.hold : null
     if (plannedServe !== null && late > 0) diagnostics.push({ code: 'LATE', message: `${gd.title} is planned ${Math.round(late / 60)} min after its serve window.`, dish: gd.id, delta: late })
+    // a dish that is ready more than its hold before the serve window opens is stale when served (spec §3.8)
+    const finalHold = sinkHold(graph, gd)
+    const lastFinish = dd.lastFinishRel !== null && dd.lastFinishRel !== undefined ? ms(dd.lastFinishRel) : null
+    if (finalHold !== null && lastFinish !== null && gd.serveTime !== null && gd.serveTime !== undefined) {
+      const early = (gd.serveTime - (gd.earlyTolerance || 0) - finalHold * 1000 - lastFinish) / 1000
+      if (early > EARLY_GRACE_SECONDS) diagnostics.push({ code: 'EARLY', message: `${gd.title} is ready ${Math.round((gd.serveTime - lastFinish) / 60000)} min before serving, ${Math.max(1, Math.round(early / 60))} min more than its ${Math.round(finalHold / 60)} min hold; it will not be at its best.`, dish: gd.id, delta: early })
+    }
     if (hold !== null && dd.spread > hold) diagnostics.push({ code: 'SPREAD', message: `${gd.title}: portions finish ${Math.round(dd.spread / 60)} min apart, more than the ${Math.round(hold / 60)} min hold.`, dish: gd.id, delta: dd.spread - hold })
     return { dishId: gd.id, title: gd.title, serveTarget: gd.serveTime, plannedServe, spread: Math.round(dd.spread || 0), holdUsed: hold, late: late === null ? null : Math.round(late) }
   })
@@ -231,4 +239,11 @@ function relFrozen(frozen, t0) {
     done: (frozen.done || []).map((d) => ({ ...d, start: rel(d.start), end: rel(d.end) })),
     running: (frozen.running || []).map((d) => ({ ...d, start: rel(d.start), remainingActive: d.remainingActive })),
   }
+}
+
+/** The tightest freshness hold on a dish's final outputs (their maxlag edges into the sink), else the dish hold. */
+function sinkHold(graph, gd) {
+  const holds = graph.edges.filter((e) => e.to === gd.sinkId && e.kind === 'maxlag' && Number.isFinite(e.hold)).map((e) => e.hold)
+  if (holds.length > 0) return Math.min(...holds)
+  return Number.isFinite(gd.hold) ? gd.hold : null
 }

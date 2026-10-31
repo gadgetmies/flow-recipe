@@ -203,6 +203,25 @@ test('inventory with 2 sheets → buffer capacity 32', () => {
   assert.equal(batchesOf(graph, 'place').length, 4, 'batches follow the capacity per sheet, not the sheet count')
 })
 
+test('a recipe capacity in another unit than the inventory one is kept (cookies on a bun sheet)', () => {
+  const inventory = mergeInventory(defaultInventory(), { tools: [{ type: 'baking-sheet', count: 4, capacity: { number: 12, unit: 'cookie' } }] })
+  const graph = buildGraph(session([bunsDish()], inventory), catalogue)
+  assert.equal(batchesOf(graph, 'place').length, 4, 'the recipe sheet holds 16 buns')
+  assert.ok(!graph.diagnostics.some((d) => d.code === 'NO_CAPACITY'))
+})
+
+test('the recipe capacity wins over the inventory in the same unit (17 buns of this size fit a sheet)', () => {
+  const recipe = bunsModel()
+  const sheet = recipe.tools.find((t) => t.id === 'baking-sheet')
+  sheet.capacity = { number: 20, unit: 'bun' }
+  const graph = buildGraph(session([bunsDish({ recipe })]), catalogue)
+  assert.equal(graph.buffers.find((b) => b.from === 'buns:place#b1').capPerCarrier, 20, 'not the inventory default of 16')
+  // without a recipe capacity the kitchen default applies
+  delete sheet.capacity
+  const fallback = buildGraph(session([bunsDish({ recipe })]), catalogue)
+  assert.equal(fallback.buffers.find((b) => b.from === 'buns:place#b1').capPerCarrier, 16)
+})
+
 test('policy hold applies when the recipe gives none; ambient is unbounded', () => {
   const recipe = bunsModel()
   recipe.serving = { temperature: 'hot', hold: null }

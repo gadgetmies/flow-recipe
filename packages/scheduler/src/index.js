@@ -6,6 +6,7 @@ export * from './graph/index.js'
 export * from './planner/index.js'
 export * from './online/index.js'
 export * from './sim/index.js'
+export * from './conversions/index.js'
 
 import { parseRecipe } from './recipe/index.js'
 import { loadCatalogue } from './catalogue/index.js'

@@ -32,7 +32,8 @@ test('catalogue has every client operation plus clean and serve', () => {
 test('parsed attributes', () => {
   const spherify = catalogue.spherify
   assert.equal(spherify.title, 'Roll into balls')
-  assert.deepEqual(spherify.time, { model: 'per-unit', active: 0, perUnit: 15, passive: 0, passiveFrom: null })
+  assert.deepEqual(spherify.time, { model: 'per-unit', active: 0, perUnit: 15, passive: 0, passiveFrom: null, byAmount: null })
+  assert.deepEqual(catalogue.measure.time.byAmount, { spoon: 20, count: 15, weigh: 40, pour: 30 })
   assert.equal(spherify.divisible, 'units')
   assert.equal(spherify.minChunk, 180)
   assert.equal(spherify.preemptible, 'units')
@@ -50,7 +51,7 @@ test('parsed attributes', () => {
 
   const measure = catalogue.measure
   assert.equal(measure.time.model, 'sub-linear')
-  assert.equal(measure.time.perUnit, 60)
+  assert.equal(measure.time.perUnit, 45)
   assert.equal(measure.tedium, 1.2)
   assert.equal(measure.minInputs, 1)
   assert.equal(measure.maxOutputs, 1)
@@ -78,6 +79,45 @@ test('parsed attributes', () => {
   assert.equal(catalogue.chill.station, 'fridge')
   assert.equal(catalogue.wait.maxInputs, 0)
   assert.equal(catalogue.mix.maxInputs, null)
+})
+
+// Operations added for recipes imported from the web (RECIPE.spec.md lists them for the LLM).
+const WEB_OPERATIONS = [
+  'chop', 'dice', 'mince', 'cut', 'zest', 'juice', 'crush', 'sift', 'rinse', 'drain', 'season', 'knead', 'blend',
+  'mash', 'toss', 'fry', 'saute', 'sear', 'toast', 'simmer', 'cook', 'steam', 'roast', 'rest', 'cool', 'marinate',
+  'freeze', 'roll-out', 'shape', 'scoop', 'pipe', 'glaze', 'assemble', 'garnish', 'plate',
+]
+
+test('web recipe operations', () => {
+  for (const name of WEB_OPERATIONS) {
+    const op = catalogue[name]
+    assert.ok(op, `missing operation ${name}`)
+    assert.ok(op.title.length > 0)
+    if (op.options.duration) {
+      assert.equal(op.options.duration.required, true, `${name} needs its duration`)
+      assert.equal(op.time.passiveFrom, 'duration')
+      assert.equal(op.time.passive, 0, `${name}: the passive part comes from the duration option only`)
+    }
+  }
+  for (const name of ['chop', 'dice', 'mince', 'cut']) assert.deepEqual(catalogue[name].requires, ['knife'])
+  for (const name of ['fry', 'saute', 'sear', 'toast', 'simmer', 'cook']) {
+    assert.equal(catalogue[name].attention, 'monitored')
+    assert.equal(catalogue[name].station, 'hob')
+    assert.deepEqual(catalogue[name].requires, ['hot-pan'])
+  }
+  assert.equal(catalogue.fry.completion.urgency, 'critical')
+  assert.equal(catalogue.simmer.checkInterval, 600, "a stir every 10 min (review 1 P3-8: 20 checks for one stew)")
+  assert.equal(catalogue.roast.expand, 'bake-in-oven')
+  assert.deepEqual(catalogue.roast.requires, ['oven'])
+  assert.equal(catalogue.rinse.station, 'sink')
+  assert.equal(catalogue.marinate.station, 'fridge')
+  assert.equal(catalogue.shape.divisible, 'units')
+  assert.equal(catalogue.scoop.time.model, 'per-unit')
+
+  const fry = { operation: 'fry', options: { duration: { number: 4, unit: 'minutes' } } }
+  assert.deepEqual(durations(catalogue.fry, fry, 4), { active: 30 + 10 * 4, passive: 240 })
+  const rest = { operation: 'rest', options: { duration: { number: 10 } } }
+  assert.deepEqual(durations(catalogue.rest, rest, 1), { active: 0, passive: 600 })
 })
 
 test('loader defaults', () => {
@@ -108,8 +148,12 @@ test('loader defaults', () => {
 
 test('durations: time models', () => {
   const task = { operation: 'measure', options: { amount: { number: 500, unit: 'grams' } } }
-  assert.deepEqual(durations(catalogue.measure, task, 1), { active: 60, passive: 0 })
-  assert.deepEqual(durations(catalogue.measure, task, 4), { active: 120, passive: 0 })
+  // measuring by the kind of amount: weighing 40 s (sub-linear in units)
+  assert.deepEqual(durations(catalogue.measure, task, 1), { active: 40, passive: 0 })
+  assert.deepEqual(durations(catalogue.measure, task, 4), { active: 80, passive: 0 })
+  const spoon = { operation: 'measure', options: { amount: { number: 1, unit: 'tsp' } } }
+  assert.deepEqual(durations(catalogue.measure, spoon, 1), { active: 20, passive: 0 })
+  assert.deepEqual(durations(catalogue.measure, { operation: 'measure', options: {} }, 1), { active: 45, passive: 0 })
   assert.deepEqual(durations(catalogue.spherify, { operation: 'spherify', options: {} }, 64), { active: 960, passive: 0 })
   assert.deepEqual(durations(catalogue.split, { operation: 'split', options: {} }, 64), { active: 30 + 3 * 64, passive: 0 })
   assert.deepEqual(durations(catalogue.enjoy, { operation: 'enjoy', options: {} }, 10), { active: 180, passive: 0 })

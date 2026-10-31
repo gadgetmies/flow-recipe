@@ -263,6 +263,8 @@ export function dispatch(graph, session, windows, opts = {}) {
     if (!(task.batch && task.unitStream)) return Infinity
     const buf = graph.buffers.find((b) => b.carrier === type && (b.from === task.id || b.to === task.id))
     let cap = buf ? buf.capPerCarrier : null
+    // the task's own tool capacity (the recipe's when it states one) before the kitchen default
+    if (!cap) { const own = (task.tools || []).find((x) => x.type === type && x.capacity && String(x.capacity.unit).toLowerCase() === task.unitStream); if (own) cap = own.capacity.number }
     if (!cap) { const inv = (session.inventory.tools || []).find((x) => x.type === type); if (inv && inv.capacity && inv.capacity.unit === task.unitStream) cap = inv.capacity.number }
     return cap ? Math.max(1, Math.ceil(task.units / cap)) : 1
   }
@@ -271,9 +273,19 @@ export function dispatch(graph, session, windows, opts = {}) {
 
   function compatibleDirty(inst, task) {
     // a dirty tool last used on the same food (same dish and same recipe step or unit stream) needs no cleaning
+    // or on the food this task continues (the whisk that creamed the butter beats in the egg)
     const u = inst.lastUse
     if (!u || u.dishId !== task.dishId) return false
-    return u.recipeTaskId === task.recipeTaskId || (!!task.unitStream && u.unitStream === task.unitStream)
+    return u.recipeTaskId === task.recipeTaskId || (!!task.unitStream && u.unitStream === task.unitStream) || (!!u.taskId && directFoodPreds(task.id).has(u.taskId))
+  }
+  const foodPreds = new Map()
+  function directFoodPreds(id) {
+    if (!foodPreds.size) for (const e of graph.edges) {
+      if (e.kind !== 'fs' && e.kind !== 'stream') continue
+      if (!foodPreds.has(e.to)) foodPreds.set(e.to, new Set())
+      foodPreds.get(e.to).add(e.from)
+    }
+    return foodPreds.get(id) || new Set()
   }
 
   function requiredToolBindings(r, t) {
@@ -416,6 +428,31 @@ export function dispatch(graph, session, windows, opts = {}) {
     return best
   }
 
+  function needsAppointment(task) {
+    const c = task.completion
+    return !!c && task.passive > 0 && c.urgency !== 'relaxed' && task.passive >= (policy.minAppointmentPassiveSeconds ?? 180)
+  }
+  function appointmentFollow(r) {
+    const fsSucc = (succ.get(r.id) || []).filter((e) => e.kind === 'fs').map((e) => rt.get(e.to)).filter((s) => s && s.status === 'pending')
+    return fsSucc.filter((s) => (s.task.active || 0) <= APPOINTMENT_MAX_ACTIVE && (pred.get(s.id) || []).length === 1).sort((a, b) => byId(a.id, b.id))[0] || null
+  }
+  function appointmentDuration(r) {
+    const c = r.task.completion || {}
+    const follow = appointmentFollow(r)
+    return follow ? (follow.task.active || c.duration || 30) : (c.duration || 30)
+  }
+  /** Whether somebody (the placer `placer` included, who is free again by then) could take a timer ending at `end`. */
+  function holderPossible(placer, end, dur) {
+    for (const q of participants) {
+      if (q.timers.filter((x) => x.firesAt > end - policy.leadSeconds).length >= q.maxTimers) continue
+      if (!availableThrough(q, end - policy.leadSeconds, end + dur)) continue
+      if (laneBlockOverlap(q, end - policy.leadSeconds, end + dur)) continue
+      if (q !== placer && q.freeAt > end - policy.leadSeconds + 1e-9) continue
+      return true
+    }
+    return false
+  }
+
   function placeAppointment(r) {
     const c = r.task.completion
     if (!c || !(r.task.passive > 0) || c.urgency === 'relaxed') return
@@ -426,8 +463,7 @@ export function dispatch(graph, session, windows, opts = {}) {
       return
     }
     // successor that is the completion follow-up (take-out) when short; otherwise synthetic item
-    const fsSucc = (succ.get(r.id) || []).filter((e) => e.kind === 'fs').map((e) => rt.get(e.to)).filter((s) => s && s.status === 'pending')
-    const follow = fsSucc.filter((s) => (s.task.active || 0) <= APPOINTMENT_MAX_ACTIVE && (pred.get(s.id) || []).length === 1).sort((a, b) => byId(a.id, b.id))[0] || null
+    const follow = appointmentFollow(r)
     const dur = follow ? (follow.task.active || c.duration || 30) : (c.duration || 30)
     const holder = chooseHolder(r, r.end, dur, follow ? follow.id : `${r.id}@done`)
     if (!holder) {
@@ -496,15 +532,27 @@ export function dispatch(graph, session, windows, opts = {}) {
     const firstOut = task.outputs && task.outputs[0] ? task.outputs[0].id : null
     const myKey = firstOut ? bindKey(task, firstOut) : carrierKey(task, 'x')
     const returns = new Set(task.returnsTools || [])
+    // a returned type that the task also reserves (the result stays in one of them, e.g. the batter stays in the bowl
+    // and the emptied dry-ingredients bowl goes back): keep `qty` instances with the result and return the others
+    const keepOfType = {}
+    for (const need of task.tools || []) {
+      if (!returns.has(need.type) || need.mode !== 'reserved') continue
+      const n = (bind.bindings || []).filter((b) => b.type === need.type).length
+      keepOfType[need.type] = Math.max(0, Math.min(Math.max(1, need.qty || 1), n - 1))
+    }
     for (const b of bind.bindings || []) {
       const inst = b.instance
       const isCarrier = carrierTypes.has(b.type)
+      let returned = returns.has(b.type)
+      if (returned && keepOfType[b.type] > 0) { keepOfType[b.type]--; returned = false }
       let binding = null
-      if ((b.reserved || b.inherited || isCarrier) && !returns.has(b.type)) binding = myKey
+      if ((b.reserved || b.inherited || isCarrier) && !returned) binding = myKey
       const until = binding ? end : activeEnd
       tools.acquire(inst, { until, binding })
-      inst.lastUse = { dishId: task.dishId, recipeTaskId: task.recipeTaskId, unitStream: task.unitStream || null }
-      r.boundTools.push({ instance: inst, soil: b.soil, binding, reserved: !!binding, type: b.type, returned: returns.has(b.type) })
+      // a returned instance no longer holds the food it held before
+      if (returned) inst.binding = null
+      inst.lastUse = { dishId: task.dishId, taskId: task.id, recipeTaskId: task.recipeTaskId, unitStream: task.unitStream || null }
+      r.boundTools.push({ instance: inst, soil: b.soil, binding, reserved: !!binding, type: b.type, returned })
       toolRefs.push({ type: b.type, instanceId: inst.id })
     }
     // tools bound to our inputs that we do not list: carriers travel with the food; other reserved tools are freed now
@@ -568,7 +616,12 @@ export function dispatch(graph, session, windows, opts = {}) {
     const hasSuccessors = (succ.get(r.id) || []).some((e) => { const s = rt.get(e.to); return s && s.task.kind !== 'sink' })
     for (const b of r.boundTools) {
       const inst = b.instance
-      if (b.returned) continue
+      if (b.returned) {
+        // returned at the end of the active part (already released there when the task has a passive phase); the
+        // binding was dropped when the task started, the soil level is left as it is (as before)
+        if (!r.activeReleased) tools.release(inst, r.activeEnd, 'none', { unbind: false })
+        continue
+      }
       if (b.reserved && !returns.has(inst.type) && hasSuccessors) {
         // the tool stays with the result until a consumer takes it (and either carries it on, returns it or frees it);
         // a streaming consumer may already have re-bound it, so never overwrite the binding here
@@ -654,6 +707,13 @@ export function dispatch(graph, session, windows, opts = {}) {
         const bind = requiredToolBindings(r, t)
         if (!bind.ok && bind.needsCleaning) { makeCleaningTask(bind.needsCleaning, task, t); continue }
         if (!bind.ok) { r.waitedFor = { type: bind.missingType, since: r.readySince }; continue }
+        // a follow-up that slipped past its slot (its tool was busy) must not run into what the holder does next
+        if (p.freeAt > Math.max(t, r.fixedStart) + 1e-9) {
+          const s0 = Math.max(t, r.fixedStart)
+          const e0 = s0 + (task.active || 0) / p.speed
+          const clash = items.find((it) => it.participantId === p.id && it.kind !== 'blocked' && it.start < e0 - 1e-9 && it.end > s0 + 1e-9)
+          if (clash) { waitingTimes.push(clash.end); continue }
+        }
         place(r, p, Math.max(t, r.fixedStart), { fixed: true })
         placedAny = true
         continue
@@ -674,6 +734,8 @@ export function dispatch(graph, session, windows, opts = {}) {
       }
       // candidates
       refreshExpected()
+      const needsHolder = needsAppointment(task)
+      const holderDur = needsHolder ? appointmentDuration(r) : 0
       let cands = []
       for (const p of participants) {
         if (p.freeAt > t + 1e-9) continue
@@ -688,6 +750,9 @@ export function dispatch(graph, session, windows, opts = {}) {
           if (block.start - s >= policy.minChunkSeconds && a > 0) { /* could do part? not preemptible → no */ }
           continue
         }
+        // a timer whose end nobody could handle (every lane has another appointment then) would become an interrupt;
+        // floating work waits for a start whose end someone can take care of
+        if (needsHolder && t < r.window.LS - 1e-9 && !holderPossible(p, s + a + (task.passive || 0), holderDur)) { waitingTimes.push(Math.min(r.window.LS, t + 30)); continue }
         const continuesChain = p.lastContext && p.lastContext.dish === task.dishId && task.unitStream && p.lastContext.station === (task.context?.station || 'counter')
         let cost = assignmentCost({ p, task, setup, loads, expected, policy, isCleaning: !!r.isCleaning, continuesChain })
         // stability hook (online re-plan): the previous plan's assignee within the horizon gets W_stable × 60 off
@@ -743,6 +808,9 @@ export function dispatch(graph, session, windows, opts = {}) {
           }
         }
       }
+      // a chunk must fit before the next appointment of its participant (the lane's blocks); otherwise the task is
+      // placed whole below, where it can be split around the block
+      if (chunks && chunks.some(({ from, to, cand }) => laneBlockOverlap(cand.p, t + cand.setup, t + cand.setup + (task.perUnit || 0) * (to - from + 1) / cand.p.speed, { soft: task.preemptible === 'anywhere' }))) chunks = null
       if (chunks) {
         r.chunks = []
         for (let i = 0; i < chunks.length; i++) {
@@ -772,18 +840,42 @@ export function dispatch(graph, session, windows, opts = {}) {
         }
         const p = best.p
         const total = best.a
+        {
+          // a remainder that would run into the next block (another timer, the next check) is not worth a split: the
+          // cook would have to stop twice; start the whole task after the blocks instead
+          const rs = best.block.end + (task.resumeCost || 20)
+          if (laneBlockOverlap(p, rs, rs + (total - firstLen), { soft: task.preemptible === 'anywhere' })) continue
+        }
         const ratio = Math.min(1, firstLen / total)
         const unitsFirst = task.units > 1 ? Math.max(1, Math.floor(task.units * ratio)) : null
         // first segment
         const item1 = place(r, p, t, unitsFirst !== null ? { units: unitsFirst, chunkIndex: 1, chunkOf: { from: 1, to: unitsFirst } } : {})
         if (unitsFirst === null) { item1.end = best.block.start; r.activeEnd = best.block.start }
-        // second segment as a resume item
-        const resumeStart = best.block.end + (task.resumeCost || 20)
+        // the remainder resumes after the block; when a later block of the same lane (the next check of a seared pot,
+        // another timer) falls inside it, it fills the gaps between the blocks instead of jumping past them, so the
+        // cook never sits idle waiting for a slot that fits the whole remainder
         const remaining = unitsFirst !== null ? task.units - unitsFirst : null
         const remA = unitsFirst !== null ? (task.perUnit || 0) * remaining / p.speed : total - firstLen
-        const item2 = itemFor({ uuid: `${r.id}/c2`, taskId: r.id, kind: 'resume', participantId: p.id, start: resumeStart, end: resumeStart + remA, title: task.title, instructions: task.instructions, task, units: unitsFirst !== null ? { from: unitsFirst + 1, to: task.units, of: task.units } : null, dependencies: (pred.get(r.id) || []).map((e) => e.from) })
-        items.push(item2)
-        r.activeEnd = resumeStart + remA
+        const resumeCost = task.resumeCost || 20
+        const minGap = Math.min(remA, Math.max(30, policy.minChunkSeconds || 0))
+        const segments = []
+        let cursor = best.block.end + resumeCost
+        let left = remA
+        for (let guard = 0; guard < 200 && left > 1e-9; guard++) {
+          const next = laneBlockOverlap(p, cursor, cursor + left, { soft: task.preemptible === 'anywhere' })
+          if (!next) { segments.push({ start: cursor, end: cursor + left }); left = 0; break }
+          const gap = next.start - cursor
+          // units are not cut into fractions: a per-unit remainder waits for a slot that fits all of it
+          if (unitsFirst === null && gap >= minGap - 1e-9 && gap > 1e-9) { segments.push({ start: cursor, end: next.start }); left -= gap }
+          cursor = next.end + resumeCost
+        }
+        if (left > 1e-9) segments.push({ start: cursor, end: cursor + left })
+        segments.forEach((seg, k) => {
+          const units = unitsFirst !== null ? { from: unitsFirst + 1, to: task.units, of: task.units } : null
+          items.push(itemFor({ uuid: `${r.id}/c${k + 2}`, taskId: r.id, kind: 'resume', participantId: p.id, start: seg.start, end: seg.end, title: task.title, instructions: task.instructions, task, units, dependencies: (pred.get(r.id) || []).map((e) => e.from) }))
+        })
+        const resumeEnd = segments[segments.length - 1].end
+        r.activeEnd = resumeEnd
         r.end = r.activeEnd + (task.passive || 0)
         p.freeAt = r.activeEnd
         p.load += remA

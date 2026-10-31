@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<recipe version="2" id="golden-pita-bread" ref="https://www.kingarthurbaking.com/recipes/golden-pita-bread-recipe">
+  <title>Golden pita bread</title>
+  <serving temperature="ambient"/>
+  <ingredients>
+    <ingredient id="flour">all-purpose flour</ingredient>
+    <ingredient id="yeast">instant yeast</ingredient>
+    <ingredient id="sugar">granulated sugar</ingredient>
+    <ingredient id="salt">table salt</ingredient>
+    <ingredient id="water">lukewarm water</ingredient>
+    <ingredient id="oil">vegetable oil</ingredient>
+    <ingredient id="dusting-flour">all-purpose flour for dusting</ingredient>
+  </ingredients>
+  <tools>
+    <tool id="kitchen-scale">kitchen scale</tool>
+    <tool id="large-bowl">large bowl<properties>
+        <property name="capacity"><numeric-value number="8" unit="l"/></property></properties></tool>
+    <tool id="spatula">spatula</tool>
+    <tool id="cover">cover</tool>
+    <tool id="knife">bench knife</tool>
+    <tool id="rolling-pin">rolling pin</tool>
+    <tool id="baking-stone">baking stone<properties>
+        <property name="capacity"><numeric-value number="2" unit="pita"/></property></properties></tool>
+    <tool id="towel">clean kitchen towel</tool>
+  </tools>
+  <tasks>
+    <task id="measure-flour" operation="measure">
+      <options><option name="amount"><numeric-value number="360" unit="g"/></option></options>
+      <inputs><input ref="flour"/></inputs>
+      <tools><tool ref="kitchen-scale" soil="none"/><tool ref="large-bowl" reserved="true"/></tools>
+      <outputs><output id="flour-for-dough">flour</output></outputs>
+    </task>
+    <task id="measure-yeast" operation="measure">
+      <options><option name="amount"><!-- converted from 2 teaspoons (instant yeast) --><numeric-value number="2" unit="tsp"/></option></options>
+      <inputs><input ref="yeast"/></inputs>
+      <outputs><output id="yeast-for-dough">yeast</output></outputs>
+    </task>
+    <task id="measure-sugar" operation="measure">
+      <options><option name="amount"><!-- converted from 2 teaspoons (granulated sugar) --><numeric-value number="2" unit="tsp"/></option></options>
+      <inputs><input ref="sugar"/></inputs>
+      <outputs><output id="sugar-for-dough">sugar</output></outputs>
+    </task>
+    <task id="measure-salt" operation="measure">
+      <options><option name="amount"><numeric-value number="9" unit="g"/></option></options>
+      <inputs><input ref="salt"/></inputs>
+      <outputs><output id="salt-for-dough">salt</output></outputs>
+    </task>
+    <task id="measure-water" operation="measure">
+      <options><option name="amount"><numeric-value number="227" unit="g"/></option></options>
+      <inputs><input ref="water"/></inputs>
+      <tools><tool ref="kitchen-scale" soil="none"/></tools>
+      <outputs><output id="water-for-dough" hold="10">lukewarm water</output></outputs>
+    </task>
+    <task id="measure-oil" operation="measure">
+      <options><option name="amount"><numeric-value number="25" unit="g"/></option></options>
+      <inputs><input ref="oil"/></inputs>
+      <tools><tool ref="kitchen-scale" soil="none"/></tools>
+      <outputs><output id="oil-for-dough">oil</output></outputs>
+    </task>
+    <task id="mix-dough" operation="mix">
+      <inputs><input ref="flour-for-dough"/><input ref="yeast-for-dough"/><input ref="sugar-for-dough"/>
+        <input ref="salt-for-dough"/><input ref="water-for-dough"/><input ref="oil-for-dough"/></inputs>
+      <tools><tool ref="large-bowl" reserved="true" soil="wash"/><tool ref="spatula" soil="wash"/></tools>
+      <outputs><output id="shaggy-dough">shaggy dough</output></outputs>
+      <instructions>Combine the <input ref="flour-for-dough"/> with the <input ref="yeast-for-dough"/>,
+        <input ref="sugar-for-dough"/>, <input ref="salt-for-dough"/>, <input ref="water-for-dough"/> and
+        <input ref="oil-for-dough"/>, mixing to a shaggy, rough dough.</instructions>
+    </task>
+    <task id="knead-dough" operation="knead">
+      <inputs><input ref="shaggy-dough"/></inputs>
+      <tools><tool ref="large-bowl" reserved="true" soil="wash"/></tools>
+      <outputs><output id="smooth-dough" volume="1.2">smooth dough</output></outputs>
+      <instructions>Knead the <input ref="shaggy-dough"/> by hand for 10 minutes (or 5 minutes with a mixer) until
+        smooth, then put it back in the <tool ref="large-bowl"/>.</instructions>
+    </task>
+    <task id="rise-dough" operation="raise">
+      <options><option name="duration"><numeric-value number="60" unit="minutes"/></option></options>
+      <inputs><input ref="smooth-dough"/><input ref="cover"/></inputs>
+      <tools><tool ref="large-bowl" reserved="true"/></tools>
+      <outputs><output id="risen-dough" hold="30">risen dough</output></outputs>
+      <instructions>Cover the <input ref="smooth-dough"/> and let it rest until noticeably puffy, about
+        <option name="duration"/>.</instructions>
+    </task>
+    <task id="divide-dough" operation="split">
+      <options><option name="parts"><numeric-value number="8"/></option></options>
+      <inputs><input ref="risen-dough"/><input ref="dusting-flour"/></inputs>
+      <tools><tool ref="knife"/></tools>
+      <outputs><output id="dough-piece" amount="8" unit="pita">piece of dough (about 80 g)</output><tool ref="large-bowl"/></outputs>
+      <instructions>Turn the <input ref="risen-dough"/> onto a lightly floured surface, pat it into a flat round and
+        divide it with the <tool ref="knife"/> into <option name="parts"/> equal pieces of about 80 g.</instructions>
+    </task>
+    <task id="preshape-rounds" operation="spherify">
+      <inputs><input ref="dough-piece"/></inputs>
+      <outputs><output id="dough-round" amount="8" unit="pita">dough round</output></outputs>
+      <instructions>Gently preshape each <input ref="dough-piece"/> into a round.</instructions>
+    </task>
+    <task id="rest-rounds" operation="rest">
+      <options><option name="duration"><numeric-value number="15" unit="minutes"/></option></options>
+      <inputs><input ref="dough-round"/></inputs>
+      <outputs><output id="rested-round" amount="8" unit="pita" hold="30">rested dough round</output></outputs>
+      <instructions>Cover the <input ref="dough-round"/> and let them rest at room temperature for
+        <option name="duration"/>.</instructions>
+    </task>
+    <task id="roll-out-rounds" operation="shape">
+      <inputs><input ref="rested-round"/></inputs>
+      <tools><tool ref="rolling-pin" soil="rinse"/></tools>
+      <outputs><output id="rolled-pita" amount="8" unit="pita" hold="15">rolled-out pita</output></outputs>
+      <instructions>On a lightly floured surface, roll each <input ref="rested-round"/> with the
+        <tool ref="rolling-pin"/> into a 7 inch round about 1/8 inch thick.</instructions>
+    </task>
+    <task id="load-onto-stone" operation="place-on-sheet">
+      <inputs><input ref="rolled-pita"/></inputs>
+      <tools><tool ref="baking-stone" reserved="true" soil="none"/></tools>
+      <outputs><output id="pita-on-stone" amount="8" unit="pita">pita on the stone</output></outputs>
+      <instructions>Place two <input ref="rolled-pita"/> on a floured peel and slide them onto the hot
+        <tool ref="baking-stone"/>.</instructions>
+    </task>
+    <task id="bake-pitas" operation="bake-in-oven">
+      <options>
+        <option name="temperature"><!-- converted from 500 fahrenheit --><numeric-value number="260" unit="celsius"/></option>
+        <option name="duration"><numeric-value number="3" unit="minutes"/></option>
+      </options>
+      <inputs><input ref="pita-on-stone"/></inputs>
+      <tools><tool ref="baking-stone" reserved="true" soil="none"/></tools>
+      <outputs><output id="baked-pita" amount="8" unit="pita" hold="5">baked pita</output></outputs>
+      <instructions>Bake the <input ref="pita-on-stone"/> on the top-third rack until puffed and the tops look set,
+        3 to 4 minutes (preheat the stone for at least 30 minutes).</instructions>
+    </task>
+    <task id="wrap-pitas" operation="transfer">
+      <inputs><input ref="baked-pita"/></inputs>
+      <tools><tool ref="towel" reserved="true" soil="none"/></tools>
+      <outputs><output id="pita" amount="8" unit="pita" final="true">warm pita bread</output><tool ref="baking-stone"/></outputs>
+      <instructions>Lift the <input ref="baked-pita"/> off the stone with tongs and stack them in the
+        <tool ref="towel"/>, wrapped, to keep them soft and warm.</instructions>
+    </task>
+  </tasks>
+</recipe>
