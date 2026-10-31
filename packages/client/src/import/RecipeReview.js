@@ -315,6 +315,7 @@ export default function RecipeReview({
   onSave,
   saving,
   saveError,
+  notice,
 }) {
   const summary = check?.summary || {}
   const serving = summary.serving
@@ -411,7 +412,8 @@ export default function RecipeReview({
                 'From pasted text'
               )}
               {source.structured ? ' · recipe data found on the page' : ''}
-              {result?.attempts > 1 ? ` · ${result.attempts} AI attempts` : ''}
+              {result?.llm?.provider === 'claude-connector' ? ' · written by Claude' : ''}
+              {result?.llm?.provider !== 'claude-connector' && result?.attempts > 1 ? ` · ${result.attempts} AI attempts` : ''}
               {result?.llm?.model ? ` · ${result.llm.model}` : ''}
             </Typography>
           </Stack>
@@ -448,6 +450,7 @@ export default function RecipeReview({
       <Divider />
       {saveError}
       <Paper elevation={3} sx={{ position: 'sticky', bottom: 8, p: 1.5, zIndex: 2 }}>
+        {notice && <Box sx={{ mb: 1.5 }}>{notice}</Box>}
         <Button variant="contained" size="large" fullWidth startIcon={<SaveIcon />} disabled={!!blocker || saving || busy} onClick={onSave}>
           {saving ? 'Saving…' : 'Save recipe'}
         </Button>

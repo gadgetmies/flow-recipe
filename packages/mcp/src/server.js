@@ -1,13 +1,14 @@
 // The flow-recipe MCP server: tools for an agent (the agent is the LLM) to turn a recipe from the web into scheduler
 // friendly recipe XML. All deterministic work (fetching, unit conversion, validation, dry-run planning) is done by
-// @flow-recipe/importer and @flow-recipe/scheduler; saving goes to the flow-recipe server or a local directory.
+// @flow-recipe/importer and @flow-recipe/scheduler; reading and saving recipes goes through a backend adapter
+// (backend.js): the flow-recipe REST API / a local directory for the stdio server, or the flow-recipe server's own
+// services for the remote connector (packages/server/src/services/mcpRemote.js).
 
-import fs from 'node:fs/promises'
-import path from 'node:path'
 import { readFileSync } from 'node:fs'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import { apiRequest, serverConfig, ApiError } from './api.js'
+import { ApiError } from './api.js'
+import { createHttpBackend } from './backend.js'
 import * as deps from './deps.js'
 import {
   jsonResult,
@@ -19,9 +20,8 @@ import {
   isValidRecipeId,
   isServerRecipeId,
   sniffRecipeAttributes,
-  kebab,
 } from './format.js'
-import { measurementRules, WORKFLOW } from './text.js'
+import { measurementRules, WORKFLOW, HANDOFF_WORKFLOW, STDIO_INSTRUCTIONS, REMOTE_INSTRUCTIONS } from './text.js'
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'))
 
@@ -43,6 +43,10 @@ function safe(handler) {
         return errorResult(error.message, { hint: error.hint, status: error.status ?? undefined, response: trimDeep(error.body ?? undefined) })
       }
       if (error instanceof deps.DependencyError) return errorResult(error.message, { hint: error.hint })
+      // Backend errors with an actionable hint and/or an HTTP-like status (e.g. the remote backend's services).
+      if (error && (error.hint || Number.isInteger(error.status))) {
+        return errorResult(error.message, { hint: error.hint || undefined, status: error.status ?? undefined })
+      }
       return errorResult(error, { hint: 'Unexpected failure in the flow-recipe MCP server; check the arguments and try again.' })
     }
   }
@@ -102,45 +106,21 @@ async function runCheck(xml, { precisionScale = false, id } = {}) {
   return await checkRecipeXml(xml, options)
 }
 
-async function localRecipeIds(dir) {
-  try {
-    return (await fs.readdir(dir)).filter(f => f.endsWith('.xml') && f !== 'operations.xml').map(f => f.slice(0, -4))
-  } catch (error) {
-    if (error.code === 'ENOENT') return []
-    throw error
-  }
-}
-
-async function listLocalRecipes(dir) {
-  const out = []
-  for (const id of await localRecipeIds(dir)) {
-    let title = null
-    try {
-      title = sniffRecipeAttributes(await fs.readFile(path.join(dir, `${id}.xml`), 'utf-8')).title || null
-    } catch {
-      // unreadable file: list it without a title
-    }
-    out.push({ id, title, source: 'local', path: path.join(dir, `${id}.xml`) })
-  }
-  return out
-}
-
 /**
  * Creates the MCP server.
- * @param {{ env?: object, fetch?: typeof fetch }} options
+ * @param {{ env?: object, fetch?: typeof fetch, backend?: object, instructions?: string }} options
+ *   `backend` — where recipes are read and saved (see backend.js); default: the flow-recipe REST API from `env`.
+ *   A backend without `startServerImport` hides import_recipe_with_server_llm; one without the pending-import
+ *   methods hides the handoff tools.
  */
-export function createFlowRecipeServer({ env = process.env, fetch = globalThis.fetch } = {}) {
-  const config = serverConfig(env)
-  const api = (method, p, options = {}) => apiRequest(config, method, p, { fetch, ...options })
+export function createFlowRecipeServer({ env = process.env, fetch = globalThis.fetch, backend = null, instructions = null } = {}) {
+  const store = backend || createHttpBackend({ env, fetch })
+  const remote = store.kind === 'remote'
+  const hasHandoff = ['listPendingImports', 'getPendingImport', 'submitImport'].every(m => typeof store[m] === 'function')
 
   const server = new McpServer(
     { name: 'flow-recipe', title: 'Flow Recipe', version: pkg.version },
-    {
-      instructions:
-        'Tools for turning recipes (URL or text) into flow-recipe XML for the multi-cook scheduler. You write the XML; ' +
-        'the tools fetch sources, convert units, validate, dry-run the scheduler and upload. Start with ' +
-        'get_authoring_guide, finish with check_recipe (no errors) and upload_recipe.',
-    }
+    { instructions: instructions || (remote ? REMOTE_INSTRUCTIONS : STDIO_INSTRUCTIONS) }
   )
 
   // ---- guide and catalogue ------------------------------------------------------------------------------------
@@ -161,6 +141,7 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
     safe(async ({ precisionScale = false, includeCatalogue = true }) => {
       const { loadGuide, catalogueSummary } = await deps.importer()
       const parts = [await loadGuide(), measurementRules({ precisionScale }), WORKFLOW]
+      if (hasHandoff) parts.push(HANDOFF_WORKFLOW)
       if (includeCatalogue) parts.push(`## Operation catalogue\n\n${catalogueSummary(await deps.catalogue())}`)
       return textResult(parts.join('\n\n---\n\n'))
     })
@@ -363,43 +344,26 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
     'list_recipes',
     {
       title: 'List recipes',
-      description: `Lists the recipes on the flow-recipe server (${config.base})${
-        config.recipesDir ? ` and in the local directory ${config.recipesDir}` : ''
-      }: built-in and imported, with ids and titles.`,
+      description: `Lists the recipes in ${store.target}: built-in and imported, with ids and titles.`,
       inputSchema: {},
-      annotations: { readOnlyHint: true, openWorldHint: true },
+      annotations: { readOnlyHint: true, openWorldHint: !remote },
     },
-    safe(async () => {
-      if (!config.recipesDir) return jsonResult(await api('GET', '/api/recipes'))
-      const local = await listLocalRecipes(config.recipesDir)
-      try {
-        const remote = await api('GET', '/api/recipes', { timeoutMs: 5000 })
-        return jsonResult({ server: remote, local })
-      } catch (error) {
-        return jsonResult({ server: null, serverError: error.message, local })
-      }
-    })
+    safe(async () => jsonResult(await store.listRecipes()))
   )
 
   server.registerTool(
     'get_recipe',
     {
       title: 'Get a recipe',
-      description: 'Returns the XML of a recipe by id (from FLOW_RECIPES_DIR when set and present, else from the server). Useful as a modelling example.',
+      description: remote
+        ? 'Returns the XML of a recipe by id. Useful as a modelling example (e.g. "buns").'
+        : 'Returns the XML of a recipe by id (from FLOW_RECIPES_DIR when set and present, else from the server). Useful as a modelling example.',
       inputSchema: { id: z.string().min(1).describe('Recipe id, e.g. "buns"') },
-      annotations: { readOnlyHint: true, openWorldHint: true },
+      annotations: { readOnlyHint: true, openWorldHint: !remote },
     },
     safe(async ({ id }) => {
       if (!isServerRecipeId(id)) return errorResult(`Invalid recipe id "${id}".`, { hint: 'Ids are letters, digits, - and _; use list_recipes.' })
-      if (config.recipesDir) {
-        try {
-          return textResult(await fs.readFile(path.join(config.recipesDir, `${id}.xml`), 'utf-8'))
-        } catch (error) {
-          if (error.code !== 'ENOENT') throw error
-        }
-      }
-      const xml = await api('GET', `/api/recipes/${encodeURIComponent(id)}`)
-      return textResult(typeof xml === 'string' ? xml : JSON.stringify(xml, null, 2))
+      return textResult(await store.getRecipe(id))
     })
   )
 
@@ -407,10 +371,13 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
     'upload_recipe',
     {
       title: 'Upload a recipe',
-      description:
-        'Checks the recipe locally (refuses when there are errors), then saves it: POST /api/recipes on the ' +
-        'flow-recipe server, or writes <FLOW_RECIPES_DIR>/<id>.xml when FLOW_RECIPES_DIR is set. Run check_recipe ' +
-        'and show the user a summary first.',
+      description: remote
+        ? 'Checks the recipe (refuses when there are errors), then saves it in the Flow Recipe app right away. For ' +
+          'chat-only imports; for an import request from the app (get_pending_import) use submit_import instead, so ' +
+          'the user reviews it in the app. Run check_recipe and show the user a summary first.'
+        : 'Checks the recipe locally (refuses when there are errors), then saves it: POST /api/recipes on the ' +
+          'flow-recipe server, or writes <FLOW_RECIPES_DIR>/<id>.xml when FLOW_RECIPES_DIR is set. Run check_recipe ' +
+          'and show the user a summary first.',
       inputSchema: {
         xml: xmlArg,
         id: z.string().optional().describe('Recipe id (lowercase kebab-case). Default: the recipe’s id attribute or derived from its title.'),
@@ -433,56 +400,11 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
           plan: check.plan && (check.plan.error || check.plan.diagnostics) ? { error: check.plan.error, diagnostics: check.plan.diagnostics } : undefined,
         })
       }
-      const title = check.title || attrs.title || null
-
-      if (config.recipesDir) {
-        const dir = path.resolve(config.recipesDir)
-        await fs.mkdir(dir, { recursive: true })
-        const existing = await localRecipeIds(dir)
-        let recipeId = id || (isValidRecipeId(attrs.id) ? attrs.id : null) || (isValidRecipeId(check.id) ? check.id : null)
-        if (!recipeId) {
-          const { suggestRecipeId } = await deps.importer()
-          recipeId = suggestRecipeId ? suggestRecipeId(title || 'recipe', existing) : kebab(title) || 'recipe'
-        }
-        if (!isValidRecipeId(recipeId)) return errorResult(`Cannot derive a valid id ("${recipeId}").`, { hint: 'Pass `id`.' })
-        const file = path.join(dir, `${recipeId}.xml`)
-        if (existing.includes(recipeId) && !overwrite) {
-          return errorResult(`${file} already exists.`, { hint: 'Pass overwrite: true to replace it, or choose another id.' })
-        }
-        // The saved document's root id always matches its file name / id.
-        const { setRootAttributes } = await deps.importer()
-        const stored = typeof setRootAttributes === 'function' ? setRootAttributes(xml, { id: recipeId }) : xml
-        await fs.writeFile(file, stored.endsWith('\n') ? stored : `${stored}\n`, 'utf-8')
-        return jsonResult({
-          saved: 'local',
-          id: recipeId,
-          title,
-          path: file,
-          warnings: check.warnings,
-          verdict: presentCheck(check).verdict,
-        })
-      }
-
-      const body = { xml }
-      const explicitId = id || (isValidRecipeId(attrs.id) ? attrs.id : null)
-      if (explicitId) body.id = explicitId
-      if (overwrite) body.overwrite = true
-      const response = await api('POST', '/api/recipes', { body, auth: true })
-      const savedId = response.id || explicitId
-      return jsonResult({
-        saved: 'server',
-        id: savedId,
-        title: response.title || title,
-        server: config.base,
-        recipeUrl: `${config.base}/api/recipes/${encodeURIComponent(savedId)}`,
-        startSession: `Open the flow-recipe app and pick "${response.title || title}", or open /?recipe=${savedId}`,
-        warnings: check.warnings,
-        verdict: presentCheck(response.check || check).verdict,
-      })
+      return jsonResult(await store.uploadRecipe({ xml, id, overwrite, precisionScale: !!precisionScale, check, attrs, verdict: c => presentCheck(c).verdict }))
     })
   )
 
-  server.registerTool(
+  if (typeof store.startServerImport === 'function') server.registerTool(
     'import_recipe_with_server_llm',
     {
       title: 'Import with the server’s LLM',
@@ -508,12 +430,12 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
       if (text) body.text = text
       if (servings) body.servings = servings
       if (notes) body.notes = notes
-      const { jobId } = await api('POST', '/api/import', { body, auth: true })
+      const { jobId } = await store.startServerImport(body)
       const deadline = Date.now() + timeoutSeconds * 1000
       let job = null
       while (Date.now() < deadline) {
         if (extra?.signal?.aborted) return errorResult('Cancelled.')
-        job = await api('GET', `/api/import/${encodeURIComponent(jobId)}`)
+        job = await store.getServerImportJob(jobId)
         if (job.status === 'done' || job.status === 'error') break
         await new Promise(resolve => setTimeout(resolve, Number(env.FLOW_IMPORT_POLL_MS) || 1000))
       }
@@ -536,6 +458,100 @@ export function createFlowRecipeServer({ env = process.env, fetch = globalThis.f
       })
     })
   )
+
+  // ---- "Import with Claude" handoff ---------------------------------------------------------------------------
+
+  if (hasHandoff) {
+    const requestId = z.string().min(1).max(100).describe('The import request id from the user’s message ("import recipe request <id>")')
+
+    server.registerTool(
+      'list_pending_imports',
+      {
+        title: 'List pending import requests',
+        description:
+          'Lists the recipe import requests the user started in the Flow Recipe app ("Import with Claude") that are ' +
+          'waiting for you (last 24 h, newest first). Use when the user asks to import "the recipe from the app" ' +
+          'without giving a request id.',
+        inputSchema: {},
+        annotations: { readOnlyHint: true, openWorldHint: false },
+      },
+      safe(async () => {
+        const requests = await store.listPendingImports()
+        return jsonResult({
+          requests,
+          next: requests.length
+            ? 'Call get_pending_import { id } for the request the user means (usually the newest).'
+            : 'No pending requests. Ask the user to start "Import with Claude" on the import page of the Flow Recipe app, or give you the recipe URL to import directly.',
+        })
+      })
+    )
+
+    server.registerTool(
+      'get_pending_import',
+      {
+        title: 'Get an import request',
+        description:
+          'Fetches an import request the user started in the Flow Recipe app and marks it as picked up: the recipe ' +
+          'URL or pasted text, whether the user has a precision scale, servings, notes, and the fetched recipe source. ' +
+          'Then author the XML and finish with submit_import (not upload_recipe).',
+        inputSchema: { id: requestId },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+      },
+      safe(async ({ id }) => {
+        const request = await store.getPendingImport(id)
+        const { sourceError, ...rest } = request
+        const out = trimDeep(rest, { maxString: 12000, maxArray: 200 })
+        if (sourceError) {
+          return errorResult(sourceError, {
+            hint:
+              'The site could not be fetched (it may block automated requests). Ask the user to paste the recipe text ' +
+              'on the import page of the Flow Recipe app and start "Import with Claude" again (or paste it here and ' +
+              'continue with fetch_recipe_source { text } and submit_import for this request).',
+            request: out,
+          })
+        }
+        out.next =
+          `Workflow: get_authoring_guide { precisionScale: ${!!request.precisionScale} } → write ONE complete <recipe version="2"> ` +
+          'document from `source` → convert_recipe_units → check_recipe until ok → submit_import { id, xml }. ' +
+          'Do not call upload_recipe for this request: the user reviews and saves it in the app.'
+        return jsonResult(out)
+      })
+    )
+
+    server.registerTool(
+      'submit_import',
+      {
+        title: 'Submit a recipe draft for an import request',
+        description:
+          'Submits your recipe XML for an import request from the app. The server converts units (with the request’s ' +
+          'precision-scale setting) and checks it; when there are no errors the draft is ready for the user to review ' +
+          'and save in the app. Returns the check: fix any errors and submit again (a new submission replaces the draft).',
+        inputSchema: { id: requestId, xml: xmlArg },
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+      },
+      safe(async ({ id, xml }) => {
+        const result = await store.submitImport({ id, xml })
+        const out = {
+          id: result.id,
+          status: result.status,
+          ready: !!result.ready,
+          recipeId: result.recipeId,
+          attempts: result.attempts,
+          conversions: Array.isArray(result.conversions) ? result.conversions.length : 0,
+          check: presentCheck(result.check),
+        }
+        if (result.ready) {
+          out.next =
+            'The draft is ready. Tell the user to go back to the Flow Recipe app to review and save the recipe ' +
+            '(the import page picks it up automatically). Give a short summary: ingredients, steps, estimated time with 1 and 3 cooks.'
+        } else {
+          if (result.keptPrevious) out.note = 'The app keeps showing the previous valid draft until a new draft passes the check.'
+          out.next = 'The draft has errors and was not handed to the app. Fix every error in `check.errors` and call submit_import again.'
+        }
+        return jsonResult(out)
+      })
+    )
+  }
 
   // ---- prompt and resource ------------------------------------------------------------------------------------
 

@@ -194,7 +194,7 @@ export default function SourceForm({ source, onSourceChange, llmInfo, llmInfoErr
             startIcon={<AutoAwesomeIcon />}
             disabled={submitting || (touched && !!blocker) || (!llmState.ready && !!llmInfo)}
           >
-            {submitting ? 'Starting…' : 'Import recipe'}
+            {submitting ? 'Starting…' : llmState.claude ? 'Import with Claude' : 'Import recipe'}
           </Button>
           {blocker && (touched || !llmState.ready) && (
             <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1, textAlign: 'center' }}>

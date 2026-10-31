@@ -24,6 +24,9 @@ const EXPECTED_TOOLS = [
   'get_recipe',
   'upload_recipe',
   'import_recipe_with_server_llm',
+  'list_pending_imports',
+  'get_pending_import',
+  'submit_import',
 ]
 
 async function connect(env = {}) {
@@ -72,6 +75,17 @@ function startFakeServer() {
       if (req.method === 'GET' && req.url === '/api/recipes/buns') {
         res.writeHead(200, { 'Content-Type': 'application/xml' })
         return res.end(BUNS)
+      }
+      if (req.url.startsWith('/api/import/claude')) {
+        if (req.headers.authorization !== 'Bearer connector-secret-0123456789abcdef') return send(401, { error: 'Unauthorized' })
+        if (req.method === 'GET' && req.url === '/api/import/claude') return send(200, [{ id: 'req-1', url: 'https://example.com/buns', createdAt: 1, status: 'pending' }])
+        if (req.method === 'POST' && req.url === '/api/import/claude/req-1/claim') {
+          return send(200, { id: 'req-1', status: 'claimed', url: 'https://example.com/buns', text: null, precisionScale: true, servings: null, notes: null, source: { title: 'Buns', ingredients: [] } })
+        }
+        if (req.method === 'POST' && req.url === '/api/import/claude/gone/claim') return send(410, { error: 'Import request gone was cancelled in the app.', hint: 'Ask the user to start a new import.' })
+        if (req.method === 'POST' && req.url === '/api/import/claude/req-1/draft') {
+          return send(200, { id: 'req-1', status: 'ready', ready: true, recipeId: 'buns-2', attempts: 1, check: { ok: true, errors: [], warnings: [], plan: null }, conversions: [] })
+        }
       }
       if (req.method === 'POST' && req.url === '/api/import') return send(202, { jobId: 'job-1' })
       if (req.method === 'GET' && req.url === '/api/import/job-1') {
@@ -326,5 +340,31 @@ describe('flow-recipe MCP server with the importer', () => {
     } finally {
       await local.close()
     }
+  })
+
+  test('handoff tools call the server with the connector secret', async () => {
+    const handoff = await connect({ FLOW_RECIPE_SERVER: fake.url, FLOW_MCP_SECRET: 'connector-secret-0123456789abcdef' })
+    try {
+      const list = json(await handoff.callTool({ name: 'list_pending_imports', arguments: {} }))
+      assert.equal(list.requests[0].id, 'req-1')
+      const request = json(await handoff.callTool({ name: 'get_pending_import', arguments: { id: 'req-1' } }))
+      assert.equal(request.precisionScale, true)
+      assert.match(request.next, /precisionScale: true/)
+      const submitted = json(await handoff.callTool({ name: 'submit_import', arguments: { id: 'req-1', xml: BUNS } }))
+      assert.equal(submitted.ready, true)
+      assert.match(submitted.next, /back to the Flow Recipe app/)
+      const gone = await handoff.callTool({ name: 'get_pending_import', arguments: { id: 'gone' } })
+      assert.equal(gone.isError, true)
+      assert.equal(json(gone).status, 410)
+      assert.match(json(gone).hint, /new import/)
+    } finally {
+      await handoff.close()
+    }
+  })
+
+  test('handoff tools explain a missing FLOW_MCP_SECRET', async () => {
+    const result = await client.callTool({ name: 'list_pending_imports', arguments: {} })
+    assert.equal(result.isError, true)
+    assert.match(json(result).hint, /FLOW_MCP_SECRET/)
   })
 })

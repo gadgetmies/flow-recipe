@@ -12,6 +12,25 @@ scheduler dry run and the upload. Never do unit arithmetic in your head when a t
 If the `flow-recipe` tools are not available, use the **fallback without MCP** at the end of this file — the
 workflow is the same.
 
+The same tools are also available as the **Flow Recipe custom connector** (remote MCP at
+`https://<app>/mcp/<secret>`, e.g. in claude.ai or Claude Desktop); the workflow below is identical.
+
+## 0. Import requests from the app ("import recipe request <id>")
+
+When the user's message is like "Use the Flow Recipe connector to import recipe request <id> (…)" — the app's
+**Import with Claude** button sends this — the request already holds everything:
+
+1. `get_pending_import { id }` (if the user mentions a request but no id, `list_pending_imports` and take the newest).
+   It returns the URL or pasted text, `precisionScale` (do **not** ask about the scale again), `servings`, `notes`
+   and the fetched `source`. If it reports that the page could not be fetched, ask the user to paste the recipe text
+   (here or in the app) and continue with `fetch_recipe_source { text }`.
+2. Do steps 2–6 below (guide, draft, convert, check until ok, short summary) — no questions unless the source is
+   genuinely ambiguous.
+3. Finish with `submit_import { id, xml }` instead of `upload_recipe`. If `ready` is false, fix every error in
+   `check.errors` and submit again (a new submission replaces the draft). When `ready` is true, tell the user to go
+   back to the Flow Recipe app to review and save the recipe — the import page picks the draft up by itself.
+   Errors such as "cancelled", "expired" or "already saved" mean the request is closed: tell the user, do not retry.
+
 ## 1. Get the source and the one question
 
 1. Take the recipe URL or pasted text from the user's message. If there is neither, ask for it (one message).
@@ -153,6 +172,8 @@ Call `upload_recipe { xml, id }`. It re-checks and refuses on errors. Results:
 - Server unreachable → offer to start it (`yarn start` in the repo) or save the file locally: write it to
   `packages/server/src/recipes/<id>.xml` (the built-in recipe folder) or wherever the user wants, or run the MCP
   with `FLOW_RECIPES_DIR` set.
+
+For an import request from the app (section 0) use `submit_import` instead — the user saves it in the app.
 
 If the server has its own LLM configured and the user prefers it, `import_recipe_with_server_llm { url }` runs the
 server's import; review its `check` and still upload with `upload_recipe`.

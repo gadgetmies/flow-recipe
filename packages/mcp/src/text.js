@@ -41,3 +41,29 @@ export const WORKFLOW = `## Workflow: create a flow-recipe recipe from a URL or 
 7. upload_recipe { xml, id? } (saves to the server, or to FLOW_RECIPES_DIR). Report the id and how to start a
    session with it (\`/?recipe=<id>\`).
 `
+
+export const HANDOFF_WORKFLOW = `## Import requests from the app ("Import with Claude")
+
+When the user's message says "import recipe request <id>" (or asks for the recipe they started in the app):
+1. get_pending_import { id } (list_pending_imports when there is no id). It returns the URL or pasted text, the
+   precision-scale setting, servings, notes and the fetched source. If fetching failed, ask the user to paste the
+   recipe text in the app (or here).
+2. Author the recipe exactly as in the workflow above (guide → XML → convert_recipe_units → check_recipe).
+3. submit_import { id, xml } instead of upload_recipe. Fix errors and resubmit until ready is true, then tell the
+   user to go back to the Flow Recipe app to review and save it.
+`
+
+export const STDIO_INSTRUCTIONS =
+  'Tools for turning recipes (URL or text) into flow-recipe XML for the multi-cook scheduler. You write the XML; ' +
+  'the tools fetch sources, convert units, validate, dry-run the scheduler and upload. Start with ' +
+  'get_authoring_guide, finish with check_recipe (no errors) and upload_recipe.'
+
+export const REMOTE_INSTRUCTIONS =
+  'Flow Recipe connector: you turn recipes (URL or pasted text) into flow-recipe XML for the multi-cook scheduler; ' +
+  'the tools fetch the source, convert units, validate, dry-run the scheduler and save. Workflow: ' +
+  'get_authoring_guide → fetch_recipe_source (or get_pending_import) → write ONE complete <recipe version="2"> ' +
+  'document → convert_recipe_units → check_recipe until ok → submit. When the user asks to "import recipe request ' +
+  '<id>" (a request started in the Flow Recipe app), call get_pending_import { id } first and finish with ' +
+  'submit_import { id, xml }; then tell the user to go back to the app to review and save it. For a recipe given ' +
+  'only in chat, finish with upload_recipe (saves directly). Never do unit arithmetic yourself: convert_recipe_units ' +
+  'and check_recipe are the source of truth.'

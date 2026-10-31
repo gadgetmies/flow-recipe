@@ -28,16 +28,47 @@ open). JSON bodies are limited to 2 MB, pasted `text` to 1 MB and `xml` to 256 k
 
 | Method & path | Body / params | Response |
 |---|---|---|
-| `GET /api/llm` | | `{ server: { provider, model, baseUrl, hasKey } \| null, providers: ['anthropic','openai','openai-compatible','ollama'], available: bool }` — `server` is the env configuration (`FLOW_LLM_PROVIDER`, `FLOW_LLM_MODEL`, `FLOW_LLM_API_KEY`/`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`, `FLOW_LLM_BASE_URL`), never the key (`baseUrl` without credentials or query); `available` = importer loaded |
+| `GET /api/llm` | | `{ server: { provider, model, baseUrl, hasKey } \| null, providers: ['anthropic','openai','openai-compatible','ollama'], available: bool }` — `server` is the env configuration (`FLOW_LLM_PROVIDER`, `FLOW_LLM_MODEL`, `FLOW_LLM_API_KEY`/`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`, `FLOW_LLM_BASE_URL`), never the key (`baseUrl` without credentials or query); `available` = importer loaded; `claude: { connector: bool }` = the remote MCP connector is configured (`FLOW_MCP_SECRET`) |
 | `GET /api/conversions` | | the density table (`DENSITIES`: `[{ id, names, gPerMl, kind, pieceGrams?, source? }]`) |
 | (auth) `POST /api/import` | `{ url? \| text?, precisionScale?, servings?, notes?, llm?: { provider, model?, apiKey?, baseUrl? } }` | `202 { jobId }`. `llm` (the user's own configuration) wins over the server's; neither → `400 { error: 'No LLM configured' }`. `400` invalid input or a disallowed `llm.baseUrl` (see below), `429` too many running jobs (20 in total, 3 per client IP) |
 | `GET /api/import/:jobId` | | `{ id, status: 'running'\|'done'\|'error', stage, detail, attempts, createdAt, finishedAt, result?: ImportResult, error? }`; `404` unknown or expired (jobs are kept 1 h after finishing) |
 | (auth) `DELETE /api/import/:jobId` | | cancels a running job → the job view with `status: 'error', error: 'Cancelled'` |
 | `POST /api/recipes/check` | `{ xml, precisionScale?, id?, metricize? }` | `CheckResult`; with `metricize: true` the XML is converted first and the response adds `{ xml, changes, conversionWarnings }`; XML the converter cannot parse → `422 { …CheckResult, error }` |
 | `POST /api/recipes/convert` | `{ xml, precisionScale? }` | `{ xml, changes, warnings }` (`metricizeRecipeXml`); unparsable XML → `422 { error }` |
-| (auth) `POST /api/recipes` | `{ xml, id?, overwrite? }` | `201 { id, title, check }`. `id` defaults to `<recipe id>`; the stored document's root `id` is rewritten to the saved id. `400` invalid id/xml, `409` built-in or reserved id (`operations`, case-insensitive match of a file) or existing id without `overwrite: true`, `422 { error, check }` when the check has errors |
+| (auth) `POST /api/recipes` | `{ xml, id?, overwrite?, importRequestId? }` | `201 { id, title, check }`; with `importRequestId` (a Claude import request) the request is marked `saved`. `id` defaults to `<recipe id>`; the stored document's root `id` is rewritten to the saved id. `400` invalid id/xml, `409` built-in or reserved id (`operations`, case-insensitive match of a file) or existing id without `overwrite: true`, `422 { error, check }` when the check has errors |
 | (auth) `PUT /api/recipes/:id` | `{ xml }` | `200 { id, title, check }` replaces a user recipe; `404` unknown, `409` built-in, `422 { error, check }` |
 | (auth) `DELETE /api/recipes/:id` | | `200 { id, deleted: true }`; `403` built-in, `404` unknown |
+
+### Import with Claude (custom connector handoff)
+
+The import page hands a request over to the user's Claude, which reads it through the Flow Recipe connector (remote
+MCP, below), writes the XML and submits a draft; the page polls for it and reuses the review step. Requests live in the
+SQLite table `import_requests`. Status: `pending` → `claimed` (Claude fetched it) → `ready` (a draft without errors was
+submitted) → `saved`; or `cancelled`, `expired` (24 h after creation, swept lazily; rows are deleted after 7 days).
+
+| Method & path | Body / params | Response |
+|---|---|---|
+| (auth) `POST /api/import/claude` | `{ url? \| text?, ref?, precisionScale?, servings?, notes? }` (validated like `POST /api/import`) | `201 { requestId, prompt, claudeUrl }` — `prompt` = `Use the Flow Recipe connector to import recipe request <id> (<url>).`, `claudeUrl` = `https://claude.ai/new?q=` + the encoded prompt. `503 { error }` when the connector is not configured, `429` with 200 open requests |
+| `GET /api/import/claude/:id` | | `{ id, status, createdAt, updatedAt, url, result?: ImportResult, recipeId? }` — `result` (when `ready`/`saved`) has the server-LLM job's shape with `llm: { provider: 'claude-connector' }` and `attempts` = submissions; `updatedAt` changes with every new ready draft; `404` |
+| (auth) `DELETE /api/import/claude/:id` | | cancels → the view with `status: 'cancelled'` (a saved request stays saved); `404` |
+| (secret) `GET /api/import/claude` | | pending/claimed requests of the last 24 h `[{ id, url, createdAt, status }]` |
+| (secret) `POST /api/import/claude/:id/claim` | | `{ id, status, url, text, precisionScale, servings, notes, source?, sourceError? }` and marks it `claimed`; `source` is fetched from `url` (pasted `text` → a text source; a `ref` is never fetched) |
+| (secret) `POST /api/import/claude/:id/draft` | `{ xml }` | metricize + check with the request's `precisionScale` → `{ id, status, ready, recipeId, check, conversions, conversionWarnings, keptPrevious, attempts }`; `ready` when the check has no errors (a draft with errors never replaces a ready one) |
+
+(secret) = `Authorization: Bearer <FLOW_MCP_SECRET>`, used by the stdio MCP server's handoff tools; `404` when the
+connector is not configured, `401` otherwise. Errors on closed requests: `404` unknown, `409` already saved, `410`
+cancelled/expired, each `{ error, hint }`.
+
+### Remote MCP connector `/mcp/:secret`
+
+Set `FLOW_MCP_SECRET` (at least 24 characters, e.g. `openssl rand -hex 32`) to serve MCP over Streamable HTTP at
+`/mcp/<FLOW_MCP_SECRET>`; add `https://<your-app>/mcp/<FLOW_MCP_SECRET>` to Claude as a custom connector (the URL is the
+credential). Shorter or missing → disabled, with a log line at startup (the secret is never logged). Stateless: every
+`POST` gets a fresh `McpServer` and transport (JSON responses, no `Mcp-Session-Id`); `GET`/`DELETE` → `405` JSON-RPC
+error. Wrong secret → `404` for every method. Malformed JSON → `400` JSON-RPC `-32700`, body over 2 MB → `413`, internal
+failures → `500` JSON-RPC `-32603`. The tools are `@flow-recipe/mcp`'s (see packages/mcp/README.md) with an in-process
+backend: `list_recipes`/`get_recipe`/`upload_recipe` use the recipe services directly (no local files, no
+`import_recipe_with_server_llm`), plus `list_pending_imports`, `get_pending_import`, `submit_import` for the handoff.
 
 Import jobs live in memory only. Stages reported by `stage`: `queued`, `fetching`, `generating`, `converting`,
 `checking`, `repairing`, `done`; `attempts` counts LLM generations. Job failures (including timeouts after 10 min)
@@ -134,6 +165,7 @@ participants(session_id, participant_id, socket_id, name, joined_at, is_spectato
 events(id PK AUTOINCREMENT, session_id, participant_id, type, uuid, units, payload_json, at)
 help_requests(... unchanged)
 user_recipes(id PK, title, xml, source_url, created_at, updated_at)   -- epoch ms; kept when the session tables are reset
+import_requests(id PK uuid, created_at, updated_at, status, url, text, precision_scale, servings, notes, xml, result_json, recipe_id)   -- Claude handoff; kept on reset
 ```
 `completed_tasks` is replaced by `events` (`taskDone` rows). Legacy columns `scale`, `mise_en_place`,
 `session_started`, `recipe_name` stay for compatibility with old clients during the transition but new code reads

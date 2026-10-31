@@ -1,4 +1,5 @@
-// "AI model" card of the import page: use the server's configured LLM, or the user's own provider + API key (kept in
+// "AI model" card of the import page: use the server's configured LLM, the user's own Claude (through the Flow Recipe
+// connector: Claude writes the recipe with the app's tools, no API key), or the user's own provider + API key (kept in
 // this browser only, sent only to our server's import endpoint with the request).
 
 import { useState } from 'react'
@@ -26,6 +27,35 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff'
 import LockIcon from '@mui/icons-material/Lock'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
 
+function ConnectorHowTo() {
+  return (
+    <Box component="details" sx={{ mt: 0.5, '& summary': { cursor: 'pointer', typography: 'body2', color: 'primary.main' } }}>
+      <summary>How to add the connector to Claude</summary>
+      <Box component="ol" sx={{ pl: 2.5, my: 0.5, typography: 'body2', color: 'text.secondary', '& li': { mb: 0.5 } }}>
+        <li>Ask whoever runs this app for the connector URL. Keep it private: it works like a password.</li>
+        <li>
+          In Claude on the web or the desktop app, open <b>Settings → Connectors → Add custom connector</b>, name it “Flow Recipe” and
+          paste the URL.
+        </li>
+        <li>That is all: the Claude apps on your phone and computer use it too. Once per Claude account.</li>
+      </Box>
+    </Box>
+  )
+}
+
+function ClaudeLabel({ available }) {
+  return (
+    <Box sx={{ py: 0.5 }}>
+      <Typography color={available ? 'text.primary' : 'text.disabled'}>Use Claude (via the Flow Recipe connector)</Typography>
+      <Typography variant="body2" color={available ? 'text.secondary' : 'text.disabled'}>
+        {available
+          ? 'Uses your Claude subscription, no API key. You continue in Claude and come back here to review.'
+          : 'Not enabled on this server; the host can enable this.'}
+      </Typography>
+    </Box>
+  )
+}
+
 export const DEFAULT_PROVIDERS = ['anthropic', 'openai', 'openai-compatible', 'ollama']
 
 const PROVIDERS = {
@@ -46,10 +76,27 @@ export function initialLlmValue(saved) {
   }
 }
 
-/** Which configuration an import would use: `{ ready, llm, reason }`; `llm` is the request's `llm` (undefined → server default). */
+export const hasClaudeConnector = (info) => !!info?.claude?.connector
+
+/**
+ * The choice in effect: the chosen one when it is available; otherwise Claude when the server has no model but has the
+ * connector (and nothing of the user's own was chosen), else the user's own key.
+ */
+export function effectiveMode(info, value) {
+  const claude = hasClaudeConnector(info)
+  if (value.mode === 'claude') return claude ? 'claude' : info?.server ? 'server' : 'own'
+  if (value.mode === 'server' && !info?.server) return claude ? 'claude' : 'own'
+  return value.mode
+}
+
+/**
+ * Which configuration an import would use: `{ ready, llm, reason, claude }`; `llm` is the request's `llm` (undefined →
+ * server default); `claude: true` hands the import over to the user's Claude instead.
+ */
 export function resolveLlm(info, value) {
-  const useOwn = value.mode === 'own' || !info?.server
-  if (!useOwn) return { ready: true, llm: undefined }
+  const mode = effectiveMode(info, value)
+  if (mode === 'claude') return { ready: true, llm: undefined, claude: true }
+  if (mode === 'server') return { ready: true, llm: undefined }
   const { provider, model, apiKey, baseUrl } = value.own
   const meta = PROVIDERS[provider] || {}
   if (!provider) return { ready: false, reason: 'Choose a provider.' }
@@ -139,6 +186,8 @@ function OwnLlmForm({ providers, own, remember, onOwnChange, onRememberChange })
 export default function LlmSettings({ info, infoError, value, onChange }) {
   const providers = info?.providers?.length ? info.providers : DEFAULT_PROVIDERS
   const server = info?.server
+  const claude = hasClaudeConnector(info)
+  const mode = effectiveMode(info, value)
   const setOwn = (patch) => onChange({ ...value, own: { ...value.own, ...patch } })
   const setRemember = (remember) => onChange({ ...value, remember })
 
@@ -157,24 +206,7 @@ export default function LlmSettings({ info, infoError, value, onChange }) {
         )}
         {(info || infoError) && (
           <Stack spacing={2}>
-            {server ? (
-              <RadioGroup value={value.mode} onChange={(e) => onChange({ ...value, mode: e.target.value })}>
-                <FormControlLabel
-                  value="server"
-                  control={<Radio />}
-                  label={
-                    <Box>
-                      <Typography>Server default</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {providerLabel(server.provider)}
-                        {server.model ? ` · ${server.model}` : ''}
-                      </Typography>
-                    </Box>
-                  }
-                />
-                <FormControlLabel value="own" control={<Radio />} label="My own API key" />
-              </RadioGroup>
-            ) : (
+            {info && !server && !claude && (
               <Alert severity="info">
                 <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
                   No AI model is set up on this server yet.
@@ -194,12 +226,42 @@ export default function LlmSettings({ info, infoError, value, onChange }) {
                   <summary>For the server admin</summary>
                   <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>
                     Set <code>FLOW_LLM_PROVIDER</code> and <code>FLOW_LLM_API_KEY</code> (optionally <code>FLOW_LLM_MODEL</code>) in the
-                    server&apos;s environment and restart it.
+                    server&apos;s environment and restart it. <code>FLOW_MCP_SECRET</code> enables importing with Claude.
                   </Typography>
                 </Box>
               </Alert>
             )}
-            {(value.mode === 'own' || !server) && (
+            <RadioGroup value={mode} onChange={(e) => onChange({ ...value, mode: e.target.value })} aria-label="AI model">
+              {server && (
+                <FormControlLabel
+                  value="server"
+                  control={<Radio />}
+                  label={
+                    <Box>
+                      <Typography>Server default</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {providerLabel(server.provider)}
+                        {server.model ? ` · ${server.model}` : ''}
+                      </Typography>
+                    </Box>
+                  }
+                />
+              )}
+              <FormControlLabel
+                value="claude"
+                control={<Radio />}
+                disabled={!claude}
+                label={<ClaudeLabel available={claude} />}
+                sx={{ alignItems: 'flex-start', '& .MuiRadio-root': { mt: 0.25 } }}
+              />
+              {claude && mode === 'claude' && (
+                <Box sx={{ ml: 4, mb: 1 }}>
+                  <ConnectorHowTo />
+                </Box>
+              )}
+              <FormControlLabel value="own" control={<Radio />} label="My own API key" />
+            </RadioGroup>
+            {mode === 'own' && (
               <OwnLlmForm providers={providers} own={value.own} remember={value.remember} onOwnChange={setOwn} onRememberChange={setRemember} />
             )}
           </Stack>

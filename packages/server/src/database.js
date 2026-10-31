@@ -80,6 +80,21 @@ const PRESERVED_SCHEMAS = {
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 )`,
+  // "Import with Claude" handoff requests (services/claudeImports.js); epoch ms.
+  import_requests: `CREATE TABLE IF NOT EXISTS import_requests (
+  id TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  url TEXT,
+  text TEXT,
+  precision_scale INTEGER NOT NULL DEFAULT 0,
+  servings REAL,
+  notes TEXT,
+  xml TEXT,
+  result_json TEXT,
+  recipe_id TEXT
+)`,
 };
 
 function normalizeSchema(sql) {
@@ -145,6 +160,7 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_participants_socket ON participants(socket_id);
     CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);
     CREATE INDEX IF NOT EXISTS idx_help_requests_session ON help_requests(session_id);
+    CREATE INDEX IF NOT EXISTS idx_import_requests_status ON import_requests(status, created_at);
   `);
 
   console.log(`Database initialized (${dbPath})`);

@@ -1,22 +1,39 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ImportPage from './ImportPage'
 import { ensureRecipeRef, getRecipeId, getRecipeTitle, IMPORT_TIMING, LLM_STORAGE_KEY, setRecipeId, setRecipeTitle } from './importApi'
 import { dedupeDiagnostics, fmtAmount, fmtJobDetail, fromLabel, planRuns, sourceTotalSeconds, streamLabel, suggestedServeInMinutes } from './format'
 import { MOCK_XML } from './mockImport.fixture'
 import ImportProgress, { stepsFor } from './ImportProgress'
+import { CLAUDE_REQUEST_KEY, LLM_MODE_STORAGE_KEY } from './importApi'
+import { getClaudeImport, mockClaudeResubmit } from './mockImport'
 
 jest.setTimeout(20000)
 
 const saved = { ...IMPORT_TIMING }
 
+let visibility = 'visible'
+Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+const setVisibility = (v) =>
+  act(() => {
+    visibility = v
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+
 beforeEach(() => {
   window.scrollTo = jest.fn()
   window.localStorage.clear()
+  window.sessionStorage.clear()
+  visibility = 'visible'
   window.history.replaceState({}, '', '/import?mock=1')
   // a fast simulated job
   IMPORT_TIMING.pollMs = 20
   IMPORT_TIMING.mockStageMs = 30
+  // a quick simulated Claude: picks the request up after 150 ms, submits a draft after 400 ms
+  IMPORT_TIMING.claudePollMs = 20
+  IMPORT_TIMING.claudeReadyMs = 30
+  IMPORT_TIMING.mockClaimMs = 150
+  IMPORT_TIMING.mockReadyMs = 400
 })
 
 afterAll(() => Object.assign(IMPORT_TIMING, saved))
@@ -222,7 +239,7 @@ test('imported recipes are told apart and can be deleted after confirming', asyn
 })
 
 test('without a server LLM the two options are explained and the own key is masked and remembered', async () => {
-  window.history.replaceState({}, '', '/import?mock=1&nollm=1')
+  window.history.replaceState({}, '', '/import?mock=1&nollm=1&noclaude=1')
   renderPage()
   expect(await screen.findByText('No AI model is set up on this server yet.')).toBeInTheDocument()
   expect(screen.getByText(/Server default:/)).toBeInTheDocument()
@@ -246,4 +263,111 @@ test('without a server LLM the two options are explained and the own key is mask
   expect(await screen.findByText('Read the pasted text')).toBeInTheDocument()
   expect(await screen.findByText(/From pasted text/, {}, { timeout: 3000 })).toBeInTheDocument()
   expect(screen.getByLabelText('Title')).toHaveValue('Chewy Chocolate Chip Cookies')
+})
+
+test('imports with Claude: hand over, wait, review, load an updated draft, save', async () => {
+  // slow enough to see every status
+  IMPORT_TIMING.mockClaimMs = 600
+  IMPORT_TIMING.mockReadyMs = 1500
+  IMPORT_TIMING.claudeReadyMs = 1000
+  const writeText = jest.fn(() => Promise.resolve())
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  renderPage()
+  fireEvent.click(await screen.findByLabelText(/Use Claude \(via the Flow Recipe connector\)/))
+  expect(screen.getByText(/Uses your Claude subscription, no API key/)).toBeInTheDocument()
+  expect(screen.getByText('How to add the connector to Claude')).toBeInTheDocument()
+  await waitFor(() => expect(window.localStorage.getItem(LLM_MODE_STORAGE_KEY)).toBe('claude'))
+  fireEvent.change(screen.getByLabelText('Recipe page URL'), { target: { value: 'https://example.com/cookies' } })
+  fireEvent.click(screen.getByRole('button', { name: /import with claude/i }))
+
+  // the handoff
+  const open = await screen.findByRole('link', { name: /continue in claude/i })
+  expect(open.getAttribute('href')).toMatch(/^https:\/\/claude\.ai\/new\?q=Use%20the%20Flow%20Recipe%20connector/)
+  expect(open).toHaveAttribute('target', '_blank')
+  expect(screen.getByText('https://example.com/cookies')).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Waiting for Claude…')
+  const stored = JSON.parse(window.sessionStorage.getItem(CLAUDE_REQUEST_KEY))
+  expect(stored).toMatchObject({ url: 'https://example.com/cookies', precisionScale: false })
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: /copy prompt/i }))
+  })
+  expect(writeText).toHaveBeenCalledWith(expect.stringContaining(stored.requestId))
+  expect(await screen.findByRole('button', { name: /copied/i })).toBeInTheDocument()
+
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Claude has picked it up'))
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Draft received'))
+  expect(screen.getByRole('button', { name: /review the draft/i })).toBeInTheDocument()
+
+  // the same review, then Claude sends another draft
+  expect(await screen.findByDisplayValue('Chewy Chocolate Chip Cookies', {}, { timeout: 3000 })).toBeInTheDocument()
+  expect(screen.getByText(/written by Claude/)).toBeInTheDocument()
+  expect(screen.queryByText(/Claude sent an updated draft/)).not.toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'My edit' } })
+  mockClaudeResubmit(stored.requestId, MOCK_XML.replace('Chewy Chocolate Chip Cookies', 'Chewier Cookies'))
+  expect(await screen.findByText(/Claude sent an updated draft\. Loading it replaces your edits\./)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Load it' }))
+  expect(await screen.findByDisplayValue('Chewier Cookies')).toBeInTheDocument()
+  expect(screen.queryByText(/Claude sent an updated draft/)).not.toBeInTheDocument()
+
+  // saving tells the server which request it was (an earlier test saved the suggested id already)
+  fireEvent.change(screen.getByLabelText('Recipe id'), { target: { value: 'chewier-cookies' } })
+  fireEvent.click(screen.getByRole('button', { name: /save recipe/i }))
+  expect(await screen.findByText(/Saved “Chewier Cookies”/)).toBeInTheDocument()
+  expect(window.sessionStorage.getItem(CLAUDE_REQUEST_KEY)).toBeNull()
+  let status = null
+  await act(async () => {
+    status = (await getClaudeImport(stored.requestId)).status
+  })
+  expect(status).toBe('saved')
+})
+
+test('waiting for Claude pauses while the tab is hidden and resumes after a reload', async () => {
+  // a request handed over just now, before the page was reloaded
+  const requestId = `mock-claude-${Date.now().toString(36)}-99`
+  window.sessionStorage.setItem(
+    CLAUDE_REQUEST_KEY,
+    JSON.stringify({ requestId, prompt: `Use the Flow Recipe connector to import recipe request ${requestId}.`, claudeUrl: 'https://claude.ai/new?q=x', url: 'https://example.com/r', precisionScale: true, startedAt: Date.now() })
+  )
+  renderPage()
+  expect(await screen.findByRole('link', { name: /continue in claude/i })).toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Waiting for Claude…')
+  setVisibility('hidden')
+  await act(() => new Promise((r) => setTimeout(r, 600)))
+  expect(screen.getByRole('status')).not.toHaveTextContent('Draft received')
+  setVisibility('visible')
+  expect(await screen.findByDisplayValue('Chewy Chocolate Chip Cookies', {}, { timeout: 3000 })).toBeInTheDocument()
+  // the precision-scale choice came back with the request
+  expect(screen.getByText('285 g')).toBeInTheDocument()
+})
+
+test('a request handed over to Claude can be cancelled', async () => {
+  window.localStorage.setItem(LLM_MODE_STORAGE_KEY, 'claude')
+  renderPage()
+  fireEvent.change(await screen.findByLabelText('Recipe page URL'), { target: { value: 'https://example.com/cookies' } })
+  fireEvent.click(await screen.findByRole('button', { name: /import with claude/i }))
+  await screen.findByRole('button', { name: 'Cancel' })
+  const stored = JSON.parse(window.sessionStorage.getItem(CLAUDE_REQUEST_KEY) || 'null')
+  expect(stored?.requestId).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(await screen.findByLabelText('Recipe page URL')).toBeInTheDocument()
+  expect(window.sessionStorage.getItem(CLAUDE_REQUEST_KEY)).toBeNull()
+  expect((await getClaudeImport(stored.requestId)).status).toBe('cancelled')
+})
+
+test('Claude is the default without a server model, and disabled without the connector', async () => {
+  window.history.replaceState({}, '', '/import?mock=1&nollm=1')
+  const { unmount } = renderPage()
+  expect(await screen.findByRole('button', { name: /import with claude/i })).toBeInTheDocument()
+  expect(screen.queryByText('No AI model is set up on this server yet.')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('API key')).not.toBeInTheDocument()
+  unmount()
+
+  window.history.replaceState({}, '', '/import?mock=1&noclaude=1')
+  window.localStorage.setItem(LLM_MODE_STORAGE_KEY, 'claude')
+  renderPage()
+  expect(await screen.findByText(/the host can enable this/)).toBeInTheDocument()
+  expect(screen.getByLabelText(/Use Claude/)).toBeDisabled()
+  // a remembered Claude choice falls back to the server default
+  expect(screen.getByLabelText(/Server default/)).toBeChecked()
+  expect(screen.getByRole('button', { name: /import recipe/i })).toBeInTheDocument()
 })

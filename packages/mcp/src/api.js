@@ -20,12 +20,14 @@ export function serverConfig(env = process.env) {
 /**
  * Calls the server. Returns the parsed body (JSON, or text for XML). Throws ApiError with an actionable hint.
  * @param {{ base: string, token: string|null }} config
+ * `auth` sends FLOW_UPLOAD_TOKEN; `bearer` sends another bearer token (the connector secret for the handoff endpoints).
  */
-export async function apiRequest(config, method, path, { body, auth = false, fetch = globalThis.fetch, timeoutMs = 30000 } = {}) {
+export async function apiRequest(config, method, path, { body, auth = false, bearer = null, fetch = globalThis.fetch, timeoutMs = 30000 } = {}) {
   const url = `${config.base}${path}`
   const headers = { Accept: 'application/json, application/xml;q=0.9, */*;q=0.1' }
   if (body !== undefined) headers['Content-Type'] = 'application/json'
   if (auth && config.token) headers.Authorization = `Bearer ${config.token}`
+  if (bearer) headers.Authorization = `Bearer ${bearer}`
   let response
   try {
     response = await fetch(url, {

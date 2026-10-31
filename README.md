@@ -45,6 +45,13 @@ With Claude, use the `flow-recipe-import` skill (`.claude/skills/flow-recipe-imp
 the source, convert units, check and upload. Without the MCP server, `node packages/importer/bin/check.js recipe.xml
 --convert` does the conversion and check.
 
+**Import with Claude (custom connector).** Claude on the web, desktop and phone can use the app directly: set
+`FLOW_MCP_SECRET` (≥ 24 random characters, e.g. `openssl rand -hex 32`) on the server, then in Claude go to Settings →
+Connectors → Add custom connector with the URL `https://<your-app>/mcp/<FLOW_MCP_SECRET>` (the URL is a credential —
+keep it private). The import page then offers **Use Claude**: it hands the request to your Claude chat, Claude writes
+and checks the recipe with the app's tools, and the page picks up the draft for review — no server API key needed.
+Details in [`packages/mcp/README.md`](packages/mcp/README.md#use-the-app-from-claude-custom-connector).
+
 ---
 
 # Getting Started with Create React App

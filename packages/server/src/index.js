@@ -11,6 +11,9 @@ const sessions = require('./services/sessions');
 const recipes = require('./services/recipes');
 const planning = require('./services/planning');
 const importJobs = require('./services/importJobs');
+const claudeImports = require('./services/claudeImports');
+const mcpRemote = require('./services/mcpRemote');
+const { idError, withRootId, saveNewRecipe } = require('./services/recipeSave');
 
 const app = express();
 const server = http.createServer(app);
@@ -257,6 +260,7 @@ app.get('/api/llm', asyncRoute(async (req, res) => {
     server: importJobs.describe(importer, config),
     providers: importJobs.PROVIDERS,
     available: !!(importer && typeof importer.importRecipe === 'function'),
+    claude: { connector: claudeImports.connectorConfigured() },
   });
 }));
 
@@ -268,47 +272,118 @@ app.get('/api/conversions', asyncRoute(async (req, res) => {
   res.json(mod.DENSITIES);
 }));
 
-app.post('/api/import', requireUploadToken, asyncRoute(async (req, res) => {
-  const body = req.body || {};
-  const { url, text, ref, precisionScale, servings, notes, llm } = body;
+// Validates the import request fields shared by POST /api/import and POST /api/import/claude.
+// Returns { params: { url?, text?, ref?, precisionScale, servings, notes } } or { status, error }.
+function parseImportParams(body) {
+  const { url, text, ref, precisionScale, servings, notes } = body || {};
   const params = { precisionScale: precisionScale === true, servings: null, notes: null };
+  const fail = (status, error) => ({ status, error });
 
   if (typeof url === 'string' && url.trim()) {
-    if (url.length > MAX_URL_LENGTH) return res.status(400).json({ error: 'url is too long' });
+    if (url.length > MAX_URL_LENGTH) return fail(400, 'url is too long');
     let parsed;
     try {
       parsed = new URL(url.trim());
     } catch (error) {
-      return res.status(400).json({ error: 'url is not a valid URL' });
+      return fail(400, 'url is not a valid URL');
     }
-    if (!['http:', 'https:'].includes(parsed.protocol)) return res.status(400).json({ error: 'url must be http(s)' });
+    if (!['http:', 'https:'].includes(parsed.protocol)) return fail(400, 'url must be http(s)');
     params.url = parsed.href;
   } else if (typeof text === 'string' && text.trim()) {
-    if (Buffer.byteLength(text, 'utf8') > MAX_TEXT_BYTES) {
-      return res.status(413).json({ error: 'text is too large (max 1 MB)' });
-    }
+    if (Buffer.byteLength(text, 'utf8') > MAX_TEXT_BYTES) return fail(413, 'text is too large (max 1 MB)');
     params.text = text;
     // ref: the page the pasted text came from (the URL the user tried). Recorded as the recipe's ref, never fetched.
     if (ref !== undefined && ref !== null && ref !== '') {
-      if (typeof ref !== 'string' || ref.length > MAX_URL_LENGTH) return res.status(400).json({ error: 'ref must be an http(s) URL' });
+      if (typeof ref !== 'string' || ref.length > MAX_URL_LENGTH) return fail(400, 'ref must be an http(s) URL');
       let parsedRef;
       try {
         parsedRef = new URL(ref.trim());
       } catch (error) {
-        return res.status(400).json({ error: 'ref is not a valid URL' });
+        return fail(400, 'ref is not a valid URL');
       }
-      if (!['http:', 'https:'].includes(parsedRef.protocol)) return res.status(400).json({ error: 'ref must be an http(s) URL' });
+      if (!['http:', 'https:'].includes(parsedRef.protocol)) return fail(400, 'ref must be an http(s) URL');
       params.ref = parsedRef.href;
     }
   } else {
-    return res.status(400).json({ error: 'url or text is required' });
+    return fail(400, 'url or text is required');
   }
   if (servings !== undefined && servings !== null && servings !== '') {
     const n = Number(servings);
-    if (!Number.isFinite(n) || n <= 0 || n > 1000) return res.status(400).json({ error: 'servings must be a positive number' });
+    if (!Number.isFinite(n) || n <= 0 || n > 1000) return fail(400, 'servings must be a positive number');
     params.servings = n;
   }
   if (typeof notes === 'string' && notes.trim()) params.notes = notes.trim().slice(0, MAX_NOTES_LENGTH);
+  return { params };
+}
+
+// ---- "Import with Claude" handoff (services/claudeImports.js); registered before /api/import/:jobId ------------------
+
+// The agent-side endpoints (used by the stdio MCP server) take `Authorization: Bearer <FLOW_MCP_SECRET>`.
+function requireConnectorSecret(req, res, next) {
+  if (!claudeImports.connectorConfigured()) return res.status(404).json({ error: 'Not found' });
+  const match = (req.get('authorization') || '').match(/^Bearer\s+(.+)$/i);
+  if (!match || !claudeImports.secretMatches(match[1].trim())) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
+// Like asyncRoute, but service errors keep their status and hint.
+function handoffRoute(handler) {
+  return (req, res, next) => {
+    Promise.resolve(handler(req, res, next)).catch((error) => {
+      if (res.headersSent) return;
+      if (error && error.status) return res.status(error.status).json({ error: error.message, hint: error.hint || undefined });
+      console.error(`Error in ${req.method} ${req.path}:`, error && error.message);
+      res.status(500).json({ error: 'Internal error' });
+    });
+  };
+}
+
+app.post('/api/import/claude', requireUploadToken, handoffRoute(async (req, res) => {
+  if (!claudeImports.connectorConfigured()) {
+    return res.status(503).json({ error: 'The Claude connector is not configured on this server (FLOW_MCP_SECRET)' });
+  }
+  const { params, status, error } = parseImportParams(req.body);
+  if (!params) return res.status(status).json({ error });
+  res.status(201).json(claudeImports.createRequest(params));
+}));
+
+app.get('/api/import/claude', requireConnectorSecret, handoffRoute(async (req, res) => {
+  res.json(claudeImports.listPending());
+}));
+
+app.get('/api/import/claude/:id', handoffRoute(async (req, res) => {
+  const request = claudeImports.getRequest(req.params.id);
+  if (!request) return res.status(404).json({ error: 'Import request not found' });
+  res.json(request);
+}));
+
+app.delete('/api/import/claude/:id', requireUploadToken, handoffRoute(async (req, res) => {
+  const request = claudeImports.cancelRequest(req.params.id);
+  if (!request) return res.status(404).json({ error: 'Import request not found' });
+  res.json(request);
+}));
+
+app.post('/api/import/claude/:id/claim', requireConnectorSecret, handoffRoute(async (req, res) => {
+  res.json(await claudeImports.claim(req.params.id));
+}));
+
+app.post('/api/import/claude/:id/draft', requireConnectorSecret, handoffRoute(async (req, res) => {
+  const xml = req.body && req.body.xml;
+  res.json(await claudeImports.submit(req.params.id, xml, { maxBytes: Math.min(MAX_CHECK_XML_BYTES, MAX_XML_BYTES) }));
+}));
+
+// ---- remote MCP connector (services/mcpRemote.js) -------------------------------------------------------------------
+
+const mcpHandlers = mcpRemote.createMcpHandlers({ maxXmlBytes: Math.min(MAX_CHECK_XML_BYTES, MAX_XML_BYTES) });
+app.all('/mcp/:secret', mcpHandlers.handle);
+app.use('/mcp/:secret', mcpHandlers.errorHandler);
+
+app.post('/api/import', requireUploadToken, asyncRoute(async (req, res) => {
+  const body = req.body || {};
+  const { llm } = body;
+  const parsedParams = parseImportParams(body);
+  if (!parsedParams.params) return res.status(parsedParams.status).json({ error: parsedParams.error });
+  const { params } = parsedParams;
 
   const importer = await requireImporter(res);
   if (!importer) return;
@@ -384,56 +459,28 @@ app.post('/api/recipes/convert', checkRateLimit, asyncRoute(async (req, res) => 
   res.json({ xml: result.xml, changes: result.changes || [], warnings: result.warnings || [] });
 }));
 
-function idError(id) {
-  if (!recipes.isValidId(id) || id.length > recipes.MAX_ID_LENGTH) {
-    return { status: 400, error: 'Invalid recipe id (letters, digits, - and _; max 100 characters)' };
-  }
-  if (recipes.isReservedId(id) || recipes.isBuiltin(id)) {
-    return { status: 409, error: `Recipe id '${id}' is reserved by a built-in recipe` };
-  }
-  return null;
-}
-
-// The stored document's root id always equals the id it is stored under.
-function withRootId(importer, xml, id) {
-  return typeof importer.setRootAttributes === 'function' ? importer.setRootAttributes(xml, { id }) : xml;
-}
-
 app.post('/api/recipes', requireUploadToken, checkRateLimit, asyncRoute(async (req, res) => {
   const xml = bodyXml(req, res);
   if (xml === null) return;
-  const header = recipes.readHeader(xml);
-  if (!header) return res.status(400).json({ error: 'xml is not a <recipe> document' });
-
-  let id = req.body.id;
-  if (id !== undefined && id !== null && id !== '' && typeof id !== 'string') {
-    return res.status(400).json({ error: 'id must be a string' });
+  const { importRequestId } = req.body;
+  if (importRequestId !== undefined && importRequestId !== null && typeof importRequestId !== 'string') {
+    return res.status(400).json({ error: 'importRequestId must be a string' });
   }
-  if (!id) id = header.rootId;
-  if (!id) return res.status(400).json({ error: 'id is required (or an id attribute on <recipe>)' });
-  const invalid = idError(id);
-  if (invalid) return res.status(invalid.status).json({ error: invalid.error });
-  const overwrite = req.body.overwrite === true;
-  if (!overwrite && recipes.userRecipeExists(id)) {
-    return res.status(409).json({ error: `Recipe '${id}' already exists` });
-  }
-
+  // Cheap input errors (not a recipe, bad or taken id) are answered before the importer is needed.
+  if (!recipes.readHeader(xml)) return res.status(400).json({ error: 'xml is not a <recipe> document' });
   const importer = await requireImporter(res);
   if (!importer) return;
-  // checkRecipeXml also refuses foreign elements, namespaces and processing instructions (stored-XSS guard).
-  const check = await importer.checkRecipeXml(xml, { id, precisionScale: req.body.precisionScale === true });
-  if (!check || !check.ok || (check.errors && check.errors.length)) {
-    return res.status(422).json({ error: 'The recipe has errors', check });
+  // saveNewRecipe runs checkRecipeXml, which also refuses foreign elements, namespaces and processing instructions.
+  const { status, body } = await saveNewRecipe(importer, {
+    xml,
+    id: req.body.id,
+    overwrite: req.body.overwrite === true,
+    precisionScale: req.body.precisionScale === true,
+  });
+  if (status === 201 && importRequestId && claudeImports.markSaved(importRequestId, body.id)) {
+    console.log(`[claude-import] request ${importRequestId} saved as ${body.id}`);
   }
-  const stored = withRootId(importer, xml, id);
-  try {
-    const saved = recipes.saveUserRecipe({ id, xml: stored, title: check.title || header.title }, { overwrite });
-    console.log(`[recipes] ${saved.created ? 'saved' : 'replaced'} user recipe ${id}`);
-    res.status(201).json({ id, title: saved.title, check });
-  } catch (error) {
-    if (error.status) return res.status(error.status).json({ error: error.message });
-    throw error;
-  }
+  res.status(status).json(body);
 }));
 
 app.put('/api/recipes/:id', requireUploadToken, checkRateLimit, asyncRoute(async (req, res) => {
@@ -916,6 +963,8 @@ async function main() {
   for (const row of db.prepare(`SELECT session_id FROM sessions WHERE status = 'running'`).all()) {
     startInterruptLoop(row.session_id);
   }
+
+  mcpRemote.logStatus();
 
   const PORT = process.env.PORT || 3001;
   server.listen(PORT, () => {

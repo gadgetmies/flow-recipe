@@ -8,6 +8,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createFlowRecipeServer } from './server.js'
 
 export { createFlowRecipeServer, presentCheck } from './server.js'
+export { createHttpBackend } from './backend.js'
 
 export async function main() {
   const server = createFlowRecipeServer()

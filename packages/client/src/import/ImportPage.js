@@ -1,5 +1,7 @@
 // Import page (route /import): turn a recipe page (or pasted text) into a scheduler recipe with the help of an LLM.
 // Source → progress (server job, polled) → review (converted amounts, steps, schedule check, XML) → saved.
+// With Claude (the Flow Recipe connector) the progress step is a handoff instead: the request waits on the server, the
+// user continues in Claude, and the draft Claude submits comes back here for the same review.
 // `?mock=1` simulates the server with ./mockImport.js.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -28,24 +30,31 @@ import AddIcon from '@mui/icons-material/Add'
 import theme from '../theme'
 import { isMockMode } from '../config'
 import {
+  cancelClaudeImport,
   checkRecipe,
   convertRecipe,
   deleteRecipe,
   ensureRecipeRef,
   forgetImportJob,
+  getClaudeImport,
   getImportJob,
   getLlmInfo,
   getRecipeId,
   getRecipeTitle,
   IMPORT_TIMING,
   listRecipes,
+  loadClaudeRequest,
   loadLlmConfig,
+  loadLlmMode,
   loadUploadToken,
+  saveClaudeRequest,
   saveLlmConfig,
+  saveLlmMode,
   saveRecipe,
   saveUploadToken,
   setRecipeId,
   setRecipeTitle,
+  startClaudeImport,
   startImport,
 } from './importApi'
 import { initialLlmValue, resolveLlm } from './LlmSettings'
@@ -53,6 +62,7 @@ import SourceForm, { emptySource } from './SourceForm'
 import ImportProgress from './ImportProgress'
 import RecipeReview from './RecipeReview'
 import ImportedRecipes from './ImportedRecipes'
+import ClaudeHandoff from './ClaudeHandoff'
 import { suggestedServeInMinutes } from './format'
 
 const STEPS = [
@@ -63,6 +73,9 @@ const STEPS = [
 ]
 
 const MAX_POLL_FAILURES = 5
+
+const CLAUDE_ENDED = ['cancelled', 'expired', 'saved']
+const isHidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden'
 
 function TokenPrompt({ onSave }) {
   const [value, setValue] = useState('')
@@ -93,11 +106,21 @@ export default function ImportPage() {
   const mock = useMemo(() => isMockMode(), [])
   const mockSuffix = mock ? '?mock=1' : ''
 
-  const [step, setStep] = useState('source')
-  const [source, setSource] = useState(emptySource)
+  // an import handed over to Claude before a reload (the phone switched apps) resumes waiting
+  const [claudeReq, setClaudeReq] = useState(() => loadClaudeRequest())
+  const [claudeState, setClaudeState] = useState(null)
+  const [claudeUpdate, setClaudeUpdate] = useState(null)
+  const loadedDraftAt = useRef(null)
+  const reviewBaseXml = useRef('')
+
+  const [step, setStep] = useState(() => (claudeReq ? 'claude' : 'source'))
+  const [source, setSource] = useState(() => (claudeReq ? { ...emptySource(), precisionScale: !!claudeReq.precisionScale } : emptySource()))
   const [llmInfo, setLlmInfo] = useState(null)
   const [llmInfoError, setLlmInfoError] = useState(null)
-  const [llmValue, setLlmValue] = useState(() => initialLlmValue(loadLlmConfig()))
+  const [llmValue, setLlmValue] = useState(() => {
+    const v = initialLlmValue(loadLlmConfig())
+    return loadLlmMode() === 'claude' ? { ...v, mode: 'claude' } : v
+  })
   const [token, setToken] = useState(() => loadUploadToken())
   const [needsToken, setNeedsToken] = useState(false)
   const [error, setError] = useState(null)
@@ -105,7 +128,7 @@ export default function ImportPage() {
 
   const [jobId, setJobId] = useState(null)
   const [job, setJob] = useState(null)
-  const [startedAt, setStartedAt] = useState(Date.now())
+  const [startedAt, setStartedAt] = useState(() => claudeReq?.startedAt || Date.now())
   const pollFailures = useRef(0)
   const refRef = useRef(null)
 
@@ -155,6 +178,9 @@ export default function ImportPage() {
   useEffect(() => {
     saveLlmConfig(llmValue.remember ? llmValue.own : null)
   }, [llmValue])
+  useEffect(() => {
+    saveLlmMode(llmValue.mode)
+  }, [llmValue.mode])
 
   const llmState = resolveLlm(llmInfo, llmValue)
 
@@ -166,6 +192,7 @@ export default function ImportPage() {
     // pasted text from a page that blocked us: keep the page as the recipe's source
     if (ref && !r.source?.url) x = ensureRecipeRef(x, ref)
     setResult(ref && !r.source?.url ? { ...r, source: { ...(r.source || {}), url: ref, pasted: true } } : r)
+    reviewBaseXml.current = x
     setXml(x)
     setCheckedXml(x)
     setCheck(r.check)
@@ -214,6 +241,133 @@ export default function ImportPage() {
     }
   }, [step, jobId, mock, showReview])
 
+  // ---------- import with Claude ----------
+
+  const forgetClaude = useCallback(() => {
+    saveClaudeRequest(null)
+    setClaudeReq(null)
+    setClaudeState(null)
+    setClaudeUpdate(null)
+    loadedDraftAt.current = null
+  }, [])
+
+  const openClaudeDraft = useCallback(
+    (r) => {
+      if (!r?.result) return
+      loadedDraftAt.current = r.updatedAt || null
+      setClaudeUpdate(null)
+      showReview(r.result, claudeReq?.ref || null)
+    },
+    [showReview, claudeReq]
+  )
+
+  // Poll the request every 2 s while waiting for Claude, and on the review for an updated draft. Paused while the tab
+  // is hidden (the user is in Claude); checks at once when it comes back.
+  const requestId = claudeReq?.requestId
+  const claudePhase = !requestId ? null : step === 'claude' ? 'waiting' : step === 'review' ? 'review' : null
+  useEffect(() => {
+    if (!claudePhase) return undefined
+    let stopped = false
+    let timer = null
+    let inflight = false
+    let failures = 0
+    const schedule = (ms) => {
+      if (stopped || timer) return
+      timer = setTimeout(poll, ms)
+    }
+    const poll = async () => {
+      timer = null
+      if (stopped || inflight || isHidden()) return
+      inflight = true
+      try {
+        const r = await getClaudeImport(requestId, mock)
+        inflight = false
+        if (stopped) return
+        failures = 0
+        if (claudePhase === 'waiting') {
+          setClaudeState(r)
+          if (r.status === 'ready' || CLAUDE_ENDED.includes(r.status)) return
+        } else {
+          if (r.status === 'ready' && r.result && r.updatedAt !== loadedDraftAt.current) setClaudeUpdate(r)
+          if (CLAUDE_ENDED.includes(r.status)) return
+        }
+      } catch (e) {
+        inflight = false
+        if (stopped) return
+        failures += 1
+        if (e.status === 404 || failures >= MAX_POLL_FAILURES) {
+          if (claudePhase === 'waiting') {
+            setClaudeState({
+              status: 'lost',
+              error: e.status === 404 ? 'The server does not know this import request any more. Please start again.' : e.message,
+            })
+          }
+          return
+        }
+      }
+      schedule(IMPORT_TIMING.claudePollMs)
+    }
+    const onVisibility = () => {
+      if (!isHidden()) schedule(0)
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    schedule(claudePhase === 'waiting' ? 0 : IMPORT_TIMING.claudePollMs)
+    return () => {
+      stopped = true
+      if (timer) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [claudePhase, requestId, mock])
+
+  // "Draft received": show it for a moment, then the review
+  useEffect(() => {
+    if (step !== 'claude' || claudeState?.status !== 'ready' || !claudeState.result) return undefined
+    const t = setTimeout(() => openClaudeDraft(claudeState), IMPORT_TIMING.claudeReadyMs)
+    return () => clearTimeout(t)
+  }, [step, claudeState, openClaudeDraft])
+
+  const beginWithClaude = async (src, body) => {
+    try {
+      const r = await startClaudeImport(body, { mock, token })
+      const req = {
+        requestId: r.requestId,
+        prompt: r.prompt,
+        claudeUrl: r.claudeUrl,
+        url: body.url || null,
+        ref: body.ref || null,
+        sourceLabel: src.mode === 'text' ? (src.ref ? `Pasted text from ${src.ref}` : 'Pasted text') : null,
+        precisionScale: !!body.precisionScale,
+        startedAt: Date.now(),
+      }
+      saveClaudeRequest(req)
+      loadedDraftAt.current = null
+      setClaudeUpdate(null)
+      setClaudeState({ status: 'pending' })
+      setClaudeReq(req)
+      setStartedAt(req.startedAt)
+      setStep('claude')
+      scrollTop()
+    } catch (e) {
+      if (e.status === 401) {
+        setNeedsToken(true)
+        setError('The server needs an upload token for imports.')
+      } else if (e.status === 503) {
+        setError('Importing with Claude is not enabled on this server (the host can enable it). Choose another AI model.')
+      } else {
+        setError(e.message)
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const cancelClaude = () => {
+    if (requestId) cancelClaudeImport(requestId, { mock, token })
+    forgetClaude()
+    setStep('source')
+    scrollTop()
+  }
+
   const begin = async (src = source) => {
     setError(null)
     setSubmitting(true)
@@ -228,6 +382,8 @@ export default function ImportPage() {
     const servings = parseInt(src.servings, 10)
     if (servings > 0) body.servings = servings
     if (src.notes.trim()) body.notes = src.notes.trim()
+    if (llmState.claude) return beginWithClaude(src, body)
+    forgetClaude()
     if (llmState.llm) body.llm = llmState.llm
     try {
       const { jobId: newJobId } = await startImport(body, { mock, token })
@@ -328,7 +484,8 @@ export default function ImportPage() {
     setReviewError(null)
     const finalXml = setRecipeTitle(xml, title.trim())
     try {
-      const r = await saveRecipe({ xml: finalXml, id }, { mock, token })
+      const r = await saveRecipe({ xml: finalXml, id, importRequestId: requestId }, { mock, token })
+      forgetClaude()
       setXml(finalXml)
       setSaved({ id: r.id || id, title: r.title || title, serveIn: suggestedServeInMinutes(check?.plan) })
       refreshRecipes()
@@ -354,6 +511,7 @@ export default function ImportPage() {
     setSaved(null)
     setJobId(null)
     setJob(null)
+    forgetClaude()
     setStep('source')
     scrollTop()
   }
@@ -370,7 +528,9 @@ export default function ImportPage() {
     />
   ) : null
 
-  const stepIndex = STEPS.findIndex((s) => s.key === step)
+  const stepIndex = step === 'claude' ? 1 : STEPS.findIndex((s) => s.key === step)
+  const withClaude = step === 'claude' || (!!claudeReq && step === 'review')
+  const steps = withClaude ? STEPS.map((s) => (s.key === 'progress' ? { ...s, label: 'Claude' } : s)) : STEPS
   const sourceLabel = source.mode === 'url' ? source.url : source.ref ? `Pasted text from ${source.ref}` : 'Pasted text'
   const duplicateOf = title.trim()
     ? recipes.find((r) => r.id !== id && r.title?.trim().toLowerCase() === title.trim().toLowerCase()) || null
@@ -391,8 +551,8 @@ export default function ImportPage() {
           </Stack>
 
           <Stepper activeStep={stepIndex} alternativeLabel sx={{ '& .MuiStepLabel-label': { mt: 0.5, fontSize: 13 } }}>
-            {STEPS.map((s) => (
-              <Step key={s.key} completed={stepIndex > STEPS.indexOf(s) || step === 'saved'}>
+            {steps.map((s, i) => (
+              <Step key={s.key} completed={stepIndex > i || step === 'saved'}>
                 <StepLabel>{s.label}</StepLabel>
               </Step>
             ))}
@@ -434,6 +594,20 @@ export default function ImportPage() {
             />
           )}
 
+          {step === 'claude' && claudeReq && (
+            <ClaudeHandoff
+              request={claudeReq}
+              state={claudeState}
+              startedAt={startedAt}
+              onCancel={cancelClaude}
+              onReview={() => openClaudeDraft(claudeState)}
+              onRestart={() => {
+                forgetClaude()
+                setStep('source')
+              }}
+            />
+          )}
+
           {step === 'review' && result && (
             <RecipeReview
               result={result}
@@ -453,6 +627,20 @@ export default function ImportPage() {
               convertMessage={convertMessage}
               onSave={save}
               saving={saving}
+              notice={
+                claudeUpdate ? (
+                  <Alert
+                    severity="info"
+                    action={
+                      <Button color="inherit" size="small" onClick={() => openClaudeDraft(claudeUpdate)}>
+                        Load it
+                      </Button>
+                    }
+                  >
+                    Claude sent an updated draft.{xml !== reviewBaseXml.current ? ' Loading it replaces your edits.' : ''}
+                  </Alert>
+                ) : null
+              }
               saveError={
                 reviewError || tokenPrompt ? (
                   <Stack spacing={1}>
