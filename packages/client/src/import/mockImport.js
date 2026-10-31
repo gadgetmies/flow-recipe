@@ -80,7 +80,8 @@ export function mockClaudeResubmit(id, xml) {
 
 export function getClaudeImport(id) {
   const startedAt = startOf(id)
-  const r = claudeRequests.get(id) || { body: {}, cancelled: false, drafts: [] }
+  // after a reload the simulated server has forgotten the body: pretend it was the fixture's page
+  const r = claudeRequests.get(id) || { body: { url: MOCK_SOURCE_URL }, cancelled: false, drafts: [] }
   if (!startedAt) return Promise.reject(new MockError('Import request not found', 404))
   const createdAt = new Date(startedAt).toISOString()
   const url = r.body.url || null
